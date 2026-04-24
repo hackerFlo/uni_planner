@@ -1,8 +1,9 @@
 services:
   server:
-    container_name: uni-planner-server
     image: ghcr.io/hackerflo/uni-planner-server:latest
     restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
     environment:
       NODE_ENV: production
       PORT: 3001
@@ -20,9 +21,10 @@ services:
           memory: 64M
 
   client:
-    container_name: uni-planner-client
     image: ghcr.io/hackerflo/uni-planner-client:latest
     restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
     ports:
       - "8080:80"
     depends_on:
@@ -43,7 +45,7 @@ services:
       WATCHTOWER_CLEANUP: "true"
       WATCHTOWER_SCHEDULE: "0 0 4 * * *"
       WATCHTOWER_INCLUDE_STOPPED: "false"
-    command: uni-planner-server uni-planner-client
+      WATCHTOWER_LABEL_ENABLE: "true"
     deploy:
       resources:
         limits:
