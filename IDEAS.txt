@@ -1,0 +1,15 @@
+UNI PLANNER — IMPROVEMENT IDEAS
+=================================
+Mark ideas as [x] when implemented, [ ] when pending.
+
+[ ] Display Bavarian / German public holidays in the weekly planner, make those days' box in the week view stand out visually
+[ ] Make website into a PWA (Progressive Web App) installable on iPhone
+[ ] add user sign up and account management with delete account feature
+[ ] add version naming, handeling for future updates of the software
+[ ] add functionality so that to do list items can be dragged and dropped to new positions in the list within the week view
+[ ] test website and docker deploymet for security vulnerability
+[ ] add 2fa log in method, add passkey log in method that can be activated in account settings (only if that does not require external software/ servers)
+[ ] dark mode
+[ ] Tiles in to do list view should diplay a max of 2 lines of title text and expand to fit the text before cutting off the overflowing text with '...'
+[ ] 
+[ ] 

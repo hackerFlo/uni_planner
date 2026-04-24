@@ -1,0 +1,38 @@
+services:
+  server:
+    image: ghcr.io/YOUR_GITHUB_USERNAME/uni-planner-server:latest
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: 7d
+      CORS_ORIGIN: ${CORS_ORIGIN}
+      DATABASE_PATH: /app/data/planner.db
+    volumes:
+      - db_data:/app/data
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 256M
+        reservations:
+          memory: 64M
+
+  client:
+    image: ghcr.io/YOUR_GITHUB_USERNAME/uni-planner-client:latest
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - server
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 64M
+        reservations:
+          memory: 16M
+
+volumes:
+  db_data:
