@@ -7,6 +7,7 @@ import TodoList from '../components/todos/TodoList';
 import TodoForm from '../components/todos/TodoForm';
 import ArchiveDrawer from '../components/todos/ArchiveDrawer';
 import WeeklyPlanner from '../components/planner/WeeklyPlanner';
+import { _pendingAnimIds } from '../components/planner/AssignedCard';
 
 const LIST_BADGE = {
   university: 'bg-indigo-50 text-indigo-500',
@@ -188,6 +189,8 @@ export default function PlannerPage() {
 
     // Dropped on a day column (empty area)
     if (DATE_RE.test(overId)) {
+      const activeT = todos.find(t => t.id === realId);
+      if (!activeT?.day_assigned) _pendingAnimIds.add(realId);
       assignDay(realId, overId);
       return;
     }
@@ -207,6 +210,7 @@ export default function PlannerPage() {
       reorderDay(arrayMove(dayTodos, oldIdx, newIdx));
     } else if (overT.day_assigned) {
       // From sidebar or different day → assign AND insert at the target card's position
+      if (!activeT?.day_assigned) _pendingAnimIds.add(realId);
       const dayTodos = todos
         .filter(t => t.day_assigned === overT.day_assigned)
         .sort((a, b) => (a.planner_order ?? Infinity) - (b.planner_order ?? Infinity));
