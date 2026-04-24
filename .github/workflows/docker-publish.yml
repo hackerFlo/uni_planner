@@ -1,0 +1,40 @@
+name: Build and push Docker images
+
+on:
+  push:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  OWNER: ${{ github.repository_owner }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push server
+        uses: docker/build-push-action@v5
+        with:
+          context: ./server
+          push: true
+          tags: ghcr.io/${{ env.OWNER }}/uni-planner-server:latest
+
+      - name: Build and push client
+        uses: docker/build-push-action@v5
+        with:
+          context: ./client
+          push: true
+          tags: ghcr.io/${{ env.OWNER }}/uni-planner-client:latest

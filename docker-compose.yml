@@ -1,0 +1,24 @@
+services:
+  server:
+    build: ./server
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: 7d
+      CORS_ORIGIN: ${CORS_ORIGIN}
+      DATABASE_PATH: /app/data/planner.db
+    volumes:
+      - db_data:/app/data
+
+  client:
+    build: ./client
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - server
+
+volumes:
+  db_data:
