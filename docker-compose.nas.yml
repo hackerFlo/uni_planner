@@ -1,6 +1,6 @@
 services:
   server:
-    image: ghcr.io/YOUR_GITHUB_USERNAME/uni-planner-server:latest
+    image: ghcr.io/hackerflo/uni-planner-server:latest
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -20,7 +20,7 @@ services:
           memory: 64M
 
   client:
-    image: ghcr.io/YOUR_GITHUB_USERNAME/uni-planner-client:latest
+    image: ghcr.io/hackerflo/uni-planner-client:latest
     restart: unless-stopped
     ports:
       - "8080:80"
