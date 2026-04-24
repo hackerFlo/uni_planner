@@ -4,10 +4,6 @@ on:
   push:
     branches: [main]
 
-env:
-  REGISTRY: ghcr.io
-  OWNER: ${{ github.repository_owner }}
-
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
@@ -25,16 +21,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set lowercase image names
+        run: |
+          echo "SERVER_IMAGE=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/uni-planner-server:latest" >> $GITHUB_ENV
+          echo "CLIENT_IMAGE=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/uni-planner-client:latest" >> $GITHUB_ENV
+
       - name: Build and push server
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./server
           push: true
-          tags: ghcr.io/${{ env.OWNER }}/uni-planner-server:latest
+          tags: ${{ env.SERVER_IMAGE }}
 
       - name: Build and push client
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./client
           push: true
-          tags: ghcr.io/${{ env.OWNER }}/uni-planner-client:latest
+          tags: ${{ env.CLIENT_IMAGE }}
