@@ -93,7 +93,7 @@ export default function WeeklyPlanner({ todos, onUnassign, onComplete, onEdit })
 
       <div
         ref={scrollRef}
-        className="flex-1 min-h-0 overflow-x-auto overflow-y-auto [&::-webkit-scrollbar]:hidden"
+        className="flex-1 min-h-0 overflow-x-auto overflow-y-auto [&::-webkit-scrollbar]:hidden snap-x snap-mandatory md:snap-none"
         style={{ scrollbarWidth: 'none' }}
       >
         <div className="flex gap-3 min-h-full">

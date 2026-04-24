@@ -23,7 +23,7 @@ export default function DayColumn({ date, todos, onUnassign, onComplete, onEdit 
   return (
     <div
       ref={setNodeRef}
-      className={`flex flex-col min-w-[180px] flex-shrink-0 rounded-xl border transition-all ${
+      className={`flex flex-col min-w-[180px] flex-shrink-0 rounded-xl border transition-all snap-start md:snap-align-none ${
         isToday
           ? 'border-indigo-200 bg-indigo-50/40'
           : 'border-zinc-100 bg-white'
