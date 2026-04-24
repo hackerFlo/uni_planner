@@ -6,7 +6,7 @@ const cookieParser = require('cookie-parser');
 const { authLimiter, todoLimiter } = require('./middleware/rateLimiter');
 const authRoutes = require('./routes/auth');
 const todoRoutes = require('./routes/todos');
-const seed = require('./seed');
+const seed = process.env.NODE_ENV !== 'production' ? require('./seed') : () => Promise.resolve();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
