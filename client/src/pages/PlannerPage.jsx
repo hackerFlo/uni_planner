@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { DndContext, DragOverlay, MouseSensor, TouchSensor, KeyboardSensor, useSensor, useSensors, pointerWithin, closestCenter } from '@dnd-kit/core';
+import { arrayMove } from '@dnd-kit/sortable';
 import { useTodos } from '../hooks/useTodos';
 import Navbar from '../components/layout/Navbar';
 import TodoList from '../components/todos/TodoList';
@@ -39,8 +40,9 @@ function DragCard({ todo, rotation = 0 }) {
 }
 
 export default function PlannerPage() {
-  const { todos, loading, fetchTodos, createTodo, updateTodo, deleteTodo, assignDay } = useTodos();
+  const { todos, loading, fetchTodos, createTodo, updateTodo, deleteTodo, assignDay, reorderDay } = useTodos();
   const [activeTodo, setActiveTodo] = useState(null);
+  const [dragOverInfo, setDragOverInfo] = useState(null);
   const [dragRotation, setDragRotation] = useState(0);
   const [formState, setFormState] = useState(null); // null | { mode: 'create'|'edit', todo?, defaults? }
   const [archiveOpen, setArchiveOpen] = useState(false);
@@ -51,6 +53,7 @@ export default function PlannerPage() {
   const resizingRef = useRef(false);
   const resizeStartRef = useRef({ x: 0, width: 0 });
   const lastPointerX = useRef(null);
+  const dragCommitRef = useRef({ prevDate: null, time: 0 });
 
   useEffect(() => { fetchTodos(); }, [fetchTodos]);
 
@@ -128,46 +131,140 @@ export default function PlannerPage() {
 
   function collisionDetection(args) {
     const within = pointerWithin(args);
-    return within.length > 0 ? within : closestCenter(args);
+    if (within.length === 0) return closestCenter(args);
+    // Prefer card droppables (numeric id) over column droppables (date string)
+    const cardHit = within.find(c => typeof c.id === 'number');
+    return cardHit ? [cardHit] : within;
+  }
+
+  function handleDragOver({ active, over }) {
+    if (!activeTodo) { setDragOverInfo(null); return; }
+    if (!over) return; // Don't clear on transient null — prevents layout-shift feedback loop
+    const realActiveId = getRealId(active.id);
+    const overId = over.id;
+    const activeT = todos.find(t => t.id === realActiveId);
+
+    let targetDate = null;
+    let targetOverId = null;
+
+    if (DATE_RE.test(overId)) {
+      if (overId !== activeT?.day_assigned) { targetDate = overId; }
+    } else if (typeof overId === 'number') {
+      const overT = todos.find(t => t.id === overId);
+      if (overT?.day_assigned && overT.day_assigned !== activeT?.day_assigned) {
+        targetDate = overT.day_assigned;
+        targetOverId = overId;
+      }
+    }
+
+    if (!targetDate) { setDragOverInfo(null); return; }
+
+    setDragOverInfo(prev => {
+      if (prev?.date === targetDate) return prev; // Already committed here — freeze
+
+      // If this target is the column we just left, and it's within 150ms, it's a
+      // layout-shift bounce between adjacent columns — ignore it
+      const { prevDate, time } = dragCommitRef.current;
+      if (prevDate === targetDate && Date.now() - time < 150) return prev;
+
+      dragCommitRef.current = { prevDate: prev?.date ?? null, time: Date.now() };
+      return { date: targetDate, overId: targetOverId };
+    });
   }
 
   function handleDragStart({ active }) {
     const realId = getRealId(active.id);
     setActiveTodo(todos.find(t => t.id === realId) ?? null);
+    dragCommitRef.current = { prevDate: null, time: 0 };
   }
 
   function handleDragEnd({ active, over }) {
     setActiveTodo(null);
+    setDragOverInfo(null);
     if (!over) return;
     const realId = getRealId(active.id);
     const overId = over.id;
     if (realId === overId) return;
-    const date = DATE_RE.test(overId) ? overId : null;
-    assignDay(realId, date);
+
+    // Dropped on a day column (empty area)
+    if (DATE_RE.test(overId)) {
+      assignDay(realId, overId);
+      return;
+    }
+
+    // Dropped on another card
+    const activeT = todos.find(t => t.id === realId);
+    const overT = todos.find(t => t.id === overId);
+    if (!overT) return;
+
+    if (activeT?.day_assigned && activeT.day_assigned === overT.day_assigned) {
+      // Same day → reorder within the column
+      const dayTodos = todos
+        .filter(t => t.day_assigned === activeT.day_assigned)
+        .sort((a, b) => (a.planner_order ?? Infinity) - (b.planner_order ?? Infinity));
+      const oldIdx = dayTodos.findIndex(t => t.id === realId);
+      const newIdx = dayTodos.findIndex(t => t.id === overId);
+      reorderDay(arrayMove(dayTodos, oldIdx, newIdx));
+    } else if (overT.day_assigned) {
+      // From sidebar or different day → assign AND insert at the target card's position
+      const dayTodos = todos
+        .filter(t => t.day_assigned === overT.day_assigned)
+        .sort((a, b) => (a.planner_order ?? Infinity) - (b.planner_order ?? Infinity));
+      const insertIdx = dayTodos.findIndex(t => t.id === overId);
+      const newOrder = [
+        ...dayTodos.slice(0, insertIdx),
+        activeT,
+        ...dayTodos.slice(insertIdx),
+      ];
+      assignDay(realId, overT.day_assigned).then(() => reorderDay(newOrder));
+    }
   }
 
   const sidebarTodos = todos;
   const plannerTodos = todos.filter(t => t.day_assigned);
+
+  const displayPlannerTodos = useMemo(() => {
+    if (!activeTodo || !dragOverInfo) return plannerTodos;
+    const { date, overId: overCardId } = dragOverInfo;
+    const activeId = activeTodo.id;
+    const withoutActive = plannerTodos.filter(t => t.id !== activeId);
+    const targetItems = withoutActive
+      .filter(t => t.day_assigned === date)
+      .sort((a, b) => (a.planner_order ?? Infinity) - (b.planner_order ?? Infinity));
+    const ghost = { ...activeTodo, day_assigned: date };
+    if (overCardId == null) {
+      targetItems.push(ghost);
+    } else {
+      const idx = targetItems.findIndex(t => t.id === overCardId);
+      targetItems.splice(idx >= 0 ? idx : targetItems.length, 0, ghost);
+    }
+    const reordered = targetItems.map((t, i) => ({ ...t, planner_order: i }));
+    return [...withoutActive.filter(t => t.day_assigned !== date), ...reordered];
+  }, [activeTodo, dragOverInfo, plannerTodos]);
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-white">
       <Navbar onArchiveToggle={() => setArchiveOpen(v => !v)} archiveOpen={archiveOpen} />
 
       <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
-        <DndContext sensors={sensors} collisionDetection={collisionDetection} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+        <DndContext sensors={sensors} collisionDetection={collisionDetection} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
 
           {/* Weekly planner — top half on mobile, right panel on desktop */}
           <main className="flex-1 overflow-hidden order-1 md:order-2">
             <WeeklyPlanner
-              todos={plannerTodos}
+              todos={displayPlannerTodos}
               onUnassign={id => assignDay(id, null)}
               onComplete={todo => updateTodo(todo.id, { completed: 1, archived: 1 })}
               onEdit={todo => setFormState({ mode: 'edit', todo })}
+              onReorder={reorderDay}
             />
           </main>
 
           {/* Sidebar wrapper — bottom half on mobile, left panel on desktop */}
-          <div className="relative flex-1 md:flex-none md:flex-shrink-0 bg-zinc-50 order-2 md:order-1 border-t border-zinc-200 md:border-t-0 overflow-hidden">
+          <div
+            className="relative flex-1 md:flex-none md:flex-shrink-0 bg-zinc-50 order-2 md:order-1 border-t border-zinc-200 md:border-t-0"
+            style={isMobile ? undefined : (sidebarCollapsed ? { width: 0 } : { width: `${sidebarWidth}px` })}
+          >
             <aside
               style={isMobile ? undefined : (sidebarCollapsed ? { width: 0 } : { width: `${sidebarWidth}px` })}
               className={`bg-zinc-50 flex flex-col h-full overflow-hidden ${isMobile || isResizing ? '' : 'transition-[width] duration-200'}`}

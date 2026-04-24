@@ -1,5 +1,6 @@
 import { useRef, useState, useMemo, useEffect } from 'react';
 import DayColumn from './DayColumn';
+import { useHolidays } from '../../hooks/useHolidays';
 
 function getWeekDates(offset = 0) {
   const today = new Date();
@@ -20,8 +21,9 @@ function getWeekDates(offset = 0) {
 
 const WEEK_LABEL = { '-1': 'Last Week', '0': 'This Week', '1': 'Next Week' };
 
-export default function WeeklyPlanner({ todos, onUnassign, onComplete, onEdit }) {
+export default function WeeklyPlanner({ todos, onUnassign, onComplete, onEdit, onReorder }) {
   const [weekOffset, setWeekOffset] = useState(0);
+  const holidays = useHolidays();
 
   const weekDates = useMemo(() => getWeekDates(weekOffset), [weekOffset]);
 
@@ -32,7 +34,12 @@ export default function WeeklyPlanner({ todos, onUnassign, onComplete, onEdit })
     for (const date of weekDates) {
       result[date] = todos
         .filter(t => t.day_assigned === date)
-        .sort((a, b) => (LIST_ORDER[a.list_type] ?? 3) - (LIST_ORDER[b.list_type] ?? 3));
+        .sort((a, b) => {
+          const ao = a.planner_order ?? Infinity;
+          const bo = b.planner_order ?? Infinity;
+          if (ao !== bo) return ao - bo;
+          return (LIST_ORDER[a.list_type] ?? 3) - (LIST_ORDER[b.list_type] ?? 3);
+        });
     }
     return result;
   }, [todos, weekDates]);
@@ -102,9 +109,11 @@ export default function WeeklyPlanner({ todos, onUnassign, onComplete, onEdit })
               key={date}
               date={date}
               todos={todosByDate[date]}
+              holiday={holidays.get(date) ?? null}
               onUnassign={onUnassign}
               onComplete={onComplete}
               onEdit={onEdit}
+              onReorder={onReorder}
             />
           ))}
         </div>

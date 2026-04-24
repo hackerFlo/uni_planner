@@ -32,6 +32,13 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_todos_user_id ON todos(user_id);
 `);
 
+// Migrate: add planner_order column if missing
+const todoCols = db.prepare(`PRAGMA table_info(todos)`).all();
+if (!todoCols.some(c => c.name === 'planner_order')) {
+  db.exec(`ALTER TABLE todos ADD COLUMN planner_order INTEGER`);
+  console.log('[db] Migrated: added planner_order column');
+}
+
 // Migrate: if todos table still has the day-name CHECK constraint, recreate without it
 // day_assigned now stores ISO dates (YYYY-MM-DD) instead of day names
 const schema = db.prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='todos'`).get();

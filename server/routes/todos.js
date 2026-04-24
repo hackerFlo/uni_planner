@@ -45,6 +45,26 @@ router.post('/', (req, res) => {
   res.status(201).json({ todo });
 });
 
+router.patch('/reorder', (req, res) => {
+  const items = req.body.items;
+  if (!Array.isArray(items)) return res.status(400).json({ error: 'items must be an array' });
+
+  const stmt = db.prepare('UPDATE todos SET planner_order = ?, updated_at = ? WHERE id = ? AND user_id = ?');
+  const now = NOW();
+
+  const updateMany = db.transaction((rows) => {
+    for (const { id, planner_order } of rows) {
+      const numId = parseInt(id, 10);
+      const numOrder = parseInt(planner_order, 10);
+      if (!Number.isInteger(numId) || !Number.isInteger(numOrder)) continue;
+      stmt.run(numOrder, now, numId, req.user.id);
+    }
+  });
+
+  updateMany(items);
+  res.json({ ok: true });
+});
+
 router.patch('/:id', (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
@@ -80,6 +100,12 @@ router.patch('/:id', (req, res) => {
   if (req.body.archived !== undefined) {
     updates.archived = req.body.archived ? 1 : 0;
     if (updates.archived === 0) updates.completed = 0;
+  }
+
+  if (req.body.planner_order !== undefined) {
+    const po = Number(req.body.planner_order);
+    if (!Number.isInteger(po)) return res.status(400).json({ error: 'Invalid planner_order' });
+    updates.planner_order = po;
   }
 
   if ('day_assigned' in req.body) {
