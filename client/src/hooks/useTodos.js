@@ -33,10 +33,20 @@ export function useTodos() {
   }, []);
 
   const assignDay = useCallback(async (id, day) => {
+    setTodos(prev => prev.map(t => t.id === id ? { ...t, day_assigned: day } : t));
     const { todo } = await api.patch(`/api/todos/${id}`, { day_assigned: day });
     setTodos(prev => prev.map(t => t.id === id ? todo : t));
     return todo;
   }, []);
 
-  return { todos, loading, fetchTodos, createTodo, updateTodo, deleteTodo, assignDay };
+  const reorderDay = useCallback(async (orderedTodos) => {
+    const items = orderedTodos.map((t, i) => ({ id: t.id, planner_order: i }));
+    setTodos(prev => {
+      const map = new Map(items.map(({ id, planner_order }) => [id, planner_order]));
+      return prev.map(t => map.has(t.id) ? { ...t, planner_order: map.get(t.id) } : t);
+    });
+    await api.patch('/api/todos/reorder', { items });
+  }, []);
+
+  return { todos, loading, fetchTodos, createTodo, updateTodo, deleteTodo, assignDay, reorderDay };
 }
