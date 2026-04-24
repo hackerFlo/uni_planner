@@ -9,3 +9,9 @@ server/.env
 dist/
 client/dist/
 .DS_Store
+
+# Local dev / planning files
+IDEAS.txt
+dev-commands.txt
+CLAUDE.md
+start.sh
