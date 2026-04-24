@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useDraggable } from '@dnd-kit/core';
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -8,18 +9,28 @@ function dayLabel(iso) {
 }
 
 export default function TodoCard({ todo, isAssigned, onComplete, onEdit, onDelete }) {
+  const [checked, setChecked] = useState(false);
   // Use a distinct id for sidebar copies so they don't clash with the
   // AssignedCard draggable that uses the same todo.id in the planner.
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: isAssigned ? `sidebar-${todo.id}` : todo.id,
   });
 
+  function handleComplete(e) {
+    e.stopPropagation();
+    if (checked) return;
+    setChecked(true);
+    setTimeout(() => onComplete(todo), 500);
+  }
+
   return (
     <div
       ref={setNodeRef}
       style={{
-        opacity: isDragging ? 0 : 1,
+        opacity: isDragging ? 0 : checked ? 0.4 : 1,
         touchAction: 'none',
+        transform: checked ? 'scale(0.97)' : undefined,
+        transition: checked ? 'opacity 400ms ease, transform 300ms ease' : undefined,
       }}
       className={`group border rounded-lg p-3 shadow-sm transition-all select-none cursor-grab active:cursor-grabbing ${
         isAssigned
@@ -32,11 +43,26 @@ export default function TodoCard({ todo, isAssigned, onComplete, onEdit, onDelet
       <div className="flex items-start gap-2.5">
         <button
           onPointerDown={e => e.stopPropagation()}
-          onClick={e => { e.stopPropagation(); onComplete(todo); }}
-          className="mt-0.5 flex-shrink-0 w-4 h-4 rounded border border-zinc-300 hover:border-indigo-400 hover:bg-indigo-50 transition flex items-center justify-center"
+          onClick={handleComplete}
+          className={`mt-0.5 flex-shrink-0 w-4 h-4 rounded border transition-all duration-150 flex items-center justify-center ${
+            checked
+              ? 'bg-indigo-500 border-indigo-500'
+              : 'border-zinc-300 hover:border-indigo-400 hover:bg-indigo-50'
+          }`}
           title="Mark complete"
         >
-          <svg className="w-2.5 h-2.5 text-indigo-500 opacity-0 group-hover:opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+          <svg
+            className="w-2.5 h-2.5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="white"
+            strokeWidth={3}
+            style={{
+              strokeDasharray: 40,
+              strokeDashoffset: checked ? 0 : 40,
+              transition: 'stroke-dashoffset 280ms ease 60ms',
+            }}
+          >
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
           </svg>
         </button>
