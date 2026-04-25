@@ -20,14 +20,13 @@ function getWeekDates(offset = 0) {
 }
 
 const WEEK_LABEL = { '-1': 'Last Week', '0': 'This Week', '1': 'Next Week' };
+const LIST_ORDER = { university: 0, private: 1, future: 2 };
 
 export default function WeeklyPlanner({ todos, onUnassign, onComplete, onEdit, onReorder }) {
   const [weekOffset, setWeekOffset] = useState(0);
   const holidays = useHolidays();
 
   const weekDates = useMemo(() => getWeekDates(weekOffset), [weekOffset]);
-
-  const LIST_ORDER = { university: 0, private: 1, future: 2 };
 
   const todosByDate = useMemo(() => {
     const result = {};
