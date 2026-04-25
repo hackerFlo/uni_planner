@@ -15,6 +15,8 @@ const LIST_BADGE = {
   future: 'bg-amber-50 text-amber-600',
 };
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 function DragCard({ todo, rotation = 0 }) {
   return (
     <div
@@ -121,8 +123,6 @@ export default function PlannerPage() {
     useSensor(KeyboardSensor)
   );
 
-  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-
   function getRealId(id) {
     if (typeof id === 'string' && id.startsWith('sidebar-')) {
       return Number(id.slice('sidebar-'.length));
@@ -224,8 +224,12 @@ export default function PlannerPage() {
     }
   }
 
-  const sidebarTodos = todos;
-  const plannerTodos = todos.filter(t => t.day_assigned);
+  const plannerTodos = useMemo(() => todos.filter(t => t.day_assigned), [todos]);
+  const sidebarByType = useMemo(() => ({
+    university: todos.filter(t => t.list_type === 'university'),
+    private: todos.filter(t => t.list_type === 'private'),
+    future: todos.filter(t => t.list_type === 'future'),
+  }), [todos]);
 
   const displayPlannerTodos = useMemo(() => {
     if (!activeTodo || !dragOverInfo) return plannerTodos;
@@ -254,7 +258,7 @@ export default function PlannerPage() {
         <DndContext sensors={sensors} collisionDetection={collisionDetection} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
 
           {/* Weekly planner — top half on mobile, right panel on desktop */}
-          <main className="flex-1 overflow-hidden order-1 md:order-2">
+          <main className="h-1/2 md:h-auto md:flex-1 flex-shrink-0 overflow-hidden order-1 md:order-2">
             <WeeklyPlanner
               todos={displayPlannerTodos}
               onUnassign={id => assignDay(id, null)}
@@ -266,7 +270,7 @@ export default function PlannerPage() {
 
           {/* Sidebar wrapper — bottom half on mobile, left panel on desktop */}
           <div
-            className="relative flex-1 md:flex-none md:flex-shrink-0 bg-zinc-50 order-2 md:order-1 border-t border-zinc-200 md:border-t-0"
+            className="relative h-1/2 md:h-auto flex-shrink-0 md:flex-none bg-zinc-50 order-2 md:order-1 border-t border-zinc-200 md:border-t-0"
             style={isMobile ? undefined : (sidebarCollapsed ? { width: 0 } : { width: `${sidebarWidth}px` })}
           >
             <aside
@@ -279,7 +283,7 @@ export default function PlannerPage() {
               >
                 <TodoList
                   type="university"
-                  todos={sidebarTodos.filter(t => t.list_type === 'university')}
+                  todos={sidebarByType.university}
                   loading={loading}
                   onAdd={() => setFormState({ mode: 'create', defaults: { list_type: 'university' } })}
                   onEdit={todo => setFormState({ mode: 'edit', todo })}
@@ -288,7 +292,7 @@ export default function PlannerPage() {
                 />
                 <TodoList
                   type="private"
-                  todos={sidebarTodos.filter(t => t.list_type === 'private')}
+                  todos={sidebarByType.private}
                   loading={loading}
                   onAdd={() => setFormState({ mode: 'create', defaults: { list_type: 'private' } })}
                   onEdit={todo => setFormState({ mode: 'edit', todo })}
@@ -297,7 +301,7 @@ export default function PlannerPage() {
                 />
                 <TodoList
                   type="future"
-                  todos={sidebarTodos.filter(t => t.list_type === 'future')}
+                  todos={sidebarByType.future}
                   loading={loading}
                   onAdd={() => setFormState({ mode: 'create', defaults: { list_type: 'future' } })}
                   onEdit={todo => setFormState({ mode: 'edit', todo })}

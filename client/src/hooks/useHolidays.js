@@ -15,11 +15,13 @@ export function useHolidays() {
 
   useEffect(() => {
     const year = new Date().getFullYear();
-    Promise.all([fetchYear(year), fetchYear(year + 1)]).then(([a, b]) => {
-      const map = new Map();
-      [...a, ...b].forEach(h => map.set(h.date, h.localName));
-      setHolidays(map);
-    });
+    Promise.all([fetchYear(year), fetchYear(year + 1)])
+      .then(([a, b]) => {
+        const map = new Map();
+        [...a, ...b].forEach(h => map.set(h.date, h.localName));
+        setHolidays(map);
+      })
+      .catch(() => {});
   }, []);
 
   return holidays;
