@@ -21,21 +21,30 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set lowercase image names
+      - name: Set image names
         run: |
-          echo "SERVER_IMAGE=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/uni-planner-server:latest" >> $GITHUB_ENV
-          echo "CLIENT_IMAGE=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/uni-planner-client:latest" >> $GITHUB_ENV
+          OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
+          SHA=${{ github.sha }}
+          echo "SERVER_IMAGE=ghcr.io/${OWNER}/uni-planner-server" >> $GITHUB_ENV
+          echo "CLIENT_IMAGE=ghcr.io/${OWNER}/uni-planner-client" >> $GITHUB_ENV
+          echo "SHA_TAG=${SHA::7}" >> $GITHUB_ENV
 
       - name: Build and push server
         uses: docker/build-push-action@v6
         with:
           context: ./server
           push: true
-          tags: ${{ env.SERVER_IMAGE }}
+          no-cache: true
+          tags: |
+            ${{ env.SERVER_IMAGE }}:latest
+            ${{ env.SERVER_IMAGE }}:${{ env.SHA_TAG }}
 
       - name: Build and push client
         uses: docker/build-push-action@v6
         with:
           context: ./client
           push: true
-          tags: ${{ env.CLIENT_IMAGE }}
+          no-cache: true
+          tags: |
+            ${{ env.CLIENT_IMAGE }}:latest
+            ${{ env.CLIENT_IMAGE }}:${{ env.SHA_TAG }}
