@@ -68,8 +68,8 @@ export default function TodoCard({ todo, isAssigned, onComplete, onEdit, onDelet
         </button>
 
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <p className={`text-sm font-medium truncate flex-1 min-w-0 ${isAssigned ? 'text-zinc-400' : 'text-zinc-800'}`}>{todo.title}</p>
+          <div className="flex items-start gap-1.5 min-w-0">
+            <p className={`text-sm font-medium break-words flex-1 min-w-0 ${isAssigned ? 'text-zinc-400' : 'text-zinc-800'}`}>{todo.title}</p>
             {isAssigned && (
               <span className="flex-shrink-0 text-[9px] font-medium text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded-full">
                 {dayLabel(todo.day_assigned)}

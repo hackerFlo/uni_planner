@@ -24,7 +24,7 @@ export default function DayColumn({ date, todos, holiday, onUnassign, onComplete
   return (
     <div
       ref={setNodeRef}
-      className={`flex flex-col min-w-[180px] flex-shrink-0 rounded-xl border transition-all snap-start md:snap-align-none ${
+      className={`flex flex-col w-[180px] flex-shrink-0 overflow-hidden rounded-xl border transition-all snap-start md:snap-align-none ${
         isToday
           ? 'border-indigo-200 bg-indigo-50/40'
           : holiday
