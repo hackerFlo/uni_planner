@@ -52,7 +52,7 @@ export default function AssignedCard({ todo, onUnassign, onComplete, onEdit }) {
   return (
     <div
       ref={setNodeRef}
-      className={`group bg-white border border-zinc-100 rounded-lg p-2.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-grab active:cursor-grabbing select-none${dropping ? ' card-plop' : ''}`}
+      className={`group bg-white border border-zinc-100 rounded-lg p-2.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-grab active:cursor-grabbing select-none min-w-0 w-full${dropping ? ' card-plop' : ''}`}
       style={{
         transform: dropping ? undefined : CSS.Transform.toString(transform),
         transition: checked ? 'opacity 400ms ease, transform 300ms ease' : transition,
@@ -93,7 +93,7 @@ export default function AssignedCard({ todo, onUnassign, onComplete, onEdit }) {
         </span>
       </div>
 
-      <p className="text-xs font-medium text-zinc-800 leading-snug">{todo.title}</p>
+      <p className="text-xs font-medium text-zinc-800 leading-snug break-words min-w-0 w-full">{todo.title}</p>
       {todo.description && (
         <p className="text-[11px] text-zinc-400 mt-0.5 line-clamp-2">{todo.description}</p>
       )}
