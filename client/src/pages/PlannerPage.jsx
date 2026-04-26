@@ -180,19 +180,22 @@ export default function PlannerPage() {
       }
     }
 
-    if (!targetDate) { setDragOverInfo(null); return; }
+    if (!targetDate) {
+      // Only clear the ghost when pointer is explicitly on a column (date string).
+      // A card-number result from the source column can be a closestCenter artifact
+      // when pointerWithin briefly returns nothing — don't let that erase the ghost.
+      if (DATE_RE.test(overId)) setDragOverInfo(null);
+      return;
+    }
 
     setDragOverInfo(prev => {
       if (prev?.date === targetDate) {
-        // Same column: freeze the column choice but allow position updates within it.
-        // Without this, the overId (insertion slot) never updates after first commit.
         if (prev?.overId === targetOverId) return prev;
-        // When the ghost animates in it pushes the card below it downward, so the pointer
-        // briefly lands between column top and the card's new position. pointerWithin then
-        // returns only the column (no card), giving targetOverId = null. Don't allow that
-        // to erase a card position we've already locked onto — it would move the ghost to
-        // the end and the displaced card would snap back.
-        if (targetOverId === null && prev?.overId != null) return prev;
+        // Never allow the insertion slot to reset to null (ghost-at-end) once we
+        // are already inside this column — the ghost animation shifts card B downward,
+        // which briefly makes the pointer land in empty space and causes pointerWithin
+        // to return only the column (targetOverId = null). Freezing prevents the snap-back.
+        if (targetOverId === null) return prev;
         return { date: targetDate, overId: targetOverId };
       }
 
