@@ -16,6 +16,8 @@ setTimeout(() => { _appReady = true; }, 900);
 // PlannerPage adds an id here before assignDay fires; AssignedCard consumes & deletes it on mount
 export const _pendingAnimIds = new Set();
 
+function fmtTime(t) { return t ? t.replace(' min', 'm') : t; }
+
 const LIST_BADGE = {
   university: 'bg-indigo-50 text-indigo-500',
   private: 'bg-emerald-50 text-emerald-600',
@@ -91,6 +93,11 @@ export default function AssignedCard({ todo, onUnassign, onComplete, onEdit, isG
         <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full uppercase tracking-wide ${LIST_BADGE[todo.list_type]}`}>
           {todo.list_type}
         </span>
+        {todo.approx_time && (
+          <span className="text-[9px] font-medium text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded-full truncate">
+            {fmtTime(todo.approx_time)}
+          </span>
+        )}
       </div>
 
       <p className="text-xs font-medium text-zinc-800 leading-snug break-words min-w-0 w-full">{todo.title}</p>

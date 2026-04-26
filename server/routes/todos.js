@@ -23,7 +23,7 @@ router.get('/archived', (req, res) => {
 });
 
 router.post('/', (req, res) => {
-  const { title, description, list_type, day_assigned } = req.body;
+  const { title, description, list_type, day_assigned, approx_time } = req.body;
 
   const cleanTitle = sanitizeTitle(title);
   if (!cleanTitle) return res.status(400).json({ error: 'Title is required (max 200 chars)' });
@@ -37,9 +37,11 @@ router.post('/', (req, res) => {
   const cleanDay = validateDayAssigned(day_assigned);
   if (cleanDay === false) return res.status(400).json({ error: 'Invalid day_assigned value' });
 
+  const cleanTime = approx_time ? String(approx_time).trim().slice(0, 50) || null : null;
+
   const result = db.prepare(
-    'INSERT INTO todos (user_id, list_type, title, description, day_assigned) VALUES (?, ?, ?, ?, ?)'
-  ).run(req.user.id, cleanListType, cleanTitle, cleanDesc, cleanDay);
+    'INSERT INTO todos (user_id, list_type, title, description, day_assigned, approx_time) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(req.user.id, cleanListType, cleanTitle, cleanDesc, cleanDay, cleanTime);
 
   const todo = db.prepare('SELECT * FROM todos WHERE id = ?').get(result.lastInsertRowid);
   res.status(201).json({ todo });
@@ -112,6 +114,10 @@ router.patch('/:id', (req, res) => {
     const d = validateDayAssigned(req.body.day_assigned);
     if (d === false) return res.status(400).json({ error: 'Invalid day_assigned value' });
     updates.day_assigned = d;
+  }
+
+  if ('approx_time' in req.body) {
+    updates.approx_time = req.body.approx_time ? String(req.body.approx_time).trim().slice(0, 50) || null : null;
   }
 
   if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No valid fields to update' });

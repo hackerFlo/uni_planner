@@ -46,20 +46,28 @@ export default function WeeklyPlanner({ todos, onUnassign, onComplete, onEdit, o
   const scrollRef = useRef(null);
 
   useEffect(() => {
-    if (weekOffset !== 0 || !scrollRef.current) return;
-    const today = new Date();
-    const y = today.getFullYear();
-    const m = String(today.getMonth() + 1).padStart(2, '0');
-    const d = String(today.getDate()).padStart(2, '0');
-    const todayStr = `${y}-${m}-${d}`;
-    const idx = weekDates.indexOf(todayStr);
-    if (idx < 0) return;
+    if (!scrollRef.current) return;
     requestAnimationFrame(() => {
-      const col = scrollRef.current?.firstChild?.children[idx];
-      if (!col) return;
-      const containerRect = scrollRef.current.getBoundingClientRect();
-      const colRect = col.getBoundingClientRect();
-      scrollRef.current.scrollLeft += colRect.left - containerRect.left;
+      const container = scrollRef.current;
+      if (!container) return;
+      if (weekOffset === 1) {
+        container.scrollLeft = 0;
+      } else if (weekOffset === -1) {
+        container.scrollLeft = container.scrollWidth;
+      } else {
+        const today = new Date();
+        const y = today.getFullYear();
+        const m = String(today.getMonth() + 1).padStart(2, '0');
+        const d = String(today.getDate()).padStart(2, '0');
+        const todayStr = `${y}-${m}-${d}`;
+        const idx = weekDates.indexOf(todayStr);
+        if (idx < 0) return;
+        const col = container.firstChild?.children[idx];
+        if (!col) return;
+        const containerRect = container.getBoundingClientRect();
+        const colRect = col.getBoundingClientRect();
+        container.scrollLeft += colRect.left - containerRect.left;
+      }
     });
   }, [weekOffset, weekDates]);
 

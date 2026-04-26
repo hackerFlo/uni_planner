@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useDraggable } from '@dnd-kit/core';
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+function fmtTime(t) { return t ? t.replace(' min', 'm') : t; }
 function dayLabel(iso) {
   if (!iso) return '';
   const [y, m, d] = iso.split('-').map(Number);
@@ -70,8 +71,13 @@ export default function TodoCard({ todo, isAssigned, onComplete, onEdit, onDelet
         <div className="flex-1 min-w-0">
           <div className="flex items-start gap-1.5 min-w-0">
             <p className={`text-sm font-medium break-words flex-1 min-w-0 ${isAssigned ? 'text-zinc-400' : 'text-zinc-800'}`}>{todo.title}</p>
+            {todo.approx_time && (
+              <span className="flex-shrink-0 text-[9px] font-medium text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded-full group-hover:hidden">
+                {fmtTime(todo.approx_time)}
+              </span>
+            )}
             {isAssigned && (
-              <span className="flex-shrink-0 text-[9px] font-medium text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded-full">
+              <span className="flex-shrink-0 text-[9px] font-medium text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded-full group-hover:hidden">
                 {dayLabel(todo.day_assigned)}
               </span>
             )}
@@ -82,7 +88,7 @@ export default function TodoCard({ todo, isAssigned, onComplete, onEdit, onDelet
         </div>
 
         <div
-          className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition flex-shrink-0"
+          className="hidden group-hover:flex items-center gap-1 flex-shrink-0"
           onPointerDown={e => e.stopPropagation()}
         >
           <button
