@@ -29,7 +29,7 @@ export default function TodoCard({ todo, isAssigned, onComplete, onEdit, onDelet
       ref={setNodeRef}
       style={{
         opacity: isDragging ? 0 : checked ? 0.4 : 1,
-        touchAction: 'none',
+        touchAction: 'pan-y',
         transform: checked ? 'scale(0.97)' : undefined,
         transition: checked ? 'opacity 400ms ease, transform 300ms ease' : undefined,
       }}
