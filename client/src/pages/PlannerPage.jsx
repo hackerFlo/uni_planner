@@ -133,7 +133,28 @@ export default function PlannerPage() {
   function collisionDetection(args) {
     const within = pointerWithin(args);
     if (within.length === 0) return closestCenter(args);
-    // Prefer card droppables (numeric id) over column droppables (date string)
+
+    // When the ghost card inserts at position 0, it shifts card 0 down a few px so the
+    // pointer briefly exits its rect. pointerWithin then returns only the column, which
+    // makes SortableContext reset — card 0 snaps back up, pointer re-enters, loop starts.
+    // Fix: resolve card position with closestCenter (distance-based, not rect-based), but
+    // only among cards in the currently hovered column so empty columns don't pull in
+    // cards from adjacent columns.
+    const columnHit = within.find(c => typeof c.id === 'string' && DATE_RE.test(c.id));
+    if (columnHit) {
+      const colCardIds = new Set(
+        todos.filter(t => t.day_assigned === columnHit.id).map(t => t.id)
+      );
+      if (colCardIds.size > 0) {
+        const closest = closestCenter({
+          ...args,
+          droppableContainers: args.droppableContainers.filter(c => colCardIds.has(c.id)),
+        });
+        if (closest.length > 0) return closest;
+      }
+      return [columnHit];
+    }
+
     const cardHit = within.find(c => typeof c.id === 'number');
     return cardHit ? [cardHit] : within;
   }
@@ -143,6 +164,7 @@ export default function PlannerPage() {
     if (!over) return; // Don't clear on transient null — prevents layout-shift feedback loop
     const realActiveId = getRealId(active.id);
     const overId = over.id;
+    if (overId === realActiveId) return; // pointer over the ghost itself — preserve state
     const activeT = todos.find(t => t.id === realActiveId);
 
     let targetDate = null;
@@ -161,10 +183,21 @@ export default function PlannerPage() {
     if (!targetDate) { setDragOverInfo(null); return; }
 
     setDragOverInfo(prev => {
-      if (prev?.date === targetDate) return prev; // Already committed here — freeze
+      if (prev?.date === targetDate) {
+        // Same column: freeze the column choice but allow position updates within it.
+        // Without this, the overId (insertion slot) never updates after first commit.
+        if (prev?.overId === targetOverId) return prev;
+        // When the ghost animates in it pushes the card below it downward, so the pointer
+        // briefly lands between column top and the card's new position. pointerWithin then
+        // returns only the column (no card), giving targetOverId = null. Don't allow that
+        // to erase a card position we've already locked onto — it would move the ghost to
+        // the end and the displaced card would snap back.
+        if (targetOverId === null && prev?.overId != null) return prev;
+        return { date: targetDate, overId: targetOverId };
+      }
 
-      // If this target is the column we just left, and it's within 150ms, it's a
-      // layout-shift bounce between adjacent columns — ignore it
+      // Switching column: if this is the column we just left within 150ms it's a
+      // layout-shift bounce between adjacent columns — ignore it.
       const { prevDate, time } = dragCommitRef.current;
       if (prevDate === targetDate && Date.now() - time < 150) return prev;
 
@@ -239,7 +272,7 @@ export default function PlannerPage() {
     const targetItems = withoutActive
       .filter(t => t.day_assigned === date)
       .sort((a, b) => (a.planner_order ?? Infinity) - (b.planner_order ?? Infinity));
-    const ghost = { ...activeTodo, day_assigned: date };
+    const ghost = { ...activeTodo, day_assigned: date, _isGhost: true };
     if (overCardId == null) {
       targetItems.push(ghost);
     } else {

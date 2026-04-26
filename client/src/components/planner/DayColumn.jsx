@@ -66,8 +66,9 @@ export default function DayColumn({ date, todos, holiday, onUnassign, onComplete
           <SortableContext items={todos.map(t => t.id)} strategy={verticalListSortingStrategy}>
             {todos.map(todo => (
               <AssignedCard
-                key={todo.id}
+                key={todo._isGhost ? 'ghost' : todo.id}
                 todo={todo}
+                isGhost={!!todo._isGhost}
                 onUnassign={onUnassign}
                 onComplete={onComplete}
                 onEdit={onEdit}

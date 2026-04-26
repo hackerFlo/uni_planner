@@ -5,7 +5,7 @@ import { CSS } from '@dnd-kit/utilities';
 if (typeof document !== 'undefined' && !document.getElementById('card-plop-style')) {
   const s = document.createElement('style');
   s.id = 'card-plop-style';
-  s.textContent = `@keyframes cardPlop{0%{transform:translateY(-9px) scale(1.03);opacity:0}65%{transform:translateY(2px) scale(0.988);opacity:1}100%{transform:translateY(0) scale(1);opacity:1}}.card-plop{animation:cardPlop 300ms cubic-bezier(0.34,1.4,0.64,1) both}`;
+  s.textContent = `@keyframes cardPlop{0%{transform:translateY(-9px) scale(1.03);opacity:0}65%{transform:translateY(2px) scale(0.988);opacity:1}100%{transform:translateY(0) scale(1);opacity:1}}.card-plop{animation:cardPlop 300ms cubic-bezier(0.34,1.4,0.64,1) both}@keyframes ghostSlotIn{from{max-height:0}to{max-height:120px}}.ghost-slot{animation:ghostSlotIn 200ms cubic-bezier(0.25,1,0.5,1) both;overflow:hidden;}`;
   document.head.appendChild(s);
 }
 
@@ -22,7 +22,7 @@ const LIST_BADGE = {
   future: 'bg-amber-50 text-amber-600',
 };
 
-export default function AssignedCard({ todo, onUnassign, onComplete, onEdit }) {
+export default function AssignedCard({ todo, onUnassign, onComplete, onEdit, isGhost }) {
   const [checked, setChecked] = useState(false);
   const [dropping, setDropping] = useState(false);
   const { attributes, listeners, setNodeRef, isDragging, transform, transition } = useSortable({
@@ -52,7 +52,7 @@ export default function AssignedCard({ todo, onUnassign, onComplete, onEdit }) {
   return (
     <div
       ref={setNodeRef}
-      className={`group bg-white border border-zinc-100 rounded-lg p-2.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-grab active:cursor-grabbing select-none min-w-0 w-full${dropping ? ' card-plop' : ''}`}
+      className={`group bg-white border border-zinc-100 rounded-lg p-2.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-grab active:cursor-grabbing select-none min-w-0 w-full${dropping ? ' card-plop' : ''}${isGhost ? ' ghost-slot' : ''}`}
       style={{
         transform: dropping ? undefined : CSS.Transform.toString(transform),
         transition: checked ? 'opacity 400ms ease, transform 300ms ease' : transition,
