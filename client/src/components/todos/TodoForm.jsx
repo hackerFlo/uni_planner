@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
+import EmojiPicker from '../ui/EmojiPicker';
 
 function toIso(d) {
   const y = d.getFullYear();
@@ -36,13 +37,61 @@ function getAssignableDates() {
 
 const ASSIGNABLE_DATES = getAssignableDates();
 
+function detectEmojiTrigger(value, cursorPos) {
+  const before = value.substring(0, cursorPos);
+  const match = before.match(/(^|[^:\w]):([\w]*)$/);
+  if (!match) return null;
+  const query = match[2];
+  const colonIdx = match.index + match[1].length;
+  return { query, triggerStart: colonIdx };
+}
+
 export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate, onUpdate }) {
   const [title, setTitle] = useState(todo?.title ?? '');
   const [description, setDescription] = useState(todo?.description ?? '');
   const [listType, setListType] = useState(todo?.list_type ?? defaults.list_type ?? 'university');
   const [dayAssigned, setDayAssigned] = useState(todo?.day_assigned ?? '');
+  const [approxTime, setApproxTime] = useState(todo?.approx_time ?? '');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [emojiState, setEmojiState] = useState(null);
+
+  const titleRef = useRef(null);
+  const descRef = useRef(null);
+
+  function handleTitleChange(e) {
+    const val = e.target.value;
+    setTitle(val);
+    const trigger = detectEmojiTrigger(val, e.target.selectionStart);
+    setEmojiState(trigger ? { field: 'title', ...trigger } : null);
+  }
+
+  function handleDescChange(e) {
+    const val = e.target.value;
+    setDescription(val);
+    const trigger = detectEmojiTrigger(val, e.target.selectionStart);
+    setEmojiState(trigger ? { field: 'description', ...trigger } : null);
+  }
+
+  function handleEmojiSelect(emoji) {
+    if (!emojiState) return;
+    const isTitle = emojiState.field === 'title';
+    const ref = isTitle ? titleRef : descRef;
+    const value = isTitle ? title : description;
+    const cursorPos = ref.current?.selectionStart ?? value.length;
+    const newVal = value.substring(0, emojiState.triggerStart) + emoji + ' ' + value.substring(cursorPos);
+    if (isTitle) {
+      setTitle(newVal);
+    } else {
+      setDescription(newVal);
+    }
+    setEmojiState(null);
+    const newCursor = emojiState.triggerStart + [...emoji].length + 1;
+    setTimeout(() => {
+      ref.current?.focus();
+      ref.current?.setSelectionRange(newCursor, newCursor);
+    }, 0);
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -55,6 +104,7 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
         description: description.trim(),
         list_type: listType,
         day_assigned: dayAssigned || null,
+        approx_time: approxTime.trim() || null,
       };
       if (mode === 'edit') {
         await onUpdate(todo.id, data);
@@ -73,6 +123,7 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm px-4"
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      onKeyDown={e => { if (e.key === 'Escape' && !emojiState) onClose(); }}
     >
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
         <div className="flex items-center justify-between mb-5">
@@ -95,35 +146,65 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form
+          onSubmit={handleSubmit}
+          onKeyDown={e => { if (e.key === 'Enter' && e.metaKey) handleSubmit(e); }}
+          className="space-y-4"
+        >
           <div>
             <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1.5">
               Title <span className="text-red-400">*</span>
             </label>
-            <input
-              type="text"
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              maxLength={200}
-              autoFocus
-              required
-              className="w-full px-3.5 py-2.5 text-sm bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
-              placeholder="What needs to be done?"
-            />
+            <div className="relative">
+              {emojiState?.field === 'title' && (
+                <div className="absolute bottom-full left-0 mb-1.5 z-50">
+                  <EmojiPicker
+                    query={emojiState.query}
+                    onSelect={handleEmojiSelect}
+                    onClose={() => setEmojiState(null)}
+                  />
+                </div>
+              )}
+              <input
+                ref={titleRef}
+                type="text"
+                value={title}
+                onChange={handleTitleChange}
+                onBlur={() => setTimeout(() => setEmojiState(null), 150)}
+                maxLength={200}
+                autoFocus
+                required
+                className="w-full px-3.5 py-2.5 text-sm bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                placeholder="What needs to be done?"
+              />
+            </div>
           </div>
 
           <div>
             <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1.5">
               Description
             </label>
-            <textarea
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              rows={3}
-              maxLength={5000}
-              className="w-full px-3.5 py-2.5 text-sm bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition resize-none"
-              placeholder="Optional details…"
-            />
+            <div className="relative">
+              {emojiState?.field === 'description' && (
+                <div className="absolute bottom-full left-0 mb-1.5 z-50">
+                  <EmojiPicker
+                    query={emojiState.query}
+                    onSelect={handleEmojiSelect}
+                    onClose={() => setEmojiState(null)}
+                  />
+                </div>
+              )}
+              <textarea
+                ref={descRef}
+                value={description}
+                onChange={handleDescChange}
+                onBlur={() => setTimeout(() => setEmojiState(null), 150)}
+                rows={3}
+                maxLength={5000}
+                className="w-full px-3.5 py-2.5 text-sm bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition resize-none"
+                placeholder="Optional details…"
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -163,6 +244,27 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
                     </>
                   );
                 })}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1.5">
+                Approx. time <span className="normal-case text-zinc-400 font-normal">(optional)</span>
+              </label>
+              <select
+                value={approxTime}
+                onChange={e => setApproxTime(e.target.value)}
+                className="w-full px-3.5 py-2.5 text-sm bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+              >
+                <option value="">None</option>
+                <option value="15m">15m</option>
+                <option value="30m">30m</option>
+                <option value="45m">45m</option>
+                <option value="90m">90m</option>
+                <option value="1h">1h</option>
+                <option value="2h">2h</option>
+                <option value="3h">3h</option>
+                <option value="4h">4h</option>
               </select>
             </div>
           </div>

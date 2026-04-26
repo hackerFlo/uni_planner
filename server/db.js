@@ -38,6 +38,10 @@ if (!todoCols.some(c => c.name === 'planner_order')) {
   db.exec(`ALTER TABLE todos ADD COLUMN planner_order INTEGER`);
   console.log('[db] Migrated: added planner_order column');
 }
+if (!todoCols.some(c => c.name === 'approx_time')) {
+  db.exec(`ALTER TABLE todos ADD COLUMN approx_time TEXT`);
+  console.log('[db] Migrated: added approx_time column');
+}
 
 // Migrate: if todos table still has the day-name CHECK constraint, recreate without it
 // day_assigned now stores ISO dates (YYYY-MM-DD) instead of day names
