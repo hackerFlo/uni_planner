@@ -9,8 +9,8 @@ services:
       JWT_EXPIRES_IN: 7d
       CORS_ORIGIN: ${CORS_ORIGIN}
       DATABASE_PATH: /app/data/planner.db
-      MAILEROO_API_KEY: ${MAILEROO_API_KEY}
-      MAILEROO_FROM: ${MAILEROO_FROM}
+      GMAIL_USER: ${GMAIL_USER}
+      GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD}
       NOTIFICATION_ENCRYPT_KEY: ${NOTIFICATION_ENCRYPT_KEY}
     volumes:
       - db_data:/app/data
