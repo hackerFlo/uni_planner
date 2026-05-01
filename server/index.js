@@ -27,8 +27,11 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
+const { startScheduler } = require('./scheduler');
+
 seed().then(() => {
   const server = app.listen(PORT, () => console.log(`[server] Listening on http://localhost:${PORT}`));
+  startScheduler();
 
   const shutdown = () => server.close(() => process.exit(0));
   process.on('SIGTERM', shutdown);

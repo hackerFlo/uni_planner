@@ -24,4 +24,11 @@
   ::-webkit-scrollbar-thumb {
     @apply bg-zinc-200 rounded-full;
   }
+  .autohide-scroll::-webkit-scrollbar-thumb {
+    background: transparent;
+    transition: background 0.25s ease;
+  }
+  .autohide-scroll.is-scrolling::-webkit-scrollbar-thumb {
+    @apply bg-zinc-200;
+  }
 }

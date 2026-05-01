@@ -96,7 +96,10 @@ router.patch('/:id', (req, res) => {
 
   if (req.body.completed !== undefined) {
     updates.completed = req.body.completed ? 1 : 0;
-    if (updates.completed === 1) updates.archived = 1;
+    if (updates.completed === 1) {
+      updates.archived = 1;
+      updates.completed_at = NOW();
+    }
   }
 
   if (req.body.archived !== undefined) {

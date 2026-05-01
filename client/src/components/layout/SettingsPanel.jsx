@@ -1,8 +1,16 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import { TimePicker } from '../ui/TimePicker';
 
 export default function SettingsPanel({ onClose }) {
-  const { user, updateAccount } = useAuth();
+  const { user, updateAccount, logout } = useAuth();
+  const navigate = useNavigate();
+
+  async function handleLogout() {
+    await logout();
+    navigate('/login');
+  }
 
   const [emailForm, setEmailForm] = useState({ newEmail: '', currentPassword: '' });
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirm: '' });
@@ -12,6 +20,18 @@ export default function SettingsPanel({ onClose }) {
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const [emailLoading, setEmailLoading] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
+
+  const [notifForm, setNotifForm] = useState({ notify_enabled: false, notify_time: '22:00', notify_email: '' });
+  const [notifLoading, setNotifLoading] = useState(false);
+  const [notifError, setNotifError] = useState('');
+  const [notifSuccess, setNotifSuccess] = useState('');
+
+  useEffect(() => {
+    fetch('/api/auth/notification-settings', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setNotifForm({ notify_enabled: data.notify_enabled, notify_time: data.notify_time, notify_email: data.notify_email }); })
+      .catch(() => {});
+  }, []);
 
   async function handleEmailSubmit(e) {
     e.preventDefault();
@@ -46,6 +66,28 @@ export default function SettingsPanel({ onClose }) {
       setPasswordError(err.message);
     } finally {
       setPasswordLoading(false);
+    }
+  }
+
+  async function handleNotifSubmit(e) {
+    e.preventDefault();
+    setNotifError('');
+    setNotifSuccess('');
+    setNotifLoading(true);
+    try {
+      const res = await fetch('/api/auth/notification-settings', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(notifForm),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save');
+      setNotifSuccess('Notification settings saved');
+    } catch (err) {
+      setNotifError(err.message);
+    } finally {
+      setNotifLoading(false);
     }
   }
 
@@ -161,6 +203,72 @@ export default function SettingsPanel({ onClose }) {
               {passwordLoading ? 'Saving…' : 'Update Password'}
             </button>
           </form>
+
+          <div className="border-t border-zinc-100" />
+
+          {/* Email Notifications */}
+          <form onSubmit={handleNotifSubmit} className="space-y-3">
+            <h3 className="text-xs font-semibold text-zinc-600 uppercase tracking-widest">Email Notifications</h3>
+            <p className="text-[11px] text-zinc-400 leading-relaxed">
+              Receive a daily summary of all tasks you completed that day. Messages are sent at central european time.
+            </p>
+
+            <label className="flex items-center gap-3 cursor-pointer">
+              <div className="relative">
+                <input
+                  type="checkbox"
+                  className="sr-only"
+                  checked={notifForm.notify_enabled}
+                  onChange={e => setNotifForm(f => ({ ...f, notify_enabled: e.target.checked }))}
+                />
+                <div className={`w-9 h-5 rounded-full transition-colors ${notifForm.notify_enabled ? 'bg-indigo-500' : 'bg-zinc-200'}`} />
+                <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${notifForm.notify_enabled ? 'translate-x-4' : ''}`} />
+              </div>
+              <span className="text-xs text-zinc-600">Enable daily summary</span>
+            </label>
+
+            <div className={notifForm.notify_enabled ? '' : 'opacity-40 pointer-events-none'}>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs text-zinc-500 mb-1">Send to email</label>
+                  <input
+                    type="email"
+                    maxLength={254}
+                    value={notifForm.notify_email}
+                    onChange={e => setNotifForm(f => ({ ...f, notify_email: e.target.value }))}
+                    className="w-full text-sm border border-zinc-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition"
+                    placeholder="you@example.com"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-zinc-500 mb-1">Send time</label>
+                  <TimePicker
+                    value={notifForm.notify_time}
+                    onChange={t => setNotifForm(f => ({ ...f, notify_time: t }))}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {notifError && <p className="text-xs text-red-500">{notifError}</p>}
+            {notifSuccess && <p className="text-xs text-emerald-600">{notifSuccess}</p>}
+            <button
+              type="submit"
+              disabled={notifLoading}
+              className="w-full text-xs font-medium bg-indigo-500 hover:bg-indigo-600 text-white py-2 rounded-lg transition disabled:opacity-50"
+            >
+              {notifLoading ? 'Saving…' : 'Save Notification Settings'}
+            </button>
+          </form>
+        </div>
+
+        <div className="px-5 py-4 pb-8 md:pb-4 border-t border-zinc-100">
+          <button
+            onClick={handleLogout}
+            className="w-full text-xs font-medium bg-red-500 hover:bg-red-600 text-white py-2 rounded-lg transition"
+          >
+            Log out
+          </button>
         </div>
       </aside>
     </div>
