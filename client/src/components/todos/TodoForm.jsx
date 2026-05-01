@@ -8,7 +8,7 @@ function toIso(d) {
   return `${y}-${m}-${dd}`;
 }
 
-function getAssignableDates() {
+function getAssignableDates(extraDate) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const todayIso = toIso(today);
@@ -32,10 +32,19 @@ function getAssignableDates() {
       dates.push({ value: iso, label, isNextWeek: week === 1 });
     }
   }
+
+  if (extraDate && !dates.find(d => d.value === extraDate)) {
+    const [y, m, dd] = extraDate.split('-').map(Number);
+    const d = new Date(y, m - 1, dd);
+    const label = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+    dates.unshift({ value: extraDate, label, isNextWeek: false });
+  }
+
   return dates;
 }
 
-const ASSIGNABLE_DATES = getAssignableDates();
+const TIME_PRESETS = ['5m', '10m', '15m', '30m', '45m', '90m', '1h', '2h', '3h', '4h'];
+function isPreset(v) { return v === '' || TIME_PRESETS.includes(v); }
 
 function detectEmojiTrigger(value, cursorPos) {
   const before = value.substring(0, cursorPos);
@@ -47,11 +56,14 @@ function detectEmojiTrigger(value, cursorPos) {
 }
 
 export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate, onUpdate }) {
+  const assignableDates = getAssignableDates(todo?.day_assigned ?? defaults.day_assigned);
   const [title, setTitle] = useState(todo?.title ?? '');
   const [description, setDescription] = useState(todo?.description ?? '');
   const [listType, setListType] = useState(todo?.list_type ?? defaults.list_type ?? 'university');
-  const [dayAssigned, setDayAssigned] = useState(todo?.day_assigned ?? '');
-  const [approxTime, setApproxTime] = useState(todo?.approx_time ?? '');
+  const [dayAssigned, setDayAssigned] = useState(todo?.day_assigned ?? defaults.day_assigned ?? '');
+  const initialApproxTime = todo?.approx_time ?? '';
+  const [approxTime, setApproxTime] = useState(isPreset(initialApproxTime) ? initialApproxTime : 'custom');
+  const [customTime, setCustomTime] = useState(!isPreset(initialApproxTime) ? initialApproxTime : '');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [emojiState, setEmojiState] = useState(null);
@@ -104,7 +116,7 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
         description: description.trim(),
         list_type: listType,
         day_assigned: dayAssigned || null,
-        approx_time: approxTime.trim() || null,
+        approx_time: approxTime === 'custom' ? (customTime.trim() || null) : (approxTime || null),
       };
       if (mode === 'edit') {
         await onUpdate(todo.id, data);
@@ -233,8 +245,8 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
                 className="w-full px-3.5 py-2.5 text-sm bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition capitalize"
               >
                 <option value="">None</option>
-                {ASSIGNABLE_DATES.map(({ value, label, isNextWeek }, idx) => {
-                  const prevIsThisWeek = idx > 0 && !ASSIGNABLE_DATES[idx - 1].isNextWeek;
+                {assignableDates.map(({ value, label, isNextWeek }, idx) => {
+                  const prevIsThisWeek = idx > 0 && !assignableDates[idx - 1].isNextWeek;
                   return (
                     <>
                       {isNextWeek && prevIsThisWeek && (
@@ -257,6 +269,8 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
                 className="w-full px-3.5 py-2.5 text-sm bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
               >
                 <option value="">None</option>
+                <option value="5m">5m</option>
+                <option value="10m">10m</option>
                 <option value="15m">15m</option>
                 <option value="30m">30m</option>
                 <option value="45m">45m</option>
@@ -265,7 +279,22 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
                 <option value="2h">2h</option>
                 <option value="3h">3h</option>
                 <option value="4h">4h</option>
+                <option value="custom">Custom…</option>
               </select>
+              {approxTime === 'custom' && (
+                <input
+                  type="text"
+                  value={customTime}
+                  onChange={e => {
+                    const raw = e.target.value.toLowerCase().replace(/[^0-9mh]/g, '');
+                    const m = raw.match(/^(\d{0,2})([mh]?).*$/);
+                    setCustomTime(m ? m[1] + m[2] : '');
+                  }}
+                  placeholder="e.g. 20m or 3h"
+                  maxLength={3}
+                  className="mt-1.5 w-full px-3.5 py-2.5 text-sm bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                />
+              )}
             </div>
           </div>
 

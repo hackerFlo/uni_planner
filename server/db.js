@@ -73,4 +73,23 @@ if (schema && schema.sql.includes("'monday'")) {
   console.log('[db] Migrated: day_assigned now stores ISO dates; cleared old day-name values');
 }
 
+// Migrate: add completed_at to todos
+if (!todoCols.some(c => c.name === 'completed_at')) {
+  db.exec(`ALTER TABLE todos ADD COLUMN completed_at TEXT`);
+  console.log('[db] Migrated: added completed_at column');
+}
+
+// Migrate: add notification columns to users
+const userCols = db.prepare(`PRAGMA table_info(users)`).all();
+if (!userCols.some(c => c.name === 'notify_enabled')) {
+  db.exec(`ALTER TABLE users ADD COLUMN notify_enabled INTEGER NOT NULL DEFAULT 0`);
+  db.exec(`ALTER TABLE users ADD COLUMN notify_time TEXT NOT NULL DEFAULT '22:00'`);
+  db.exec(`ALTER TABLE users ADD COLUMN notify_email_enc TEXT`);
+  console.log('[db] Migrated: added notification columns to users');
+}
+if (!userCols.some(c => c.name === 'notify_last_sent')) {
+  db.exec(`ALTER TABLE users ADD COLUMN notify_last_sent TEXT`);
+  console.log('[db] Migrated: added notify_last_sent column');
+}
+
 module.exports = db;

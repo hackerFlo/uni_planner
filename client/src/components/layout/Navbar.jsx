@@ -1,17 +1,10 @@
 import { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
 import SettingsPanel from './SettingsPanel';
 
-export default function Navbar({ onArchiveToggle, archiveOpen }) {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
+export default function Navbar({ onArchiveToggle, archiveOpen, onUndo, canUndo }) {
+  const { user } = useAuth();
   const [settingsOpen, setSettingsOpen] = useState(false);
-
-  async function handleLogout() {
-    await logout();
-    navigate('/login');
-  }
 
   return (
     <>
@@ -26,8 +19,24 @@ export default function Navbar({ onArchiveToggle, archiveOpen }) {
         </div>
 
         <button
-          onClick={onArchiveToggle}
+          onClick={onUndo}
+          disabled={!canUndo}
+          title={canUndo ? 'Undo last action (⌘Z)' : 'Nothing to undo'}
           className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition ${
+            canUndo
+              ? 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50'
+              : 'text-zinc-300 cursor-not-allowed'
+          }`}
+        >
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a8 8 0 018 8v2M3 10l6 6M3 10l6-6" />
+          </svg>
+          Undo
+        </button>
+
+        <button
+          onClick={onArchiveToggle}
+          className={`hidden sm:flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition ${
             archiveOpen
               ? 'bg-indigo-50 text-indigo-600'
               : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50'
@@ -39,21 +48,13 @@ export default function Navbar({ onArchiveToggle, archiveOpen }) {
           Archive
         </button>
 
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setSettingsOpen(v => !v)}
-            className="text-xs text-zinc-400 hover:text-zinc-700 font-medium transition px-2 py-1 rounded-lg hover:bg-zinc-50 hidden sm:block"
-            title="Account settings"
-          >
-            {user?.email}
-          </button>
-          <button
-            onClick={handleLogout}
-            className="text-xs text-zinc-500 hover:text-zinc-800 font-medium transition px-2.5 py-1.5 rounded-lg hover:bg-zinc-50"
-          >
-            Log out
-          </button>
-        </div>
+        <button
+          onClick={() => setSettingsOpen(v => !v)}
+          className="text-xs text-zinc-400 hover:text-zinc-700 font-medium transition px-2 py-1 rounded-lg hover:bg-zinc-50"
+          title="Account settings"
+        >
+          {user?.email}
+        </button>
       </header>
 
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}

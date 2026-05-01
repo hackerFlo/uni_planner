@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { DndContext, DragOverlay, MouseSensor, TouchSensor, KeyboardSensor, useSensor, useSensors, pointerWithin, closestCenter } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
 import { useTodos } from '../hooks/useTodos';
+import { useShakeUndo } from '../hooks/useShakeUndo';
 import Navbar from '../components/layout/Navbar';
 import TodoList from '../components/todos/TodoList';
 import TodoForm from '../components/todos/TodoForm';
@@ -43,7 +44,7 @@ function DragCard({ todo, rotation = 0 }) {
 }
 
 export default function PlannerPage() {
-  const { todos, loading, fetchTodos, createTodo, updateTodo, deleteTodo, assignDay, reorderDay } = useTodos();
+  const { todos, loading, fetchTodos, createTodo, updateTodo, deleteTodo, assignDay, reorderDay, canUndo, undo } = useTodos();
   const [activeTodo, setActiveTodo] = useState(null);
   const [dragOverInfo, setDragOverInfo] = useState(null);
   const [dragRotation, setDragRotation] = useState(0);
@@ -53,12 +54,31 @@ export default function PlannerPage() {
   const [sidebarWidth, setSidebarWidth] = useState(288);
   const [isResizing, setIsResizing] = useState(false);
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
+  const sidebarScrollRef = useRef(null);
+  const scrollTimerRef = useRef(null);
   const resizingRef = useRef(false);
   const resizeStartRef = useRef({ x: 0, width: 0 });
   const lastPointerX = useRef(null);
   const dragCommitRef = useRef({ prevDate: null, time: 0 });
 
+  useShakeUndo(canUndo, undo);
+
   useEffect(() => { fetchTodos(); }, [fetchTodos]);
+
+  useEffect(() => {
+    function onKeyDown(e) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+        const tag = document.activeElement?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return;
+        if (canUndo) {
+          e.preventDefault();
+          undo();
+        }
+      }
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [canUndo, undo]);
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 767px)');
@@ -261,11 +281,22 @@ export default function PlannerPage() {
   }
 
   const plannerTodos = useMemo(() => todos.filter(t => t.day_assigned), [todos]);
-  const sidebarByType = useMemo(() => ({
-    university: todos.filter(t => t.list_type === 'university'),
-    private: todos.filter(t => t.list_type === 'private'),
-    future: todos.filter(t => t.list_type === 'future'),
-  }), [todos]);
+  const sidebarByType = useMemo(() => {
+    function sortSidebar(items) {
+      const unassigned = items
+        .filter(t => !t.day_assigned)
+        .sort((a, b) => b.created_at.localeCompare(a.created_at));
+      const assigned = items
+        .filter(t => t.day_assigned)
+        .sort((a, b) => a.day_assigned.localeCompare(b.day_assigned));
+      return [...unassigned, ...assigned];
+    }
+    return {
+      university: sortSidebar(todos.filter(t => t.list_type === 'university')),
+      private:    sortSidebar(todos.filter(t => t.list_type === 'private')),
+      future:     sortSidebar(todos.filter(t => t.list_type === 'future')),
+    };
+  }, [todos]);
 
   const displayPlannerTodos = useMemo(() => {
     if (!activeTodo || !dragOverInfo) return plannerTodos;
@@ -288,7 +319,7 @@ export default function PlannerPage() {
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-white">
-      <Navbar onArchiveToggle={() => setArchiveOpen(v => !v)} archiveOpen={archiveOpen} />
+      <Navbar onArchiveToggle={() => setArchiveOpen(v => !v)} archiveOpen={archiveOpen} onUndo={undo} canUndo={canUndo} />
 
       <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
         <DndContext sensors={sensors} collisionDetection={collisionDetection} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
@@ -297,10 +328,13 @@ export default function PlannerPage() {
           <main className="h-1/2 md:h-auto md:flex-1 flex-shrink-0 overflow-hidden order-1 md:order-2">
             <WeeklyPlanner
               todos={displayPlannerTodos}
+              isDragging={!!activeTodo}
               onUnassign={id => assignDay(id, null)}
               onComplete={todo => updateTodo(todo.id, { completed: 1, archived: 1 })}
               onEdit={todo => setFormState({ mode: 'edit', todo })}
+              onDelete={deleteTodo}
               onReorder={reorderDay}
+              onAdd={date => setFormState({ mode: 'create', defaults: { day_assigned: date } })}
             />
           </main>
 
@@ -314,8 +348,16 @@ export default function PlannerPage() {
               className={`bg-zinc-50 flex flex-col h-full overflow-hidden ${isMobile || isResizing ? '' : 'transition-[width] duration-200'}`}
             >
               <div
-                className="p-5 flex-1 space-y-6 overflow-y-auto"
+                ref={sidebarScrollRef}
+                className="p-5 flex-1 space-y-6 overflow-y-auto autohide-scroll"
                 style={isMobile ? undefined : { width: `${sidebarWidth}px` }}
+                onScroll={() => {
+                  const el = sidebarScrollRef.current;
+                  if (!el) return;
+                  el.classList.add('is-scrolling');
+                  clearTimeout(scrollTimerRef.current);
+                  scrollTimerRef.current = setTimeout(() => el.classList.remove('is-scrolling'), 800);
+                }}
               >
                 <TodoList
                   type="university"

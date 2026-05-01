@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const db = require('../db');
 const requireAuth = require('../middleware/auth');
 const { validateEmail, validateIdentifier } = require('../middleware/validate');
+const { encryptEmail, decryptEmail } = require('../crypto');
 
 const router = express.Router();
 
@@ -85,6 +86,58 @@ router.patch('/me', requireAuth, async (req, res) => {
   const token = jwt.sign({ id: req.user.id, email }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN });
   res.cookie('token', token, COOKIE_OPTS);
   res.json({ user: { id: req.user.id, email, created_at: user.created_at } });
+});
+
+router.get('/notification-settings', requireAuth, (req, res) => {
+  const user = db.prepare(
+    'SELECT notify_enabled, notify_time, notify_email_enc FROM users WHERE id = ?'
+  ).get(req.user.id);
+  let notify_email = '';
+  if (user.notify_email_enc) {
+    try { notify_email = decryptEmail(user.notify_email_enc); } catch {}
+  }
+  res.json({
+    notify_enabled: !!user.notify_enabled,
+    notify_time: user.notify_time || '22:00',
+    notify_email,
+  });
+});
+
+router.patch('/notification-settings', requireAuth, (req, res) => {
+  const { notify_enabled, notify_time, notify_email } = req.body;
+  const updates = {};
+
+  if (notify_enabled !== undefined) {
+    updates.notify_enabled = notify_enabled ? 1 : 0;
+  }
+  if (notify_time !== undefined) {
+    if (!/^\d{2}:\d{2}$/.test(notify_time)) {
+      return res.status(400).json({ error: 'Invalid time format, expected HH:MM' });
+    }
+    updates.notify_time = notify_time;
+  }
+  if (notify_email !== undefined) {
+    if (notify_email === '') {
+      updates.notify_email_enc = null;
+    } else {
+      if (typeof notify_email !== 'string' || notify_email.length > 254) {
+        return res.status(400).json({ error: 'Email too long' });
+      }
+      try {
+        updates.notify_email_enc = encryptEmail(notify_email);
+      } catch (err) {
+        return res.status(500).json({ error: 'Encryption not configured' });
+      }
+    }
+  }
+
+  if (!Object.keys(updates).length) {
+    return res.status(400).json({ error: 'Nothing to update' });
+  }
+
+  const set = Object.keys(updates).map(k => `${k} = ?`).join(', ');
+  db.prepare(`UPDATE users SET ${set} WHERE id = ?`).run(...Object.values(updates), req.user.id);
+  res.json({ ok: true });
 });
 
 module.exports = router;

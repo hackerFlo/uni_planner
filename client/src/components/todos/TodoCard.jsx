@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useDraggable } from '@dnd-kit/core';
+import LinkText from '../ui/LinkText';
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 function fmtTime(t) { return t ? t.replace(' min', 'm') : t; }
@@ -41,7 +42,7 @@ export default function TodoCard({ todo, isAssigned, onComplete, onEdit, onDelet
       {...attributes}
       {...listeners}
     >
-      <div className="flex items-start gap-2.5">
+      <div className="relative flex items-start gap-2.5">
         <button
           onPointerDown={e => e.stopPropagation()}
           onClick={handleComplete}
@@ -70,25 +71,26 @@ export default function TodoCard({ todo, isAssigned, onComplete, onEdit, onDelet
 
         <div className="flex-1 min-w-0">
           <div className="flex items-start gap-1.5 min-w-0">
-            <p className={`text-sm font-medium break-words flex-1 min-w-0 ${isAssigned ? 'text-zinc-400' : 'text-zinc-800'}`}>{todo.title}</p>
+            <LinkText text={todo.title} className={`text-sm font-medium break-words flex-1 min-w-0 ${isAssigned ? 'text-zinc-400' : 'text-zinc-800'}`} />
             {todo.approx_time && (
-              <span className="flex-shrink-0 text-[9px] font-medium text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded-full group-hover:hidden">
+              <span className="flex-shrink-0 text-[9px] font-medium text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded-full">
                 {fmtTime(todo.approx_time)}
               </span>
             )}
             {isAssigned && (
-              <span className="flex-shrink-0 text-[9px] font-medium text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded-full group-hover:hidden">
+              <span className="flex-shrink-0 text-[9px] font-medium text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded-full">
                 {dayLabel(todo.day_assigned)}
               </span>
             )}
           </div>
           {todo.description && (
-            <p className="text-xs text-zinc-400 mt-0.5 line-clamp-2">{todo.description}</p>
+            <LinkText text={todo.description} className="text-xs text-zinc-400 mt-0.5 line-clamp-2 block" />
           )}
         </div>
 
         <div
-          className="hidden group-hover:flex items-center gap-1 flex-shrink-0"
+          className="absolute right-0 top-0 hidden group-hover:flex items-center gap-1 pl-4"
+          style={{ background: `linear-gradient(to right, transparent, ${isAssigned ? '#fafafa' : '#ffffff'} 40%)` }}
           onPointerDown={e => e.stopPropagation()}
         >
           <button

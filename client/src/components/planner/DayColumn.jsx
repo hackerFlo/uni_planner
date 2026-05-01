@@ -9,7 +9,7 @@ function parseDateLocal(dateStr) {
   return new Date(y, m - 1, d);
 }
 
-export default function DayColumn({ date, todos, holiday, onUnassign, onComplete, onEdit, onReorder }) {
+export default function DayColumn({ date, todos, holiday, isDragging, onUnassign, onComplete, onEdit, onDelete, onReorder, onAdd }) {
   const { setNodeRef, isOver } = useDroppable({ id: date });
 
   const dateObj = parseDateLocal(date);
@@ -43,7 +43,7 @@ export default function DayColumn({ date, todos, holiday, onUnassign, onComplete
               <span className="text-xs font-medium text-emerald-600 truncate" title={holiday}>{holiday}</span>
             </>
           )}
-          {isToday && (
+          {isToday && !holiday && (
             <span className="text-[9px] font-medium bg-indigo-500 text-white px-1 py-0.5 rounded-full uppercase tracking-wide">
               Today
             </span>
@@ -60,9 +60,6 @@ export default function DayColumn({ date, todos, holiday, onUnassign, onComplete
         }`}
       >
         <div className="space-y-2">
-          {todos.length === 0 && !isOver && (
-            <p className="text-[11px] text-zinc-300 text-center py-4">Drop here</p>
-          )}
           <SortableContext items={todos.map(t => t.id)} strategy={verticalListSortingStrategy}>
             {todos.map(todo => (
               <AssignedCard
@@ -72,9 +69,31 @@ export default function DayColumn({ date, todos, holiday, onUnassign, onComplete
                 onUnassign={onUnassign}
                 onComplete={onComplete}
                 onEdit={onEdit}
+                onDelete={onDelete}
               />
             ))}
           </SortableContext>
+          {isDragging && !isOver && (
+            <p className="text-[11px] text-zinc-300 text-center py-2">Drop here</p>
+          )}
+          {!isDragging && (
+            <button
+              onPointerDown={e => e.stopPropagation()}
+              onClick={() => onAdd(date)}
+              className={`mt-2 w-full flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] transition-colors ${
+                isToday
+                  ? 'text-indigo-300 hover:bg-indigo-100/60 hover:text-indigo-500'
+                  : holiday
+                  ? 'text-emerald-300 hover:bg-emerald-100/60 hover:text-emerald-500'
+                  : 'text-zinc-300 hover:bg-zinc-100 hover:text-zinc-500'
+              }`}
+              title="Add item"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
     </div>
