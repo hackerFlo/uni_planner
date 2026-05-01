@@ -3,7 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { TimePicker } from '../ui/TimePicker';
 
-export default function SettingsPanel({ onClose }) {
+export default function SettingsPanel({ onClose, fetchTodos }) {
   const { user, updateAccount, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -22,6 +22,11 @@ export default function SettingsPanel({ onClose }) {
   const [passwordLoading, setPasswordLoading] = useState(false);
 
   const [notifForm, setNotifForm] = useState({ notify_enabled: false, notify_time: '22:00', notify_email: '' });
+
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [restoreLoading, setRestoreLoading] = useState(false);
+  const [restoreResult, setRestoreResult] = useState(null);
+  const [restoreError, setRestoreError] = useState('');
   const [notifLoading, setNotifLoading] = useState(false);
   const [notifError, setNotifError] = useState('');
   const [notifSuccess, setNotifSuccess] = useState('');
@@ -91,6 +96,53 @@ export default function SettingsPanel({ onClose }) {
     }
   }
 
+  async function handleDownloadBackup() {
+    setBackupLoading(true);
+    try {
+      const res = await fetch('/api/backup', { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed');
+      const data = await res.json();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `uni-planner-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // download failure is self-evident to the user
+    } finally {
+      setBackupLoading(false);
+    }
+  }
+
+  async function handleRestoreBackup(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setRestoreError('');
+    setRestoreResult(null);
+    setRestoreLoading(true);
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      const res = await fetch('/api/backup/restore', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Restore failed');
+      setRestoreResult(result);
+      fetchTodos?.();
+    } catch (err) {
+      setRestoreError(err.message.includes('JSON') ? 'Invalid backup file' : err.message);
+    } finally {
+      setRestoreLoading(false);
+      e.target.value = '';
+    }
+  }
+
   return (
     <div
       className="fixed inset-0 z-40 flex justify-end"
@@ -112,46 +164,6 @@ export default function SettingsPanel({ onClose }) {
             <p className="text-[10px] font-medium text-zinc-400 uppercase tracking-widest mb-1">Signed in as</p>
             <p className="text-sm text-zinc-700 font-medium truncate">{user?.email}</p>
           </div>
-
-          {/* Change username / email */}
-          <form onSubmit={handleEmailSubmit} className="space-y-3">
-            <h3 className="text-xs font-semibold text-zinc-600 uppercase tracking-widest">Change Username / Email</h3>
-            <div>
-              <label className="block text-xs text-zinc-500 mb-1">New username or email</label>
-              <input
-                type="text"
-                required
-                maxLength={100}
-                value={emailForm.newEmail}
-                onChange={e => setEmailForm(f => ({ ...f, newEmail: e.target.value }))}
-                className="w-full text-sm border border-zinc-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition"
-                placeholder="username or new@example.com"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-zinc-500 mb-1">Current password</label>
-              <input
-                type="password"
-                required
-                maxLength={128}
-                value={emailForm.currentPassword}
-                onChange={e => setEmailForm(f => ({ ...f, currentPassword: e.target.value }))}
-                className="w-full text-sm border border-zinc-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition"
-                placeholder="••••••••"
-              />
-            </div>
-            {emailError && <p className="text-xs text-red-500">{emailError}</p>}
-            {emailSuccess && <p className="text-xs text-emerald-600">{emailSuccess}</p>}
-            <button
-              type="submit"
-              disabled={emailLoading}
-              className="w-full text-xs font-medium bg-indigo-500 hover:bg-indigo-600 text-white py-2 rounded-lg transition disabled:opacity-50"
-            >
-              {emailLoading ? 'Saving…' : 'Update Username / Email'}
-            </button>
-          </form>
-
-          <div className="border-t border-zinc-100" />
 
           {/* Change password */}
           <form onSubmit={handlePasswordSubmit} className="space-y-3">
@@ -260,6 +272,37 @@ export default function SettingsPanel({ onClose }) {
               {notifLoading ? 'Saving…' : 'Save Notification Settings'}
             </button>
           </form>
+
+          <div className="border-t border-zinc-100" />
+
+          {/* Backup & Restore */}
+          <div className="space-y-3">
+            <h3 className="text-xs font-semibold text-zinc-600 uppercase tracking-widest">Backup &amp; Restore</h3>
+            <p className="text-[11px] text-zinc-400 leading-relaxed">
+              Download all your todos as a JSON file, or restore from a previous backup. Existing items are never duplicated.
+            </p>
+            <button
+              type="button"
+              disabled={backupLoading}
+              onClick={handleDownloadBackup}
+              className="w-full text-xs font-medium bg-indigo-500 hover:bg-indigo-600 text-white py-2 rounded-lg transition disabled:opacity-50"
+            >
+              {backupLoading ? 'Preparing…' : 'Download Backup'}
+            </button>
+            <div>
+              <label className="block text-xs text-zinc-500 mb-1">Restore from backup</label>
+              <label className={`flex items-center justify-center w-full py-2 rounded-lg border border-zinc-200 text-xs text-zinc-500 hover:bg-zinc-50 transition cursor-pointer ${restoreLoading ? 'opacity-50 pointer-events-none' : ''}`}>
+                {restoreLoading ? 'Restoring…' : 'Choose backup file…'}
+                <input type="file" accept=".json,application/json" className="sr-only" onChange={handleRestoreBackup} disabled={restoreLoading} />
+              </label>
+            </div>
+            {restoreError && <p className="text-xs text-red-500">{restoreError}</p>}
+            {restoreResult && (
+              <p className="text-xs text-emerald-600">
+                Restored {restoreResult.imported} item{restoreResult.imported !== 1 ? 's' : ''}{restoreResult.skipped > 0 ? `, ${restoreResult.skipped} already existed` : ''}.
+              </p>
+            )}
+          </div>
         </div>
 
         <div className="px-5 py-4 pb-8 md:pb-4 border-t border-zinc-100">
