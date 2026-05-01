@@ -1,5 +1,7 @@
-const MAILEROO_KEY = process.env.MAILEROO_API_KEY;
-const MAILEROO_FROM = process.env.MAILEROO_FROM;
+const nodemailer = require('nodemailer');
+
+const GMAIL_USER = process.env.GMAIL_USER;
+const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
 
 function buildHtml(todos, dateStr) {
   const grouped = { university: [], private: [], future: [] };
@@ -39,25 +41,19 @@ function buildHtml(todos, dateStr) {
 }
 
 async function sendDailySummary(toEmail, todos, dateStr) {
-  if (!MAILEROO_KEY || !MAILEROO_FROM) {
-    throw new Error('MAILEROO_API_KEY and MAILEROO_FROM env vars are required');
+  if (!GMAIL_USER || !GMAIL_APP_PASSWORD) {
+    throw new Error('GMAIL_USER and GMAIL_APP_PASSWORD env vars are required');
   }
-  const res = await fetch('https://smtp.maileroo.com/api/v2/emails', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${MAILEROO_KEY}`,
-    },
-    body: JSON.stringify({
-      from: { address: MAILEROO_FROM },
-      to: [{ address: toEmail }],
-      subject: `Your daily summary – ${dateStr}`,
-      html: buildHtml(todos, dateStr),
-    }),
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
   });
-  if (!res.ok) {
-    throw new Error(`Maileroo ${res.status}: ${await res.text()}`);
-  }
+  await transporter.sendMail({
+    from: `"Uni Planner" <${GMAIL_USER}>`,
+    to: toEmail,
+    subject: `Your daily summary – ${dateStr}`,
+    html: buildHtml(todos, dateStr),
+  });
 }
 
 module.exports = { sendDailySummary };
