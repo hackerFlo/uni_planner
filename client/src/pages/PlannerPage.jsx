@@ -319,7 +319,7 @@ export default function PlannerPage() {
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-white">
-      <Navbar onArchiveToggle={() => setArchiveOpen(v => !v)} archiveOpen={archiveOpen} onUndo={undo} canUndo={canUndo} />
+      <Navbar onArchiveToggle={() => setArchiveOpen(v => !v)} archiveOpen={archiveOpen} onUndo={undo} canUndo={canUndo} fetchTodos={fetchTodos} />
 
       <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
         <DndContext sensors={sensors} collisionDetection={collisionDetection} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>

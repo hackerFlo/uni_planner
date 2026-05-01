@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import SettingsPanel from './SettingsPanel';
 
-export default function Navbar({ onArchiveToggle, archiveOpen, onUndo, canUndo }) {
+export default function Navbar({ onArchiveToggle, archiveOpen, onUndo, canUndo, fetchTodos }) {
   const { user } = useAuth();
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -57,7 +57,7 @@ export default function Navbar({ onArchiveToggle, archiveOpen, onUndo, canUndo }
         </button>
       </header>
 
-      {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} fetchTodos={fetchTodos} />}
     </>
   );
 }
