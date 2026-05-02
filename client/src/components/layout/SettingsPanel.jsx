@@ -30,6 +30,9 @@ export default function SettingsPanel({ onClose, fetchTodos }) {
   const [notifLoading, setNotifLoading] = useState(false);
   const [notifError, setNotifError] = useState('');
   const [notifSuccess, setNotifSuccess] = useState('');
+  const [testEmailLoading, setTestEmailLoading] = useState(false);
+  const [testEmailError, setTestEmailError] = useState('');
+  const [testEmailSuccess, setTestEmailSuccess] = useState('');
 
   useEffect(() => {
     fetch('/api/auth/notification-settings', { credentials: 'include' })
@@ -71,6 +74,22 @@ export default function SettingsPanel({ onClose, fetchTodos }) {
       setPasswordError(err.message);
     } finally {
       setPasswordLoading(false);
+    }
+  }
+
+  async function handleTestEmail() {
+    setTestEmailError('');
+    setTestEmailSuccess('');
+    setTestEmailLoading(true);
+    try {
+      const res = await fetch('/api/auth/test-email', { method: 'POST', credentials: 'include' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send');
+      setTestEmailSuccess(`Test email sent to ${data.sentTo}`);
+    } catch (err) {
+      setTestEmailError(err.message);
+    } finally {
+      setTestEmailLoading(false);
     }
   }
 
@@ -271,6 +290,16 @@ export default function SettingsPanel({ onClose, fetchTodos }) {
             >
               {notifLoading ? 'Saving…' : 'Save Notification Settings'}
             </button>
+            <button
+              type="button"
+              disabled={testEmailLoading}
+              onClick={handleTestEmail}
+              className="w-full text-xs font-medium border border-indigo-300 text-indigo-600 hover:bg-indigo-50 py-2 rounded-lg transition disabled:opacity-50"
+            >
+              {testEmailLoading ? 'Sending…' : 'Send Test Email Now'}
+            </button>
+            {testEmailError && <p className="text-xs text-red-500">{testEmailError}</p>}
+            {testEmailSuccess && <p className="text-xs text-emerald-600">{testEmailSuccess}</p>}
           </form>
 
           <div className="border-t border-zinc-100" />
