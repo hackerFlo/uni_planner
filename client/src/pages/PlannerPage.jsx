@@ -129,8 +129,6 @@ export default function PlannerPage() {
     };
   }, []);
 
-  useEffect(() => { dragOverInfoRef.current = dragOverInfo; }, [dragOverInfo]);
-
   function startResize(e) {
     e.preventDefault();
     resizingRef.current = true;
@@ -193,8 +191,13 @@ export default function PlannerPage() {
     return cardHit ? [cardHit] : within;
   }
 
+  function setDragOverInfoSync(newInfo) {
+    dragOverInfoRef.current = newInfo;
+    setDragOverInfo(newInfo);
+  }
+
   function handleDragOver({ active, over }) {
-    if (!activeTodo) { setDragOverInfo(null); return; }
+    if (!activeTodo) { setDragOverInfoSync(null); return; }
     if (!over) return; // Don't clear on transient null — prevents layout-shift feedback loop
     const realActiveId = getRealId(active.id);
     const overId = over.id;
@@ -214,40 +217,40 @@ export default function PlannerPage() {
       }
     }
 
+    // Read current info from ref (always up-to-date, unlike state which lags by a render)
+    const prev = dragOverInfoRef.current;
+
     if (!targetDate) {
       if (DATE_RE.test(overId)) {
         // Apply the same bounce guard before clearing: card shifts in the target column
         // can transiently push the pointer back into the source column, which would
         // oscillate the ghost on/off. Only clear once the guard window has expired.
-        setDragOverInfo(prev => {
-          if (!prev) return null;
-          const { prevDate, time } = dragCommitRef.current;
-          if (prevDate === overId && Date.now() - time < 200) return prev;
-          return null;
-        });
+        if (!prev) return;
+        const { prevDate, time } = dragCommitRef.current;
+        if (prevDate === overId && Date.now() - time < 200) return;
+        setDragOverInfoSync(null);
       }
       return;
     }
 
-    setDragOverInfo(prev => {
-      if (prev?.date === targetDate) {
-        if (prev?.overId === targetOverId) return prev;
-        // Never allow the insertion slot to reset to null (ghost-at-end) once we
-        // are already inside this column — the ghost animation shifts card B downward,
-        // which briefly makes the pointer land in empty space and causes pointerWithin
-        // to return only the column (targetOverId = null). Freezing prevents the snap-back.
-        if (targetOverId === null) return prev;
-        return { date: targetDate, overId: targetOverId };
-      }
+    if (prev?.date === targetDate) {
+      if (prev?.overId === targetOverId) return;
+      // Never allow the insertion slot to reset to null (ghost-at-end) once we
+      // are already inside this column — the ghost animation shifts card B downward,
+      // which briefly makes the pointer land in empty space and causes pointerWithin
+      // to return only the column (targetOverId = null). Freezing prevents the snap-back.
+      if (targetOverId === null) return;
+      setDragOverInfoSync({ date: targetDate, overId: targetOverId });
+      return;
+    }
 
-      // Switching column: if this is the column we just left within 200ms it's a
-      // layout-shift bounce between adjacent columns — ignore it.
-      const { prevDate, time } = dragCommitRef.current;
-      if (prevDate === targetDate && Date.now() - time < 200) return prev;
+    // Switching column: if this is the column we just left within 200ms it's a
+    // layout-shift bounce between adjacent columns — ignore it.
+    const { prevDate, time } = dragCommitRef.current;
+    if (prevDate === targetDate && Date.now() - time < 200) return;
 
-      dragCommitRef.current = { prevDate: prev?.date ?? null, time: Date.now() };
-      return { date: targetDate, overId: targetOverId };
-    });
+    dragCommitRef.current = { prevDate: prev?.date ?? null, time: Date.now() };
+    setDragOverInfoSync({ date: targetDate, overId: targetOverId });
   }
 
   function handleDragStart({ active }) {
@@ -261,7 +264,7 @@ export default function PlannerPage() {
 
   function handleDragEnd({ active, over }) {
     setActiveTodo(null);
-    setDragOverInfo(null);
+    setDragOverInfoSync(null);
     if (!over) return;
     const realId = getRealId(active.id);
     const overId = over.id;
