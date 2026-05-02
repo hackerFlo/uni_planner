@@ -33,6 +33,7 @@ function CardBody({ provided, snapshot, todo, checked, onComplete, onUnassign, o
     function handleUp() {
       setRotation(0);
       prevXRef.current = null;
+      window.removeEventListener('pointermove', handleMove);
     }
     window.addEventListener('pointermove', handleMove);
     window.addEventListener('pointerup', handleUp);
