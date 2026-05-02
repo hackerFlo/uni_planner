@@ -1,21 +1,6 @@
-import { useEffect, useState } from 'react';
-import { useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
+import { useEffect, useRef, useState } from 'react';
+import { Draggable } from '@hello-pangea/dnd';
 import LinkText from '../ui/LinkText';
-
-if (typeof document !== 'undefined' && !document.getElementById('card-plop-style')) {
-  const s = document.createElement('style');
-  s.id = 'card-plop-style';
-  s.textContent = `@keyframes cardPlop{0%{transform:translateY(-9px) scale(1.03);opacity:0}65%{transform:translateY(2px) scale(0.988);opacity:1}100%{transform:translateY(0) scale(1);opacity:1}}.card-plop{animation:cardPlop 300ms cubic-bezier(0.34,1.4,0.64,1) both}@keyframes ghostSlotIn{from{max-height:0}to{max-height:120px}}.ghost-slot{animation:ghostSlotIn 200ms cubic-bezier(0.25,1,0.5,1) both;overflow:hidden;}`;
-  document.head.appendChild(s);
-}
-
-// Delay flag so initial page-load cards don't animate
-let _appReady = false;
-setTimeout(() => { _appReady = true; }, 900);
-
-// PlannerPage adds an id here before assignDay fires; AssignedCard consumes & deletes it on mount
-export const _pendingAnimIds = new Set();
 
 function fmtTime(t) { return t ? t.replace(' min', 'm') : t; }
 
@@ -25,50 +10,55 @@ const LIST_BADGE = {
   future: 'bg-amber-50 text-amber-600',
 };
 
-export default function AssignedCard({ todo, onUnassign, onComplete, onEdit, onDelete, isGhost }) {
-  const [checked, setChecked] = useState(false);
-  const [dropping, setDropping] = useState(false);
-  const { attributes, listeners, setNodeRef, isDragging, transform, transition } = useSortable({
-    id: todo.id,
-    transition: {
-      duration: 500,
-      easing: 'cubic-bezier(0.25, 1, 0.5, 1)',
-    },
-  });
+function CardBody({ provided, snapshot, todo, checked, onComplete, onUnassign, onEdit, onDelete }) {
+  const [rotation, setRotation] = useState(0);
+  const prevXRef = useRef(null);
+  const decayRef = useRef(null);
 
   useEffect(() => {
-    if (!_appReady || isDragging || !_pendingAnimIds.has(todo.id)) return;
-    _pendingAnimIds.delete(todo.id);
-    setDropping(true);
-    const t = setTimeout(() => setDropping(false), 400);
-    return () => clearTimeout(t);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  function handleComplete(e) {
-    e.stopPropagation();
-    if (checked) return;
-    setChecked(true);
-    setTimeout(() => onComplete(todo), 500);
-  }
+    if (!snapshot.isDragging) {
+      setRotation(0);
+      prevXRef.current = null;
+      return;
+    }
+    function handleMove(e) {
+      if (prevXRef.current !== null) {
+        const dx = e.clientX - prevXRef.current;
+        setRotation(Math.max(-12, Math.min(12, dx * 1.5)));
+        clearTimeout(decayRef.current);
+        decayRef.current = setTimeout(() => setRotation(0), 80);
+      }
+      prevXRef.current = e.clientX;
+    }
+    window.addEventListener('pointermove', handleMove);
+    return () => {
+      window.removeEventListener('pointermove', handleMove);
+      clearTimeout(decayRef.current);
+    };
+  }, [snapshot.isDragging]);
 
   return (
     <div
-      ref={setNodeRef}
-      className={`group bg-white border border-zinc-100 rounded-lg p-2.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-grab active:cursor-grabbing select-none min-w-0 w-full${dropping ? ' card-plop' : ''}${isGhost ? ' ghost-slot' : ''}`}
+      ref={provided.innerRef}
+      {...provided.draggableProps}
+      {...provided.dragHandleProps}
       style={{
-        transform: dropping ? undefined : CSS.Transform.toString(transform),
-        transition: checked ? 'opacity 400ms ease, transform 300ms ease' : transition,
-        opacity: isDragging ? 0 : checked ? 0.4 : 1,
-        touchAction: 'none',
+        ...provided.draggableProps.style,
+        ...(snapshot.isDragging && {
+          transform: `${provided.draggableProps.style?.transform ?? ''} rotate(${rotation}deg) scale(1.03)`,
+          boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+        }),
+        transition: checked
+          ? 'opacity 400ms ease, transform 300ms ease'
+          : provided.draggableProps.style?.transition,
+        opacity: checked ? 0.4 : 1,
       }}
-      {...attributes}
-      {...listeners}
+      className="group bg-white border border-zinc-100 rounded-lg p-2.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-shadow cursor-grab active:cursor-grabbing select-none min-w-0 w-full"
     >
       <div className="flex items-center gap-2 mb-1.5">
         <button
           onPointerDown={e => e.stopPropagation()}
-          onClick={handleComplete}
+          onClick={onComplete}
           className={`flex-shrink-0 relative w-3.5 h-3.5 rounded border transition-all duration-150 flex items-center justify-center md:before:absolute md:before:content-[''] md:before:inset-[-8px] ${
             checked
               ? 'bg-indigo-500 border-indigo-500'
@@ -140,5 +130,33 @@ export default function AssignedCard({ todo, onUnassign, onComplete, onEdit, onD
         </button>
       </div>
     </div>
+  );
+}
+
+export default function AssignedCard({ todo, index, onUnassign, onComplete, onEdit, onDelete }) {
+  const [checked, setChecked] = useState(false);
+
+  function handleComplete(e) {
+    e.stopPropagation();
+    if (checked) return;
+    setChecked(true);
+    setTimeout(() => onComplete(todo), 500);
+  }
+
+  return (
+    <Draggable draggableId={String(todo.id)} index={index}>
+      {(provided, snapshot) => (
+        <CardBody
+          provided={provided}
+          snapshot={snapshot}
+          todo={todo}
+          checked={checked}
+          onComplete={handleComplete}
+          onUnassign={onUnassign}
+          onEdit={onEdit}
+          onDelete={onDelete}
+        />
+      )}
+    </Draggable>
   );
 }

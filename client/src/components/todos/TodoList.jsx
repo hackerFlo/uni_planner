@@ -1,4 +1,4 @@
-import { useDroppable } from '@dnd-kit/core';
+import { Droppable } from '@hello-pangea/dnd';
 import TodoCard from './TodoCard';
 
 const TYPE_CONFIG = {
@@ -6,25 +6,20 @@ const TYPE_CONFIG = {
     label: 'University',
     accent: 'text-indigo-600',
     dot: 'bg-indigo-400',
-    dropBg: 'bg-indigo-50/60',
   },
   private: {
     label: 'Private',
     accent: 'text-emerald-600',
     dot: 'bg-emerald-400',
-    dropBg: 'bg-emerald-50/60',
   },
   future: {
     label: 'Future',
     accent: 'text-amber-600',
     dot: 'bg-amber-400',
-    dropBg: 'bg-amber-50/60',
   },
 };
 
 export default function TodoList({ type, todos, loading, onAdd, onEdit, onComplete, onDelete }) {
-  const droppableId = `${type}-list`;
-  const { setNodeRef, isOver } = useDroppable({ id: droppableId });
   const config = TYPE_CONFIG[type];
 
   return (
@@ -47,32 +42,39 @@ export default function TodoList({ type, todos, loading, onAdd, onEdit, onComple
         </button>
       </div>
 
-      <div
-        ref={setNodeRef}
-        className={`min-h-[60px] space-y-2 rounded-lg transition-colors ${isOver ? config.dropBg : ''}`}
-      >
-        {loading && todos.length === 0 && (
-          <div className="text-xs text-zinc-300 py-4 text-center">Loading…</div>
-        )}
-        {!loading && todos.length === 0 && (
+      <Droppable droppableId={`${type}-list`} isDropDisabled={true}>
+        {(provided) => (
           <div
-            onClick={onAdd}
-            className="text-xs text-zinc-300 py-6 text-center border border-dashed border-zinc-200 rounded-lg cursor-pointer hover:border-zinc-300 hover:text-zinc-400 transition"
+            ref={provided.innerRef}
+            {...provided.droppableProps}
+            className="min-h-[60px] space-y-2 rounded-lg"
           >
-            No items — click + to add
+            {loading && todos.length === 0 && (
+              <div className="text-xs text-zinc-300 py-4 text-center">Loading…</div>
+            )}
+            {!loading && todos.length === 0 && (
+              <div
+                onClick={onAdd}
+                className="text-xs text-zinc-300 py-6 text-center border border-dashed border-zinc-200 rounded-lg cursor-pointer hover:border-zinc-300 hover:text-zinc-400 transition"
+              >
+                No items — click + to add
+              </div>
+            )}
+            {todos.map((todo, index) => (
+              <TodoCard
+                key={todo.id}
+                todo={todo}
+                index={index}
+                isAssigned={!!todo.day_assigned}
+                onComplete={onComplete}
+                onEdit={onEdit}
+                onDelete={onDelete}
+              />
+            ))}
+            {provided.placeholder}
           </div>
         )}
-        {todos.map(todo => (
-          <TodoCard
-            key={todo.id}
-            todo={todo}
-            isAssigned={!!todo.day_assigned}
-            onComplete={onComplete}
-            onEdit={onEdit}
-            onDelete={onDelete}
-          />
-        ))}
-      </div>
+      </Droppable>
     </div>
   );
 }
