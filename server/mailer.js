@@ -2,7 +2,7 @@ const nodemailer = require('nodemailer');
 
 const GMAIL_USER = process.env.GMAIL_USER;
 const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
-const APP_URL = process.env.CORS_ORIGIN || '#';
+const APP_URL = process.env.CORS_ORIGIN || 'https://planner.daten-tresor.synology.me/';
 
 const CATEGORY = {
   university: { color: '#6366f1', bg: '#eef2ff', label: 'University' },
@@ -109,8 +109,8 @@ function buildHtml({ completedTodos, uncompletedTodos, tomorrowTodos, dateStr, t
               <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td style="vertical-align:middle;padding-right:8px;">
-                    <div style="width:20px;height:20px;background:#edfaf4;border-radius:50%;display:inline-block;vertical-align:middle;text-align:center;line-height:20px;">
-                      <span style="color:#22c27b;font-size:11px;font-weight:700;">&#10003;</span>
+                    <div style="width:20px;height:20px;background:#edfaf4;border-radius:50%;display:inline-block;vertical-align:middle;text-align:center;line-height:20px;font-size:0;">
+                      <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2322c27b' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 13l4 4L19 7'/%3E%3C/svg%3E" width="12" height="12" style="display:inline-block;vertical-align:middle;" />
                     </div>
                   </td>
                   <td style="vertical-align:middle;">

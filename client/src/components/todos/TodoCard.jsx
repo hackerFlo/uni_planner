@@ -30,9 +30,15 @@ function TodoCardBody({ provided, snapshot, todo, isAssigned, checked, onComplet
       }
       prevXRef.current = e.clientX;
     }
+    function handleUp() {
+      setRotation(0);
+      prevXRef.current = null;
+    }
     window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleUp);
     return () => {
       window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
       clearTimeout(decayRef.current);
     };
   }, [snapshot.isDragging]);
