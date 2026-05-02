@@ -5,6 +5,7 @@ const db = require('../db');
 const requireAuth = require('../middleware/auth');
 const { validateEmail, validateIdentifier } = require('../middleware/validate');
 const { encryptEmail, decryptEmail } = require('../crypto');
+const { sendDailySummary } = require('../mailer');
 
 const router = express.Router();
 
@@ -138,6 +139,55 @@ router.patch('/notification-settings', requireAuth, (req, res) => {
   const set = Object.keys(updates).map(k => `${k} = ?`).join(', ');
   db.prepare(`UPDATE users SET ${set} WHERE id = ?`).run(...Object.values(updates), req.user.id);
   res.json({ ok: true });
+});
+
+router.post('/test-email', requireAuth, async (req, res) => {
+  const user = db.prepare('SELECT notify_email_enc, email FROM users WHERE id = ?').get(req.user.id);
+  if (!user || !user.notify_email_enc) {
+    return res.status(400).json({ error: 'No notification email saved. Save your settings first.' });
+  }
+
+  let toEmail;
+  try {
+    toEmail = decryptEmail(user.notify_email_enc);
+  } catch (err) {
+    return res.status(500).json({ error: 'Encryption not configured on server.' });
+  }
+
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  const tomorrowDate = new Date(now);
+  tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+  const tomorrow = tomorrowDate.toISOString().slice(0, 10);
+
+  const completedTodos = db.prepare(
+    `SELECT title, list_type, approx_time FROM todos
+     WHERE user_id = ? AND completed = 1
+       AND completed_at >= ? AND completed_at < ?`
+  ).all(req.user.id, `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`);
+
+  const uncompletedTodos = db.prepare(
+    `SELECT title, list_type, approx_time FROM todos
+     WHERE user_id = ? AND day_assigned = ? AND completed = 0 AND archived = 0`
+  ).all(req.user.id, today);
+
+  const tomorrowTodos = db.prepare(
+    `SELECT title, list_type, approx_time FROM todos
+     WHERE user_id = ? AND day_assigned = ? AND archived = 0
+     ORDER BY planner_order ASC`
+  ).all(req.user.id, tomorrow);
+
+  const userName = (user.email || '').split('@')[0] || 'there';
+  const dateStr = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const tomorrowStr = tomorrowDate.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+
+  try {
+    await sendDailySummary(toEmail, { completedTodos, uncompletedTodos, tomorrowTodos, dateStr, tomorrowStr, userName, hour: now.getHours() });
+    res.json({ ok: true, sentTo: toEmail });
+  } catch (err) {
+    console.error('[test-email] Send failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;

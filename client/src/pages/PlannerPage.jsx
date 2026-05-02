@@ -201,10 +201,17 @@ export default function PlannerPage() {
     }
 
     if (!targetDate) {
-      // Only clear the ghost when pointer is explicitly on a column (date string).
-      // A card-number result from the source column can be a closestCenter artifact
-      // when pointerWithin briefly returns nothing — don't let that erase the ghost.
-      if (DATE_RE.test(overId)) setDragOverInfo(null);
+      if (DATE_RE.test(overId)) {
+        // Apply the same bounce guard before clearing: card shifts in the target column
+        // can transiently push the pointer back into the source column, which would
+        // oscillate the ghost on/off. Only clear once the guard window has expired.
+        setDragOverInfo(prev => {
+          if (!prev) return null;
+          const { prevDate, time } = dragCommitRef.current;
+          if (prevDate === overId && Date.now() - time < 200) return prev;
+          return null;
+        });
+      }
       return;
     }
 
@@ -219,10 +226,10 @@ export default function PlannerPage() {
         return { date: targetDate, overId: targetOverId };
       }
 
-      // Switching column: if this is the column we just left within 150ms it's a
+      // Switching column: if this is the column we just left within 200ms it's a
       // layout-shift bounce between adjacent columns — ignore it.
       const { prevDate, time } = dragCommitRef.current;
-      if (prevDate === targetDate && Date.now() - time < 150) return prev;
+      if (prevDate === targetDate && Date.now() - time < 200) return prev;
 
       dragCommitRef.current = { prevDate: prev?.date ?? null, time: Date.now() };
       return { date: targetDate, overId: targetOverId };
@@ -231,8 +238,11 @@ export default function PlannerPage() {
 
   function handleDragStart({ active }) {
     const realId = getRealId(active.id);
-    setActiveTodo(todos.find(t => t.id === realId) ?? null);
-    dragCommitRef.current = { prevDate: null, time: 0 };
+    const t = todos.find(t => t.id === realId) ?? null;
+    setActiveTodo(t);
+    // Seed prevDate with the source column so the bounce guard fires correctly
+    // on the very first cross-column entry (null would never match any date string).
+    dragCommitRef.current = { prevDate: t?.day_assigned ?? null, time: Date.now() };
   }
 
   function handleDragEnd({ active, over }) {
