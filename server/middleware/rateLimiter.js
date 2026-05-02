@@ -21,4 +21,13 @@ const todoLimiter = rateLimit({
   message: { error: 'Too many requests, please try again later.' },
 });
 
-module.exports = { authLimiter, todoLimiter };
+const backupLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10,
+  skip: skipInDev,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+});
+
+module.exports = { authLimiter, todoLimiter, backupLimiter };

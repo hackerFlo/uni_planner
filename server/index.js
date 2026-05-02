@@ -3,7 +3,7 @@ const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
-const { authLimiter, todoLimiter } = require('./middleware/rateLimiter');
+const { authLimiter, todoLimiter, backupLimiter } = require('./middleware/rateLimiter');
 const authRoutes = require('./routes/auth');
 const todoRoutes = require('./routes/todos');
 const backupRoutes = require('./routes/backup');
@@ -22,7 +22,7 @@ app.use(cookieParser());
 
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/todos', todoLimiter, todoRoutes);
-app.use('/api/backup', backupRoutes);
+app.use('/api/backup', backupLimiter, backupRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error(err);
@@ -33,6 +33,8 @@ const { startScheduler } = require('./scheduler');
 
 seed().then(() => {
   const server = app.listen(PORT, () => console.log(`[server] Listening on http://localhost:${PORT}`));
+  server.timeout = 30000;        // 30 s — kills stalled connections
+  server.keepAliveTimeout = 65000; // > 60 s to outlast load balancer idle timeouts
   startScheduler();
 
   const shutdown = () => server.close(() => process.exit(0));
