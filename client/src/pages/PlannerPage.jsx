@@ -60,6 +60,7 @@ export default function PlannerPage() {
   const resizeStartRef = useRef({ x: 0, width: 0 });
   const lastPointerX = useRef(null);
   const dragCommitRef = useRef({ prevDate: null, time: 0 });
+  const dragOverInfoRef = useRef(null);
 
   useShakeUndo(canUndo, undo);
 
@@ -128,6 +129,8 @@ export default function PlannerPage() {
     };
   }, []);
 
+  useEffect(() => { dragOverInfoRef.current = dragOverInfo; }, [dragOverInfo]);
+
   function startResize(e) {
     e.preventDefault();
     resizingRef.current = true;
@@ -154,14 +157,25 @@ export default function PlannerPage() {
     const within = pointerWithin(args);
     if (within.length === 0) return closestCenter(args);
 
-    // When the ghost card inserts at position 0, it shifts card 0 down a few px so the
-    // pointer briefly exits its rect. pointerWithin then returns only the column, which
-    // makes SortableContext reset — card 0 snaps back up, pointer re-enters, loop starts.
-    // Fix: resolve card position with closestCenter (distance-based, not rect-based), but
-    // only among cards in the currently hovered column so empty columns don't pull in
-    // cards from adjacent columns.
     const columnHit = within.find(c => typeof c.id === 'string' && DATE_RE.test(c.id));
     if (columnHit) {
+      // Pointer is over the column but not over any card rect (e.g. hovering in the ghost's
+      // visual space, which has no droppable rect). If we already have a ghost placed in this
+      // column, freeze the result to the current target card — running closestCenter here
+      // picks the wrong card because the ghost shifted the real cards away from the pointer,
+      // which causes the ghost to jump to position 1 and the first card to snap back up.
+      const current = dragOverInfoRef.current;
+      if (current?.date === columnHit.id) {
+        // Ghost is already in this column. Return the card it's currently before so that
+        // handleDragOver sees an unchanged overId and no-ops.
+        if (current.overId != null) return [{ id: current.overId }];
+        // Ghost is at the end of the column — return the column so the freeze logic in
+        // handleDragOver preserves the null-overId state.
+        return [columnHit];
+      }
+
+      // First entry into this column — use closestCenter to pick the insertion point,
+      // scoped to only the cards in this column so adjacent columns don't interfere.
       const colCardIds = new Set(
         todos.filter(t => t.day_assigned === columnHit.id).map(t => t.id)
       );
