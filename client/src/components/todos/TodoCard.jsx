@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useDraggable } from '@dnd-kit/core';
+import { useEffect, useRef, useState } from 'react';
+import { Draggable } from '@hello-pangea/dnd';
 import LinkText from '../ui/LinkText';
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -10,42 +10,60 @@ function dayLabel(iso) {
   return DAY_NAMES[new Date(y, m - 1, d).getDay()];
 }
 
-export default function TodoCard({ todo, isAssigned, onComplete, onEdit, onDelete }) {
-  const [checked, setChecked] = useState(false);
-  // Use a distinct id for sidebar copies so they don't clash with the
-  // AssignedCard draggable that uses the same todo.id in the planner.
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: isAssigned ? `sidebar-${todo.id}` : todo.id,
-  });
+function TodoCardBody({ provided, snapshot, todo, isAssigned, checked, onComplete, onEdit, onDelete }) {
+  const [rotation, setRotation] = useState(0);
+  const prevXRef = useRef(null);
+  const decayRef = useRef(null);
 
-  function handleComplete(e) {
-    e.stopPropagation();
-    if (checked) return;
-    setChecked(true);
-    setTimeout(() => onComplete(todo), 500);
-  }
+  useEffect(() => {
+    if (!snapshot.isDragging) {
+      setRotation(0);
+      prevXRef.current = null;
+      return;
+    }
+    function handleMove(e) {
+      if (prevXRef.current !== null) {
+        const dx = e.clientX - prevXRef.current;
+        setRotation(Math.max(-12, Math.min(12, dx * 1.5)));
+        clearTimeout(decayRef.current);
+        decayRef.current = setTimeout(() => setRotation(0), 80);
+      }
+      prevXRef.current = e.clientX;
+    }
+    window.addEventListener('pointermove', handleMove);
+    return () => {
+      window.removeEventListener('pointermove', handleMove);
+      clearTimeout(decayRef.current);
+    };
+  }, [snapshot.isDragging]);
 
   return (
     <div
-      ref={setNodeRef}
+      ref={provided.innerRef}
+      {...provided.draggableProps}
+      {...provided.dragHandleProps}
       style={{
-        opacity: isDragging ? 0 : checked ? 0.4 : 1,
-        touchAction: 'pan-y',
-        transform: checked ? 'scale(0.97)' : undefined,
-        transition: checked ? 'opacity 400ms ease, transform 300ms ease' : undefined,
+        ...provided.draggableProps.style,
+        opacity: snapshot.isDragging ? 0.85 : checked ? 0.4 : 1,
+        transform: snapshot.isDragging
+          ? `${provided.draggableProps.style?.transform ?? ''} rotate(${rotation}deg) scale(1.03)`
+          : checked
+          ? `${provided.draggableProps.style?.transform ?? ''} scale(0.97)`
+          : provided.draggableProps.style?.transform,
+        transition: checked
+          ? 'opacity 400ms ease, transform 300ms ease'
+          : provided.draggableProps.style?.transition,
       }}
       className={`group border rounded-lg p-3 shadow-sm transition-all select-none cursor-grab active:cursor-grabbing ${
         isAssigned
           ? 'bg-zinc-50 border-zinc-100 opacity-50 hover:opacity-70'
           : 'bg-white border-zinc-100 hover:shadow-md hover:-translate-y-0.5'
       }`}
-      {...attributes}
-      {...listeners}
     >
       <div className="relative flex items-start gap-2.5">
         <button
           onPointerDown={e => e.stopPropagation()}
-          onClick={handleComplete}
+          onClick={onComplete}
           className={`mt-0.5 flex-shrink-0 w-4 h-4 rounded border transition-all duration-150 flex items-center justify-center ${
             checked
               ? 'bg-indigo-500 border-indigo-500'
@@ -114,5 +132,33 @@ export default function TodoCard({ todo, isAssigned, onComplete, onEdit, onDelet
         </div>
       </div>
     </div>
+  );
+}
+
+export default function TodoCard({ todo, isAssigned, index, onComplete, onEdit, onDelete }) {
+  const [checked, setChecked] = useState(false);
+
+  function handleComplete(e) {
+    e.stopPropagation();
+    if (checked) return;
+    setChecked(true);
+    setTimeout(() => onComplete(todo), 500);
+  }
+
+  return (
+    <Draggable draggableId={isAssigned ? `sidebar-${todo.id}` : String(todo.id)} index={index}>
+      {(provided, snapshot) => (
+        <TodoCardBody
+          provided={provided}
+          snapshot={snapshot}
+          todo={todo}
+          isAssigned={isAssigned}
+          checked={checked}
+          onComplete={handleComplete}
+          onEdit={onEdit}
+          onDelete={onDelete}
+        />
+      )}
+    </Draggable>
   );
 }
