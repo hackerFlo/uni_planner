@@ -141,8 +141,8 @@ function buildHtml({ completedTodos, uncompletedTodos, tomorrowTodos, dateStr, t
               <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td style="vertical-align:middle;padding-right:8px;">
-                    <div style="width:20px;height:20px;background:#fff4f4;border-radius:50%;display:inline-block;vertical-align:middle;text-align:center;line-height:20px;">
-                      <span style="color:#f43f5e;font-size:11px;font-weight:700;">!</span>
+                    <div style="width:20px;height:20px;background:#fff4f4;border-radius:50%;display:inline-block;vertical-align:middle;text-align:center;line-height:20px;font-size:0;">
+                      <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23f43f5e'%3E%3Crect x='10.5' y='4' width='3' height='10' rx='1.5'/%3E%3Crect x='10.5' y='17' width='3' height='3' rx='1.5'/%3E%3C/svg%3E" width="10" height="10" style="display:inline-block;vertical-align:middle;" />
                     </div>
                   </td>
                   <td style="vertical-align:middle;">
@@ -175,8 +175,8 @@ function buildHtml({ completedTodos, uncompletedTodos, tomorrowTodos, dateStr, t
               <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td style="vertical-align:middle;padding-right:8px;">
-                    <div style="width:20px;height:20px;background:#fff4f4;border-radius:50%;display:inline-block;vertical-align:middle;text-align:center;line-height:20px;">
-                      <span style="color:#f43f5e;font-size:11px;font-weight:700;">!</span>
+                    <div style="width:20px;height:20px;background:#fff4f4;border-radius:50%;display:inline-block;vertical-align:middle;text-align:center;line-height:20px;font-size:0;">
+                      <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23f43f5e'%3E%3Crect x='10.5' y='4' width='3' height='10' rx='1.5'/%3E%3Crect x='10.5' y='17' width='3' height='3' rx='1.5'/%3E%3C/svg%3E" width="10" height="10" style="display:inline-block;vertical-align:middle;" />
                     </div>
                   </td>
                   <td style="vertical-align:middle;">
@@ -205,8 +205,8 @@ function buildHtml({ completedTodos, uncompletedTodos, tomorrowTodos, dateStr, t
               <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td style="vertical-align:middle;padding-right:8px;">
-                    <div style="width:20px;height:20px;background:#eef0ff;border-radius:50%;display:inline-block;vertical-align:middle;text-align:center;line-height:20px;">
-                      <span style="color:#6366f1;font-size:11px;font-weight:700;">&#8594;</span>
+                    <div style="width:20px;height:20px;background:#eef0ff;border-radius:50%;display:inline-block;vertical-align:middle;text-align:center;line-height:20px;font-size:0;">
+                      <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236366f1' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='5' y1='12' x2='19' y2='12'/%3E%3Cpolyline points='12 5 19 12 12 19'/%3E%3C/svg%3E" width="12" height="12" style="display:inline-block;vertical-align:middle;" />
                     </div>
                   </td>
                   <td style="vertical-align:middle;">
@@ -261,8 +261,8 @@ function buildHtml({ completedTodos, uncompletedTodos, tomorrowTodos, dateStr, t
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                       <tr>
                         <td style="vertical-align:middle;width:32px;">
-                          <div style="width:32px;height:32px;background-color:#6366f1;border-radius:8px;text-align:center;line-height:32px;">
-                            <span style="color:#ffffff;font-size:16px;font-weight:700;font-family:'DM Sans',-apple-system,sans-serif;">U</span>
+                          <div style="width:32px;height:32px;font-size:0;line-height:0;">
+                            <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%236366f1'/%3E%3Cg transform='translate(6%2C6) scale(0.833)'%3E%3Cpath d='M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' stroke='white' stroke-width='2.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/g%3E%3C/svg%3E" width="32" height="32" style="display:block;border-radius:8px;" />
                           </div>
                         </td>
                         <td style="vertical-align:middle;padding-left:10px;">
