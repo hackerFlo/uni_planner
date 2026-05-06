@@ -4,6 +4,8 @@ const GMAIL_USER = process.env.GMAIL_USER;
 const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
 const APP_URL = process.env.CORS_ORIGIN || 'https://planner.example.com/';
 
+const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#6366f1"/><g transform="translate(6,6) scale(0.833)"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" stroke="white" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></g></svg>`;
+
 const CATEGORY = {
   university: { color: '#6366f1', bg: '#eef2ff', label: 'University' },
   private:    { color: '#059669', bg: '#ecfdf5', label: 'Private' },
@@ -59,7 +61,7 @@ function completedTaskRow(t) {
   return taskCard(t, {
     cardBg: '#ffffff',
     cardBorder: '#f0f0f5',
-    checkboxHtml: `<div style="width:14px;height:14px;background:#6366f1;border-radius:4px;text-align:center;line-height:14px;font-size:0;"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 13l4 4L19 7'/%3E%3C/svg%3E" width="9" height="9" style="display:inline-block;vertical-align:middle;" /></div>`,
+    checkboxHtml: `<div style="width:14px;height:14px;background:#6366f1;border-radius:4px;text-align:center;line-height:14px;"><span style="font-family:Arial,sans-serif;font-size:10px;font-weight:700;color:#ffffff;line-height:14px;">&#10003;</span></div>`,
     titleColor: '#a0a0b8',
   });
 }
@@ -109,8 +111,8 @@ function buildHtml({ completedTodos, uncompletedTodos, tomorrowTodos, dateStr, t
               <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td style="vertical-align:middle;padding-right:8px;">
-                    <div style="width:20px;height:20px;background:#edfaf4;border-radius:50%;display:inline-block;vertical-align:middle;text-align:center;line-height:20px;font-size:0;">
-                      <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2322c27b' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 13l4 4L19 7'/%3E%3C/svg%3E" width="12" height="12" style="display:inline-block;vertical-align:middle;" />
+                    <div style="width:20px;height:20px;background:#edfaf4;border-radius:50%;display:inline-block;vertical-align:middle;text-align:center;line-height:20px;">
+                      <span style="font-family:Arial,sans-serif;font-size:13px;font-weight:700;color:#22c27b;line-height:20px;">&#10003;</span>
                     </div>
                   </td>
                   <td style="vertical-align:middle;">
@@ -141,8 +143,8 @@ function buildHtml({ completedTodos, uncompletedTodos, tomorrowTodos, dateStr, t
               <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td style="vertical-align:middle;padding-right:8px;">
-                    <div style="width:20px;height:20px;background:#fff4f4;border-radius:50%;display:inline-block;vertical-align:middle;text-align:center;line-height:20px;font-size:0;">
-                      <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23f43f5e'%3E%3Crect x='10.5' y='4' width='3' height='10' rx='1.5'/%3E%3Crect x='10.5' y='17' width='3' height='3' rx='1.5'/%3E%3C/svg%3E" width="10" height="10" style="display:inline-block;vertical-align:middle;" />
+                    <div style="width:20px;height:20px;background:#fff4f4;border-radius:50%;display:inline-block;vertical-align:middle;text-align:center;line-height:20px;">
+                      <span style="font-family:Arial,sans-serif;font-size:13px;font-weight:700;color:#f43f5e;line-height:20px;">!</span>
                     </div>
                   </td>
                   <td style="vertical-align:middle;">
@@ -175,8 +177,8 @@ function buildHtml({ completedTodos, uncompletedTodos, tomorrowTodos, dateStr, t
               <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td style="vertical-align:middle;padding-right:8px;">
-                    <div style="width:20px;height:20px;background:#fff4f4;border-radius:50%;display:inline-block;vertical-align:middle;text-align:center;line-height:20px;font-size:0;">
-                      <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23f43f5e'%3E%3Crect x='10.5' y='4' width='3' height='10' rx='1.5'/%3E%3Crect x='10.5' y='17' width='3' height='3' rx='1.5'/%3E%3C/svg%3E" width="10" height="10" style="display:inline-block;vertical-align:middle;" />
+                    <div style="width:20px;height:20px;background:#fff4f4;border-radius:50%;display:inline-block;vertical-align:middle;text-align:center;line-height:20px;">
+                      <span style="font-family:Arial,sans-serif;font-size:13px;font-weight:700;color:#f43f5e;line-height:20px;">!</span>
                     </div>
                   </td>
                   <td style="vertical-align:middle;">
@@ -205,8 +207,8 @@ function buildHtml({ completedTodos, uncompletedTodos, tomorrowTodos, dateStr, t
               <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td style="vertical-align:middle;padding-right:8px;">
-                    <div style="width:20px;height:20px;background:#eef0ff;border-radius:50%;display:inline-block;vertical-align:middle;text-align:center;line-height:20px;font-size:0;">
-                      <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236366f1' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='5' y1='12' x2='19' y2='12'/%3E%3Cpolyline points='12 5 19 12 12 19'/%3E%3C/svg%3E" width="12" height="12" style="display:inline-block;vertical-align:middle;" />
+                    <div style="width:20px;height:20px;background:#eef0ff;border-radius:50%;display:inline-block;vertical-align:middle;text-align:center;line-height:20px;">
+                      <span style="font-family:Arial,sans-serif;font-size:13px;font-weight:700;color:#6366f1;line-height:20px;">&#8594;</span>
                     </div>
                   </td>
                   <td style="vertical-align:middle;">
@@ -234,7 +236,7 @@ function buildHtml({ completedTodos, uncompletedTodos, tomorrowTodos, dateStr, t
   <style>
     body, table, td, a { -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%; }
     table, td { mso-table-lspace:0pt; mso-table-rspace:0pt; }
-    body { margin:0; padding:0; background-color:#ffffff; font-family:'DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }
+    body { margin:0; padding:0; background-color:#f5f3ff; font-family:'DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }
     @media only screen and (max-width:600px) {
       .email-wrapper { width:100% !important; }
       .email-body { padding:0 12px !important; }
@@ -244,9 +246,9 @@ function buildHtml({ completedTodos, uncompletedTodos, tomorrowTodos, dateStr, t
     }
   </style>
 </head>
-<body style="margin:0;padding:0;background-color:#ffffff;">
+<body style="margin:0;padding:0;background-color:#f5f3ff;">
 
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#ffffff;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f5f3ff;">
     <tr>
       <td align="center" style="padding:32px 16px;">
 
@@ -262,7 +264,7 @@ function buildHtml({ completedTodos, uncompletedTodos, tomorrowTodos, dateStr, t
                       <tr>
                         <td style="vertical-align:middle;width:32px;">
                           <div style="width:32px;height:32px;font-size:0;line-height:0;">
-                            <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%236366f1'/%3E%3Cg transform='translate(6%2C6) scale(0.833)'%3E%3Cpath d='M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' stroke='white' stroke-width='2.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/g%3E%3C/svg%3E" width="32" height="32" style="display:block;border-radius:8px;" />
+                            <img src="cid:logo@uni-planner" width="32" height="32" alt="Uni Planner" style="display:block;border-radius:8px;" />
                           </div>
                         </td>
                         <td style="vertical-align:middle;padding-left:10px;">
@@ -375,6 +377,14 @@ async function sendDailySummary(toEmail, { completedTodos, uncompletedTodos, tom
     to: toEmail,
     subject: `Your daily summary – ${dateStr}`,
     html: buildHtml({ completedTodos, uncompletedTodos, tomorrowTodos, dateStr, tomorrowStr, userName, hour }),
+    attachments: [
+      {
+        filename: 'logo.svg',
+        content: LOGO_SVG,
+        contentType: 'image/svg+xml',
+        cid: 'logo@uni-planner',
+      },
+    ],
   });
 }
 

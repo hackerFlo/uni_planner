@@ -2,10 +2,13 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const requireAuth = require('../middleware/auth');
+const { validateDayAssigned } = require('../middleware/validate');
 
 const backupJsonParser = express.json({ limit: '5mb' });
 
 const VALID_LIST_TYPES = ['university', 'private', 'future'];
+const ISO_DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
+const cleanIsoDatetime = (v) => (typeof v === 'string' && ISO_DATETIME.test(v) ? v : null);
 
 router.get('/', requireAuth, (req, res) => {
   const todos = db.prepare('SELECT * FROM todos WHERE user_id = ?').all(req.user.id);
@@ -46,6 +49,8 @@ router.post('/restore', requireAuth, backupJsonParser, (req, res) => {
     for (const t of todos) {
       if (!t.title || typeof t.title !== 'string' || t.title.trim().length === 0) { skipped++; continue; }
       if (!VALID_LIST_TYPES.includes(t.list_type)) { skipped++; continue; }
+      const day = validateDayAssigned(t.day_assigned);
+      if (day === false) { skipped++; continue; }
       const key = `${t.title}|${t.list_type}|${t.created_at}`;
       if (existingSet.has(key)) { skipped++; continue; }
       const now = new Date().toISOString();
@@ -56,11 +61,11 @@ router.post('/restore', requireAuth, backupJsonParser, (req, res) => {
         t.list_type,
         t.completed ? 1 : 0,
         t.archived ? 1 : 0,
-        t.day_assigned || null,
+        day,
         t.approx_time ? String(t.approx_time).slice(0, 50) : null,
         Number.isInteger(t.planner_order) ? t.planner_order : null,
-        t.completed_at || null,
-        t.created_at || now,
+        cleanIsoDatetime(t.completed_at),
+        cleanIsoDatetime(t.created_at) || now,
         now,
       );
       imported++;

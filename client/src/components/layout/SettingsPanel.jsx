@@ -103,7 +103,7 @@ export default function SettingsPanel({ onClose, fetchTodos }) {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(notifForm),
+        body: JSON.stringify({ ...notifForm, notify_tz: Intl.DateTimeFormat().resolvedOptions().timeZone }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to save');

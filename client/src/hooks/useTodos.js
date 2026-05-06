@@ -56,7 +56,8 @@ export function useTodos() {
       const msUntilMidnight =
         new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime() - now.getTime();
       timerRef.current = setTimeout(() => {
-        fetchTodos();
+        // Skip fetch when hidden; visibilitychange handler will catch up on resume
+        if (document.visibilityState === 'visible') fetchTodos();
         scheduleAtMidnight();
       }, msUntilMidnight);
     }

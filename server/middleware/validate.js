@@ -37,4 +37,10 @@ function validateDayAssigned(val) {
   return /^\d{4}-\d{2}-\d{2}$/.test(val) ? val : false;
 }
 
-module.exports = { validateEmail, validateIdentifier, sanitizeTitle, sanitizeDescription, validateListType, validateDayAssigned };
+function validateRecurrenceInterval(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 1 && n <= 7 ? n : false;
+}
+
+module.exports = { validateEmail, validateIdentifier, sanitizeTitle, sanitizeDescription, validateListType, validateDayAssigned, validateRecurrenceInterval };

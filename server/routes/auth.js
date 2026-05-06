@@ -91,7 +91,7 @@ router.patch('/me', requireAuth, async (req, res) => {
 
 router.get('/notification-settings', requireAuth, (req, res) => {
   const user = db.prepare(
-    'SELECT notify_enabled, notify_time, notify_email_enc FROM users WHERE id = ?'
+    'SELECT notify_enabled, notify_time, notify_email_enc, notify_tz FROM users WHERE id = ?'
   ).get(req.user.id);
   let notify_email = '';
   if (user.notify_email_enc) {
@@ -101,11 +101,12 @@ router.get('/notification-settings', requireAuth, (req, res) => {
     notify_enabled: !!user.notify_enabled,
     notify_time: user.notify_time || '22:00',
     notify_email,
+    notify_tz: user.notify_tz || 'UTC',
   });
 });
 
 router.patch('/notification-settings', requireAuth, (req, res) => {
-  const { notify_enabled, notify_time, notify_email } = req.body;
+  const { notify_enabled, notify_time, notify_email, notify_tz } = req.body;
   const updates = {};
 
   if (notify_enabled !== undefined) {
@@ -116,6 +117,17 @@ router.patch('/notification-settings', requireAuth, (req, res) => {
       return res.status(400).json({ error: 'Invalid time format, expected HH:MM' });
     }
     updates.notify_time = notify_time;
+  }
+  if (notify_tz !== undefined) {
+    if (typeof notify_tz !== 'string' || notify_tz.length > 64 || !/^[A-Za-z_]+(?:\/[A-Za-z_+\-0-9]+){0,2}$/.test(notify_tz)) {
+      return res.status(400).json({ error: 'Invalid timezone' });
+    }
+    try {
+      new Intl.DateTimeFormat('en', { timeZone: notify_tz });
+    } catch {
+      return res.status(400).json({ error: 'Unknown timezone' });
+    }
+    updates.notify_tz = notify_tz;
   }
   if (notify_email !== undefined) {
     if (notify_email === '') {

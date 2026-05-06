@@ -1,9 +1,11 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import LoginPage from './pages/LoginPage';
 import PlannerPage from './pages/PlannerPage';
-import NotFoundPage from './pages/NotFoundPage';
 import ErrorBoundary from './components/ErrorBoundary';
+
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -26,11 +28,13 @@ export default function App() {
     <ErrorBoundary>
       <AuthProvider>
         <BrowserRouter>
-          <Routes>
-            <Route path="/login" element={<PublicOnlyRoute><LoginPage /></PublicOnlyRoute>} />
-            <Route path="/" element={<ProtectedRoute><PlannerPage /></ProtectedRoute>} />
-            <Route path="*" element={<NotFoundPage />} />
-          </Routes>
+          <Suspense fallback={null}>
+            <Routes>
+              <Route path="/login" element={<PublicOnlyRoute><LoginPage /></PublicOnlyRoute>} />
+              <Route path="/" element={<ProtectedRoute><PlannerPage /></ProtectedRoute>} />
+              <Route path="*" element={<NotFoundPage />} />
+            </Routes>
+          </Suspense>
         </BrowserRouter>
       </AuthProvider>
     </ErrorBoundary>

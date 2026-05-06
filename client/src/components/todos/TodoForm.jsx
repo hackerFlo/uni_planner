@@ -61,6 +61,9 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
   const [description, setDescription] = useState(todo?.description ?? '');
   const [listType, setListType] = useState(todo?.list_type ?? defaults.list_type ?? 'university');
   const [dayAssigned, setDayAssigned] = useState(todo?.day_assigned ?? defaults.day_assigned ?? '');
+  const [recurrence, setRecurrence] = useState(
+    todo?.recurrence_interval_days != null ? String(todo.recurrence_interval_days) : ''
+  );
   const initialApproxTime = todo?.approx_time ?? '';
   const [approxTime, setApproxTime] = useState(isPreset(initialApproxTime) ? initialApproxTime : 'custom');
   const [customTime, setCustomTime] = useState(!isPreset(initialApproxTime) ? initialApproxTime : '');
@@ -117,6 +120,7 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
         list_type: listType,
         day_assigned: dayAssigned || null,
         approx_time: approxTime === 'custom' ? (customTime.trim() || null) : (approxTime || null),
+        recurrence_interval_days: recurrence === '' ? null : Number(recurrence),
       };
       if (mode === 'edit') {
         await onUpdate(todo.id, data);
@@ -241,7 +245,7 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
               </label>
               <select
                 value={dayAssigned}
-                onChange={e => setDayAssigned(e.target.value)}
+                onChange={e => { setDayAssigned(e.target.value); if (!e.target.value) setRecurrence(''); }}
                 className="w-full px-3.5 py-2.5 text-sm bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition capitalize"
               >
                 <option value="">None</option>
@@ -295,6 +299,28 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
                   className="mt-1.5 w-full px-3.5 py-2.5 text-sm bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
                 />
               )}
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1.5">
+                Repeat <span className="normal-case text-zinc-400 font-normal">(optional)</span>
+              </label>
+              <select
+                value={recurrence}
+                onChange={e => setRecurrence(e.target.value)}
+                disabled={!dayAssigned}
+                title={!dayAssigned ? 'Pick a day first' : undefined}
+                className="w-full px-3.5 py-2.5 text-sm bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <option value="">Does not repeat</option>
+                <option value="1">Every day</option>
+                <option value="2">Every 2 days</option>
+                <option value="3">Every 3 days</option>
+                <option value="4">Every 4 days</option>
+                <option value="5">Every 5 days</option>
+                <option value="6">Every 6 days</option>
+                <option value="7">Every week</option>
+              </select>
             </div>
           </div>
 

@@ -21,18 +21,26 @@ function CardBody({ provided, snapshot, todo, checked, onComplete, onUnassign, o
       prevXRef.current = null;
       return;
     }
+    let rafId = null;
+    let pendingX = null;
     function handleMove(e) {
-      if (prevXRef.current !== null) {
-        const dx = e.clientX - prevXRef.current;
-        setRotation(Math.max(-12, Math.min(12, dx * 1.5)));
-        clearTimeout(decayRef.current);
-        decayRef.current = setTimeout(() => setRotation(0), 80);
-      }
-      prevXRef.current = e.clientX;
+      pendingX = e.clientX;
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        if (prevXRef.current !== null) {
+          const dx = pendingX - prevXRef.current;
+          setRotation(Math.max(-12, Math.min(12, dx * 1.5)));
+          clearTimeout(decayRef.current);
+          decayRef.current = setTimeout(() => setRotation(0), 80);
+        }
+        prevXRef.current = pendingX;
+      });
     }
     function handleUp() {
       setRotation(0);
       prevXRef.current = null;
+      if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
       window.removeEventListener('pointermove', handleMove);
     }
     window.addEventListener('pointermove', handleMove);
@@ -41,6 +49,7 @@ function CardBody({ provided, snapshot, todo, checked, onComplete, onUnassign, o
       window.removeEventListener('pointermove', handleMove);
       window.removeEventListener('pointerup', handleUp);
       clearTimeout(decayRef.current);
+      if (rafId !== null) cancelAnimationFrame(rafId);
     };
   }, [snapshot.isDragging]);
 
@@ -95,6 +104,11 @@ function CardBody({ provided, snapshot, todo, checked, onComplete, onUnassign, o
           <span className="text-[9px] font-medium text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded-full truncate">
             {fmtTime(todo.approx_time)}
           </span>
+        )}
+        {todo.recurrence_interval_days != null && (
+          <svg className="flex-shrink-0 w-3 h-3 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+          </svg>
         )}
       </div>
 

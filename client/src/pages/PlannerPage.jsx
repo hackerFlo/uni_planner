@@ -35,7 +35,6 @@ export default function PlannerPage() {
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
   const sidebarScrollRef = useRef(null);
   const scrollTimerRef = useRef(null);
-  const resizingRef = useRef(false);
   const resizeStartRef = useRef({ x: 0, width: 0 });
 
   useShakeUndo(canUndo, undo);
@@ -65,30 +64,33 @@ export default function PlannerPage() {
   }, []);
 
   useEffect(() => {
+    if (!isResizing) return;
+    let rafId = null;
     function onMouseMove(e) {
-      if (!resizingRef.current) return;
-      const delta = e.clientX - resizeStartRef.current.x;
-      setSidebarWidth(Math.max(200, Math.min(520, resizeStartRef.current.width + delta)));
+      const x = e.clientX;
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        const delta = x - resizeStartRef.current.x;
+        setSidebarWidth(Math.max(200, Math.min(520, resizeStartRef.current.width + delta)));
+      });
     }
     function onMouseUp() {
-      if (resizingRef.current) {
-        resizingRef.current = false;
-        setIsResizing(false);
-        document.body.style.cursor = '';
-        document.body.style.userSelect = '';
-      }
+      setIsResizing(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
     }
-    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mousemove', onMouseMove, { passive: true });
     document.addEventListener('mouseup', onMouseUp);
     return () => {
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
+      if (rafId !== null) cancelAnimationFrame(rafId);
     };
-  }, []);
+  }, [isResizing]);
 
   function startResize(e) {
     e.preventDefault();
-    resizingRef.current = true;
     resizeStartRef.current = { x: e.clientX, width: sidebarWidth };
     setIsResizing(true);
     document.body.style.cursor = 'col-resize';

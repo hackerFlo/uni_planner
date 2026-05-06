@@ -42,6 +42,15 @@ if (!todoCols.some(c => c.name === 'approx_time')) {
   db.exec(`ALTER TABLE todos ADD COLUMN approx_time TEXT`);
   console.log('[db] Migrated: added approx_time column');
 }
+if (!todoCols.some(c => c.name === 'recurrence_interval_days')) {
+  db.exec(`ALTER TABLE todos ADD COLUMN recurrence_interval_days INTEGER`);
+  console.log('[db] Migrated: added recurrence_interval_days column');
+}
+if (!todoCols.some(c => c.name === 'recurrence_parent_id')) {
+  db.exec(`ALTER TABLE todos ADD COLUMN recurrence_parent_id INTEGER`);
+  console.log('[db] Migrated: added recurrence_parent_id column');
+}
+db.exec(`CREATE INDEX IF NOT EXISTS idx_todos_recurrence_parent ON todos(recurrence_parent_id)`);
 
 // Migrate: if todos table still has the day-name CHECK constraint, recreate without it
 // day_assigned now stores ISO dates (YYYY-MM-DD) instead of day names
@@ -90,6 +99,10 @@ if (!userCols.some(c => c.name === 'notify_enabled')) {
 if (!userCols.some(c => c.name === 'notify_last_sent')) {
   db.exec(`ALTER TABLE users ADD COLUMN notify_last_sent TEXT`);
   console.log('[db] Migrated: added notify_last_sent column');
+}
+if (!userCols.some(c => c.name === 'notify_tz')) {
+  db.exec(`ALTER TABLE users ADD COLUMN notify_tz TEXT NOT NULL DEFAULT 'UTC'`);
+  console.log('[db] Migrated: added notify_tz column');
 }
 
 module.exports = db;
