@@ -1,10 +1,12 @@
 const nodemailer = require('nodemailer');
+const fs = require('fs');
+const path = require('path');
 
 const GMAIL_USER = process.env.GMAIL_USER;
 const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
 const APP_URL = process.env.CORS_ORIGIN || 'https://planner.example.com/';
 
-const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#6366f1"/><g transform="translate(6,6) scale(0.833)"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" stroke="white" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></g></svg>`;
+const LOGO_PNG = fs.readFileSync(path.join(__dirname, '..', 'client', 'public', 'pwa-192.png'));
 
 const CATEGORY = {
   university: { color: '#6366f1', bg: '#eef2ff', label: 'University' },
@@ -61,7 +63,7 @@ function completedTaskRow(t) {
   return taskCard(t, {
     cardBg: '#ffffff',
     cardBorder: '#f0f0f5',
-    checkboxHtml: `<div style="width:14px;height:14px;background:#6366f1;border-radius:4px;text-align:center;line-height:14px;"><span style="font-family:Arial,sans-serif;font-size:10px;font-weight:700;color:#ffffff;line-height:14px;">&#10003;</span></div>`,
+    checkboxHtml: `<div style="width:14px;height:14px;background:#6366f1;border-radius:4px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><path d="M5 13l4 4L19 7"/></svg></div>`,
     titleColor: '#a0a0b8',
   });
 }
@@ -111,8 +113,8 @@ function buildHtml({ completedTodos, uncompletedTodos, tomorrowTodos, dateStr, t
               <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td style="vertical-align:middle;padding-right:8px;">
-                    <div style="width:20px;height:20px;background:#edfaf4;border-radius:50%;display:inline-block;vertical-align:middle;text-align:center;line-height:20px;">
-                      <span style="font-family:Arial,sans-serif;font-size:13px;font-weight:700;color:#22c27b;line-height:20px;">&#10003;</span>
+                    <div style="width:20px;height:20px;background:#edfaf4;border-radius:50%;display:inline-block;vertical-align:middle;">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c27b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><path d="M5 13l4 4L19 7"/></svg>
                     </div>
                   </td>
                   <td style="vertical-align:middle;">
@@ -207,8 +209,8 @@ function buildHtml({ completedTodos, uncompletedTodos, tomorrowTodos, dateStr, t
               <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td style="vertical-align:middle;padding-right:8px;">
-                    <div style="width:20px;height:20px;background:#eef0ff;border-radius:50%;display:inline-block;vertical-align:middle;text-align:center;line-height:20px;">
-                      <span style="font-family:Arial,sans-serif;font-size:13px;font-weight:700;color:#6366f1;line-height:20px;">&#8594;</span>
+                    <div style="width:20px;height:20px;background:#eef0ff;border-radius:50%;display:inline-block;vertical-align:middle;">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
                     </div>
                   </td>
                   <td style="vertical-align:middle;">
@@ -379,9 +381,9 @@ async function sendDailySummary(toEmail, { completedTodos, uncompletedTodos, tom
     html: buildHtml({ completedTodos, uncompletedTodos, tomorrowTodos, dateStr, tomorrowStr, userName, hour }),
     attachments: [
       {
-        filename: 'logo.svg',
-        content: LOGO_SVG,
-        contentType: 'image/svg+xml',
+        filename: 'logo.png',
+        content: LOGO_PNG,
+        contentType: 'image/png',
         cid: 'logo@uni-planner',
       },
     ],
