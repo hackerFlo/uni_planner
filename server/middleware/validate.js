@@ -43,4 +43,9 @@ function validateRecurrenceInterval(v) {
   return Number.isInteger(n) && n >= 1 && n <= 7 ? n : false;
 }
 
-module.exports = { validateEmail, validateIdentifier, sanitizeTitle, sanitizeDescription, validateListType, validateDayAssigned, validateRecurrenceInterval };
+function sanitizeDayNote(str) {
+  if (typeof str !== 'string') return '';
+  return str.trim().slice(0, 200);
+}
+
+module.exports = { validateEmail, validateIdentifier, sanitizeTitle, sanitizeDescription, validateListType, validateDayAssigned, validateRecurrenceInterval, sanitizeDayNote };

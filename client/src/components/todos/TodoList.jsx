@@ -1,5 +1,6 @@
 import { Droppable } from '@hello-pangea/dnd';
 import TodoCard from './TodoCard';
+import Tooltip from '../ui/Tooltip';
 
 const TYPE_CONFIG = {
   university: {
@@ -31,15 +32,16 @@ export default function TodoList({ type, todos, loading, onAdd, onEdit, onComple
             {config.label}
           </h2>
         </div>
-        <button
-          onClick={onAdd}
-          className="text-zinc-400 hover:text-zinc-700 transition p-0.5 rounded"
-          title="Add item"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-          </svg>
-        </button>
+        <Tooltip text="Add item">
+          <button
+            onClick={onAdd}
+            className="text-zinc-400 hover:text-zinc-700 transition p-0.5 rounded"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+          </button>
+        </Tooltip>
       </div>
 
       <Droppable droppableId={`${type}-list`} isDropDisabled={true}>

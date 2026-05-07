@@ -7,6 +7,7 @@ const { authLimiter, todoLimiter, backupLimiter } = require('./middleware/rateLi
 const authRoutes = require('./routes/auth');
 const todoRoutes = require('./routes/todos');
 const backupRoutes = require('./routes/backup');
+const dayNoteRoutes = require('./routes/dayNotes');
 const seed = process.env.NODE_ENV !== 'production' ? require('./seed') : () => Promise.resolve();
 
 const app = express();
@@ -24,6 +25,7 @@ app.use(cookieParser());
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/todos', todoLimiter, todoRoutes);
 app.use('/api/backup', backupLimiter, backupRoutes);
+app.use('/api/day-notes', todoLimiter, dayNoteRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error(err);

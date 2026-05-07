@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import SettingsPanel from './SettingsPanel';
+import Tooltip from '../ui/Tooltip';
 
 export default function Navbar({ onArchiveToggle, archiveOpen, onUndo, canUndo, fetchTodos }) {
   const { user } = useAuth();
@@ -18,10 +19,10 @@ export default function Navbar({ onArchiveToggle, archiveOpen, onUndo, canUndo, 
           <span className="text-sm font-semibold text-zinc-800 tracking-tight">Uni Planner</span>
         </div>
 
+        <Tooltip text={canUndo ? 'Undo last action (⌘Z)' : 'Nothing to undo'}>
         <button
           onClick={onUndo}
           disabled={!canUndo}
-          title={canUndo ? 'Undo last action (⌘Z)' : 'Nothing to undo'}
           className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition ${
             canUndo
               ? 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50'
@@ -33,6 +34,7 @@ export default function Navbar({ onArchiveToggle, archiveOpen, onUndo, canUndo, 
           </svg>
           Undo
         </button>
+        </Tooltip>
 
         <button
           onClick={onArchiveToggle}
@@ -48,13 +50,14 @@ export default function Navbar({ onArchiveToggle, archiveOpen, onUndo, canUndo, 
           Archive
         </button>
 
-        <button
-          onClick={() => setSettingsOpen(v => !v)}
-          className="text-xs text-zinc-400 hover:text-zinc-700 font-medium transition px-2 py-1 rounded-lg hover:bg-zinc-50"
-          title="Account settings"
-        >
-          {user?.email}
-        </button>
+        <Tooltip text="Account settings">
+          <button
+            onClick={() => setSettingsOpen(v => !v)}
+            className="text-xs text-zinc-400 hover:text-zinc-700 font-medium transition px-2 py-1 rounded-lg hover:bg-zinc-50"
+          >
+            {user?.email}
+          </button>
+        </Tooltip>
       </header>
 
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} fetchTodos={fetchTodos} />}

@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { DragDropContext } from '@hello-pangea/dnd';
 import { useTodos } from '../hooks/useTodos';
+import { useDayNotes } from '../hooks/useDayNotes';
 import { useShakeUndo } from '../hooks/useShakeUndo';
 import Navbar from '../components/layout/Navbar';
 import TodoList from '../components/todos/TodoList';
 import TodoForm from '../components/todos/TodoForm';
 import ArchiveDrawer from '../components/todos/ArchiveDrawer';
 import WeeklyPlanner from '../components/planner/WeeklyPlanner';
+import Tooltip from '../components/ui/Tooltip';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -26,6 +28,7 @@ function getRealId(draggableId) {
 
 export default function PlannerPage() {
   const { todos, loading, fetchTodos, createTodo, updateTodo, deleteTodo, assignDay, reorderDay, canUndo, undo } = useTodos();
+  const { notes, setNote } = useDayNotes();
   const [activeTodo, setActiveTodo] = useState(null);
   const [formState, setFormState] = useState(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
@@ -169,6 +172,8 @@ export default function PlannerPage() {
             <WeeklyPlanner
               todos={plannerTodos}
               isDragging={!!activeTodo}
+              notes={notes}
+              onNoteChange={setNote}
               onUnassign={id => assignDay(id, null)}
               onComplete={todo => updateTodo(todo.id, { completed: 1, archived: 1 })}
               onEdit={todo => setFormState({ mode: 'edit', todo })}
@@ -236,30 +241,32 @@ export default function PlannerPage() {
                 className="absolute top-0 bottom-0 right-0 translate-x-1/2 w-8 cursor-col-resize group/resize flex items-stretch z-10"
               >
                 <div className="w-px bg-transparent group-hover/resize:bg-indigo-500 mx-auto transition-colors duration-150" />
-                <button
-                  onMouseDown={e => e.stopPropagation()}
-                  onClick={() => setSidebarCollapsed(true)}
-                  className="opacity-0 group-hover/resize:opacity-100 transition-opacity absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-5 h-12 bg-white border border-zinc-200 rounded-full shadow-md flex items-center justify-center text-zinc-400 hover:text-indigo-500 hover:border-indigo-200 cursor-pointer"
-                  title="Collapse sidebar"
-                >
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                  </svg>
-                </button>
+                <Tooltip text="Collapse sidebar">
+                  <button
+                    onMouseDown={e => e.stopPropagation()}
+                    onClick={() => setSidebarCollapsed(true)}
+                    className="opacity-0 group-hover/resize:opacity-100 transition-opacity absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-5 h-12 bg-white border border-zinc-200 rounded-full shadow-md flex items-center justify-center text-zinc-400 hover:text-indigo-500 hover:border-indigo-200 cursor-pointer"
+                  >
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                </Tooltip>
               </div>
             )}
 
             {/* Expand toggle — desktop only, shown when collapsed */}
             {!isMobile && sidebarCollapsed && (
-              <button
-                onClick={() => setSidebarCollapsed(false)}
-                className="absolute top-1/2 -translate-y-1/2 left-full w-5 h-10 bg-white border border-zinc-200 rounded-r-lg shadow-sm flex items-center justify-center text-zinc-400 hover:text-indigo-500 hover:border-indigo-200 transition-colors z-10"
-                title="Expand sidebar"
-              >
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
+              <Tooltip text="Expand sidebar">
+                <button
+                  onClick={() => setSidebarCollapsed(false)}
+                  className="absolute top-1/2 -translate-y-1/2 left-full w-5 h-10 bg-white border border-zinc-200 rounded-r-lg shadow-sm flex items-center justify-center text-zinc-400 hover:text-indigo-500 hover:border-indigo-200 transition-colors z-10"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </Tooltip>
             )}
           </div>
 

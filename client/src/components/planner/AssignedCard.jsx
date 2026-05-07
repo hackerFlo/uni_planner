@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Draggable } from '@hello-pangea/dnd';
 import LinkText from '../ui/LinkText';
+import Tooltip, { recurrenceLabel } from '../ui/Tooltip';
 
 function fmtTime(t) { return t ? t.replace(' min', 'm') : t; }
 
@@ -72,6 +73,7 @@ function CardBody({ provided, snapshot, todo, checked, onComplete, onUnassign, o
       className="group bg-white border border-zinc-100 rounded-lg p-2.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-shadow cursor-grab active:cursor-grabbing select-none min-w-0 w-full"
     >
       <div className="flex items-center gap-2 mb-1.5">
+        <Tooltip text="Mark complete">
         <button
           onPointerDown={e => e.stopPropagation()}
           onClick={onComplete}
@@ -80,7 +82,6 @@ function CardBody({ provided, snapshot, todo, checked, onComplete, onUnassign, o
               ? 'bg-indigo-500 border-indigo-500'
               : 'border-zinc-300 hover:border-indigo-400 hover:bg-indigo-50'
           }`}
-          title="Mark complete"
         >
           <svg
             className="w-2 h-2"
@@ -97,6 +98,7 @@ function CardBody({ provided, snapshot, todo, checked, onComplete, onUnassign, o
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
           </svg>
         </button>
+        </Tooltip>
         <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full uppercase tracking-wide ${LIST_BADGE[todo.list_type]}`}>
           {todo.list_type}
         </span>
@@ -106,9 +108,11 @@ function CardBody({ provided, snapshot, todo, checked, onComplete, onUnassign, o
           </span>
         )}
         {todo.recurrence_interval_days != null && (
-          <svg className="flex-shrink-0 w-3 h-3 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-            <path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
-          </svg>
+          <Tooltip text={recurrenceLabel(todo.recurrence_interval_days)}>
+            <svg className="flex-shrink-0 w-3 h-3 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+            </svg>
+          </Tooltip>
         )}
       </div>
 
@@ -118,37 +122,40 @@ function CardBody({ provided, snapshot, todo, checked, onComplete, onUnassign, o
       )}
 
       <div className="flex gap-1 mt-2">
-        <button
-          onPointerDown={e => e.stopPropagation()}
-          onClick={e => { e.stopPropagation(); onEdit(todo); }}
-          title="Edit"
-          className="text-zinc-400 hover:text-zinc-600 p-1 rounded hover:bg-zinc-50 transition"
-        >
-          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-          </svg>
-        </button>
-        <button
-          onPointerDown={e => e.stopPropagation()}
-          onClick={e => { e.stopPropagation(); onUnassign(todo.id); }}
-          title="Unassign"
-          className="text-zinc-400 hover:text-zinc-600 p-1 rounded hover:bg-zinc-50 transition"
-        >
-          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M10 14l4 4m0-4l-4 4" />
-          </svg>
-        </button>
-        <button
-          onPointerDown={e => e.stopPropagation()}
-          onClick={e => { e.stopPropagation(); onDelete(todo.id); }}
-          title="Delete"
-          className="text-zinc-400 hover:text-red-500 p-1 rounded hover:bg-red-50 transition"
-        >
-          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
-        </button>
+        <Tooltip text="Edit">
+          <button
+            onPointerDown={e => e.stopPropagation()}
+            onClick={e => { e.stopPropagation(); onEdit(todo); }}
+            className="text-zinc-400 hover:text-zinc-600 p-1 rounded hover:bg-zinc-50 transition"
+          >
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          </button>
+        </Tooltip>
+        <Tooltip text="Unassign">
+          <button
+            onPointerDown={e => e.stopPropagation()}
+            onClick={e => { e.stopPropagation(); onUnassign(todo.id); }}
+            className="text-zinc-400 hover:text-zinc-600 p-1 rounded hover:bg-zinc-50 transition"
+          >
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10 14l4 4m0-4l-4 4" />
+            </svg>
+          </button>
+        </Tooltip>
+        <Tooltip text="Delete">
+          <button
+            onPointerDown={e => e.stopPropagation()}
+            onClick={e => { e.stopPropagation(); onDelete(todo.id); }}
+            className="text-zinc-400 hover:text-red-500 p-1 rounded hover:bg-red-50 transition"
+          >
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
+        </Tooltip>
       </div>
     </div>
   );

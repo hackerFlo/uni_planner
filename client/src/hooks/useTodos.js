@@ -66,29 +66,45 @@ export function useTodos() {
   }, [fetchTodos]);
 
   const createTodo = useCallback(async (data) => {
-    const { todo } = await api.post('/api/todos', data);
-    setTodos(prev => [todo, ...prev]);
+    const { todo, materialized = [] } = await api.post('/api/todos', data);
+    setTodos(prev => [todo, ...materialized, ...prev]);
     recordUndo(async () => {
       await api.delete(`/api/todos/${todo.id}`);
-      setTodos(prev => prev.filter(t => t.id !== todo.id));
+      const allIds = new Set([todo.id, ...materialized.map(t => t.id)]);
+      setTodos(prev => prev.filter(t => !allIds.has(t.id)));
     });
     return todo;
   }, [recordUndo]);
 
   const updateTodo = useCallback(async (id, data) => {
     const prevTodo = todosRef.current.find(t => t.id === id);
-    const { todo } = await api.patch(`/api/todos/${id}`, data);
-    setTodos(prev => prev.map(t => t.id === id ? todo : t).filter(t => !t.archived));
+    const { todo, materialized = [], removedIds = [] } = await api.patch(`/api/todos/${id}`, data);
+    setTodos(prev => {
+      const removed = new Set(removedIds);
+      const matMap = new Map(materialized.map(t => [t.id, t]));
+      let next = prev
+        .filter(t => !removed.has(t.id))
+        .map(t => matMap.has(t.id) ? matMap.get(t.id) : (t.id === todo.id ? todo : t));
+      const existingIds = new Set(next.map(t => t.id));
+      for (const m of materialized) if (!existingIds.has(m.id)) next.push(m);
+      if (!existingIds.has(todo.id)) next.push(todo);
+      return next.filter(t => !t.archived);
+    });
     if (prevTodo) {
+      // Undo for recurrence changes is best-effort: reverts the interval and lets the server re-materialize
       const revertData = Object.fromEntries(Object.keys(data).map(k => [k, prevTodo[k] ?? null]));
       recordUndo(async () => {
-        const { todo: reverted } = await api.patch(`/api/todos/${id}`, revertData);
+        const { todo: reverted, materialized: rm = [], removedIds: rri = [] } = await api.patch(`/api/todos/${todo.id}`, revertData);
         setTodos(prev => {
-          const exists = prev.some(t => t.id === id);
-          const list = exists
-            ? prev.map(t => t.id === id ? reverted : t)
-            : [reverted, ...prev];
-          return list.filter(t => !t.archived);
+          const removed = new Set(rri);
+          const matMap = new Map(rm.map(t => [t.id, t]));
+          let next = prev
+            .filter(t => !removed.has(t.id))
+            .map(t => matMap.has(t.id) ? matMap.get(t.id) : (t.id === reverted.id ? reverted : t));
+          const existingIds = new Set(next.map(t => t.id));
+          for (const m of rm) if (!existingIds.has(m.id)) next.push(m);
+          if (!existingIds.has(reverted.id)) next.push(reverted);
+          return next.filter(t => !t.archived);
         });
       });
     }

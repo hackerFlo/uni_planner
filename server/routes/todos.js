@@ -61,13 +61,16 @@ router.post('/', (req, res) => {
     'INSERT INTO todos (user_id, list_type, title, description, day_assigned, approx_time, recurrence_interval_days) VALUES (?, ?, ?, ?, ?, ?, ?)'
   ).run(req.user.id, cleanListType, cleanTitle, cleanDesc, cleanDay, cleanTime, recurrenceInterval);
 
+  const materialized = [];
   if (recurrenceInterval != null && cleanDay) {
     const userRow = db.prepare('SELECT notify_tz FROM users WHERE id = ?').get(req.user.id);
     materializeForTemplate(result.lastInsertRowid, userRow?.notify_tz || 'UTC');
+    const children = db.prepare(`${TODO_SELECT} WHERE t.recurrence_parent_id = ?`).all(result.lastInsertRowid);
+    materialized.push(...children);
   }
 
   const todo = getTodoById(result.lastInsertRowid);
-  res.status(201).json({ todo });
+  res.status(201).json({ todo, materialized });
 });
 
 router.patch('/reorder', (req, res) => {
@@ -162,6 +165,22 @@ router.patch('/:id', (req, res) => {
   const totalChanges = Object.keys(instanceUpdates).length + Object.keys(seriesUpdates).length + (hasRecurrenceChange ? 1 : 0);
   if (totalChanges === 0) return res.status(400).json({ error: 'No valid fields to update' });
 
+  const isChildEdit = existing.recurrence_parent_id != null;
+
+  // Pre-compute which IDs will be detached (child-edit path only) so we can re-select them after
+  let willDetachIds = [];
+  if (hasRecurrenceChange && isChildEdit) {
+    const childDate = existing.day_assigned;
+    const earlierSiblings = db.prepare(
+      'SELECT id FROM todos WHERE user_id = ? AND recurrence_parent_id = ? AND day_assigned IS NOT NULL AND day_assigned < ?'
+    ).all(req.user.id, templateId, childDate);
+    willDetachIds = earlierSiblings.map(r => r.id);
+    const oldTemplRow = db.prepare('SELECT day_assigned FROM todos WHERE id = ?').get(templateId);
+    if (oldTemplRow && (!oldTemplRow.day_assigned || oldTemplRow.day_assigned < childDate)) {
+      willDetachIds.push(templateId);
+    }
+  }
+
   const now = NOW();
 
   db.transaction(() => {
@@ -191,23 +210,76 @@ router.patch('/:id', (req, res) => {
         timeZone: userTz, year: 'numeric', month: '2-digit', day: '2-digit',
       }).format(new Date());
 
-      // Delete all future uncompleted instances
-      db.prepare(
-        `DELETE FROM todos WHERE user_id = ? AND recurrence_parent_id = ? AND completed = 0 AND archived = 0 AND (day_assigned IS NULL OR day_assigned >= ?)`
-      ).run(req.user.id, templateId, todayIso);
+      if (isChildEdit) {
+        const childDate = existing.day_assigned;
 
-      // Update the template's interval
-      db.prepare(`UPDATE todos SET recurrence_interval_days = ?, updated_at = ? WHERE id = ?`)
-        .run(recurrenceInterval, now, templateId);
+        // Detach earlier siblings — they become standalone non-recurring todos
+        db.prepare(
+          `UPDATE todos SET recurrence_parent_id = NULL, updated_at = ?
+           WHERE user_id = ? AND recurrence_parent_id = ?
+             AND day_assigned IS NOT NULL AND day_assigned < ?`
+        ).run(now, req.user.id, templateId, childDate);
 
-      if (recurrenceInterval != null) {
-        materializeForTemplate(templateId, userTz);
+        // Detach old template if its anchor is before the child's date
+        if (willDetachIds.includes(templateId)) {
+          db.prepare(
+            `UPDATE todos SET recurrence_interval_days = NULL, updated_at = ? WHERE id = ? AND user_id = ?`
+          ).run(now, templateId, req.user.id);
+        }
+
+        // Delete future siblings (>= child's date) — the edited child is promoted, not deleted
+        db.prepare(
+          `DELETE FROM todos WHERE user_id = ? AND recurrence_parent_id = ?
+           AND completed = 0 AND archived = 0 AND day_assigned >= ? AND id != ?`
+        ).run(req.user.id, templateId, childDate, id);
+
+        // Promote the edited child to be the new template
+        if (recurrenceInterval != null) {
+          db.prepare(
+            `UPDATE todos SET recurrence_parent_id = NULL, recurrence_interval_days = ?, updated_at = ?
+             WHERE id = ? AND user_id = ?`
+          ).run(recurrenceInterval, now, id, req.user.id);
+          materializeForTemplate(id, userTz);
+        } else {
+          db.prepare(
+            `UPDATE todos SET recurrence_parent_id = NULL, recurrence_interval_days = NULL, updated_at = ?
+             WHERE id = ? AND user_id = ?`
+          ).run(now, id, req.user.id);
+        }
+      } else {
+        // Template-edit: today-based cutoff, re-materialize from existing anchor
+        db.prepare(
+          `DELETE FROM todos WHERE user_id = ? AND recurrence_parent_id = ? AND completed = 0 AND archived = 0 AND (day_assigned IS NULL OR day_assigned >= ?)`
+        ).run(req.user.id, templateId, todayIso);
+
+        db.prepare(`UPDATE todos SET recurrence_interval_days = ?, updated_at = ? WHERE id = ?`)
+          .run(recurrenceInterval, now, templateId);
+
+        if (recurrenceInterval != null) {
+          materializeForTemplate(templateId, userTz);
+        }
       }
     }
   })();
 
-  const todo = getTodoById(id);
-  res.json({ todo });
+  const removedIds = [];
+  const responseTodo = getTodoById(id);
+
+  let materialized = [];
+  if (hasRecurrenceChange) {
+    if (isChildEdit) {
+      // Promoted child's new children + the detached rows (so client updates their recurrence fields)
+      const newChildren = db.prepare(`${TODO_SELECT} WHERE t.recurrence_parent_id = ?`).all(id);
+      const detachedRows = willDetachIds.length > 0
+        ? db.prepare(`${TODO_SELECT} WHERE t.id IN (${willDetachIds.map(() => '?').join(',')})`).all(...willDetachIds)
+        : [];
+      materialized = [responseTodo, ...newChildren, ...detachedRows];
+    } else {
+      materialized = db.prepare(`${TODO_SELECT} WHERE t.recurrence_parent_id = ?`).all(templateId);
+    }
+  }
+
+  res.json({ todo: responseTodo, materialized, removedIds });
 });
 
 router.delete('/:id', (req, res) => {

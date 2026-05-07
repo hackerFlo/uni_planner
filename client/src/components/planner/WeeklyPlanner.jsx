@@ -22,7 +22,7 @@ function getWeekDates(offset = 0) {
 const WEEK_LABEL = { '-1': 'Last Week', '0': 'This Week', '1': 'Next Week' };
 const LIST_ORDER = { university: 0, private: 1, future: 2 };
 
-export default function WeeklyPlanner({ todos, isDragging, onUnassign, onComplete, onEdit, onDelete, onReorder, onAdd }) {
+export default function WeeklyPlanner({ todos, isDragging, notes, onNoteChange, onUnassign, onComplete, onEdit, onDelete, onReorder, onAdd }) {
   const [weekOffset, setWeekOffset] = useState(0);
   const holidays = useHolidays();
 
@@ -118,6 +118,8 @@ export default function WeeklyPlanner({ todos, isDragging, onUnassign, onComplet
               todos={todosByDate[date]}
               holiday={holidays.get(date) ?? null}
               isDragging={isDragging}
+              note={notes?.[date]}
+              onNoteChange={onNoteChange}
               onUnassign={onUnassign}
               onComplete={onComplete}
               onEdit={onEdit}
