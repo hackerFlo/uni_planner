@@ -2,14 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { Draggable } from '@hello-pangea/dnd';
 import LinkText from '../ui/LinkText';
 import Tooltip, { recurrenceLabel } from '../ui/Tooltip';
+import { useLists } from '../../context/ListsContext';
+import { LIST_PALETTE } from '../../constants/listPalette';
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const LIST_BADGE = {
-  university: 'bg-indigo-50 text-indigo-500',
-  private: 'bg-emerald-50 text-emerald-600',
-  future: 'bg-amber-50 text-amber-600',
-};
+
 function fmtTime(t) { return t ? t.replace(' min', 'm') : t; }
 function dayLabel(iso) {
   if (!iso) return '';
@@ -18,6 +16,11 @@ function dayLabel(iso) {
 }
 
 function TodoCardBody({ provided, snapshot, todo, isAssigned, checked, onComplete, onEdit, onDelete }) {
+  const { getList } = useLists();
+  const list = getList(todo.list_id);
+  const palette = LIST_PALETTE[list?.color] ?? LIST_PALETTE.slate;
+  const listName = list?.name ?? '';
+
   const [rotation, setRotation] = useState(0);
   const prevXRef = useRef(null);
   const decayRef = useRef(null);
@@ -92,8 +95,8 @@ function TodoCardBody({ provided, snapshot, todo, isAssigned, checked, onComplet
       {isDraggingOverDay ? (
         <>
           <div className="flex items-center gap-2 mb-1.5">
-            <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full uppercase tracking-wide ${LIST_BADGE[todo.list_type]}`}>
-              {todo.list_type}
+            <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full uppercase tracking-wide ${palette.badge}`}>
+              {listName}
             </span>
             {todo.approx_time && (
               <span className="text-[9px] font-medium text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded-full">

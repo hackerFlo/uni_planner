@@ -69,7 +69,7 @@ function materializeForTemplate(templateId, userTz) {
     'SELECT id FROM todos WHERE recurrence_parent_id = ? AND day_assigned = ?'
   );
   const insertStmt = db.prepare(
-    `INSERT INTO todos (user_id, list_type, title, description, day_assigned, approx_time, recurrence_parent_id, completed, archived)
+    `INSERT INTO todos (user_id, list_id, title, description, day_assigned, approx_time, recurrence_parent_id, completed, archived)
      VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0)`
   );
 
@@ -78,7 +78,7 @@ function materializeForTemplate(templateId, userTz) {
     if (current !== template.day_assigned && !existsStmt.get(templateId, current)) {
       insertStmt.run(
         template.user_id,
-        template.list_type,
+        template.list_id,
         template.title,
         template.description,
         current,

@@ -8,10 +8,16 @@ const APP_URL = process.env.CORS_ORIGIN || 'https://planner.example.com/';
 
 const LOGO_PNG = fs.readFileSync(path.join(__dirname, '..', 'client', 'public', 'pwa-192.png'));
 
-const CATEGORY = {
-  university: { color: '#6366f1', bg: '#eef2ff', label: 'University' },
-  private:    { color: '#059669', bg: '#ecfdf5', label: 'Private' },
-  future:     { color: '#d97706', bg: '#fffbeb', label: 'Future' },
+const PALETTE = {
+  indigo:  { color: '#6366f1', bg: '#eef2ff' },
+  emerald: { color: '#059669', bg: '#ecfdf5' },
+  teal:    { color: '#0d9488', bg: '#f0fdfa' },
+  amber:   { color: '#d97706', bg: '#fffbeb' },
+  rose:    { color: '#e11d48', bg: '#fff1f2' },
+  sky:     { color: '#0284c7', bg: '#f0f9ff' },
+  violet:  { color: '#7c3aed', bg: '#f5f3ff' },
+  pink:    { color: '#db2777', bg: '#fdf2f8' },
+  slate:   { color: '#475569', bg: '#f1f5f9' },
 };
 
 function esc(str) {
@@ -22,9 +28,9 @@ function esc(str) {
     .replace(/"/g, '&quot;');
 }
 
-function badge(listType) {
-  const c = CATEGORY[listType] || CATEGORY.future;
-  return `<span style="font-family:'DM Sans',-apple-system,sans-serif;font-size:9px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:${c.color};background:${c.bg};border-radius:20px;padding:2px 8px;white-space:nowrap;">${c.label}</span>`;
+function badge(listName, listColor) {
+  const c = PALETTE[listColor] || PALETTE.slate;
+  return `<span style="font-family:'DM Sans',-apple-system,sans-serif;font-size:9px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:${c.color};background:${c.bg};border-radius:20px;padding:2px 8px;white-space:nowrap;">${esc(listName)}</span>`;
 }
 
 function timePill(approxTime) {
@@ -45,7 +51,7 @@ function taskCard(t, opts) {
                 ${checkboxHtml}
               </td>
               <td style="vertical-align:middle;padding-bottom:5px;">
-                ${badge(t.list_type)}${timeHtml ? `&nbsp;&nbsp;${timeHtml}` : ''}
+                ${badge(t.list_name, t.list_color)}${timeHtml ? `&nbsp;&nbsp;${timeHtml}` : ''}
               </td>
             </tr>
             <tr>

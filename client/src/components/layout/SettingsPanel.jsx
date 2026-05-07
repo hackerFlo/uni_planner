@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { TimePicker } from '../ui/TimePicker';
+import ListsSection from '../settings/ListsSection';
 
-export default function SettingsPanel({ onClose, fetchTodos }) {
+export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
   const { user, updateAccount, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -237,6 +238,11 @@ export default function SettingsPanel({ onClose, fetchTodos }) {
 
           <div className="border-t border-zinc-100" />
 
+          {/* Lists */}
+          <ListsSection fetchTodos={fetchTodos} />
+
+          <div className="border-t border-zinc-100" />
+
           {/* Email Notifications */}
           <form onSubmit={handleNotifSubmit} className="space-y-3">
             <h3 className="text-xs font-semibold text-zinc-600 uppercase tracking-widest">Email Notifications</h3>
@@ -301,6 +307,21 @@ export default function SettingsPanel({ onClose, fetchTodos }) {
             {testEmailError && <p className="text-xs text-red-500">{testEmailError}</p>}
             {testEmailSuccess && <p className="text-xs text-emerald-600">{testEmailSuccess}</p>}
           </form>
+
+          <div className="border-t border-zinc-100" />
+
+          {/* App Updates */}
+          <div className="space-y-3">
+            <h3 className="text-xs font-semibold text-zinc-600 uppercase tracking-widest">App Updates</h3>
+            <p className="text-[11px] text-zinc-400 leading-relaxed">See what's changed in the most recent update.</p>
+            <button
+              type="button"
+              onClick={() => { onClose(); onOpenWhatsNew?.(); }}
+              className="w-full text-xs font-medium border border-indigo-300 text-indigo-600 hover:bg-indigo-50 py-2 rounded-lg transition"
+            >
+              What's changed since the last update
+            </button>
+          </div>
 
           <div className="border-t border-zinc-100" />
 

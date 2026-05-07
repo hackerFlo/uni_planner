@@ -6,6 +6,7 @@ const cookieParser = require('cookie-parser');
 const { authLimiter, todoLimiter, backupLimiter } = require('./middleware/rateLimiter');
 const authRoutes = require('./routes/auth');
 const todoRoutes = require('./routes/todos');
+const listRoutes = require('./routes/lists');
 const backupRoutes = require('./routes/backup');
 const dayNoteRoutes = require('./routes/dayNotes');
 const seed = process.env.NODE_ENV !== 'production' ? require('./seed') : () => Promise.resolve();
@@ -24,6 +25,7 @@ app.use(cookieParser());
 
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/todos', todoLimiter, todoRoutes);
+app.use('/api/lists', todoLimiter, listRoutes);
 app.use('/api/backup', backupLimiter, backupRoutes);
 app.use('/api/day-notes', todoLimiter, dayNoteRoutes);
 

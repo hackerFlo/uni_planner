@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import EmojiPicker from '../ui/EmojiPicker';
+import { useLists } from '../../context/ListsContext';
 
 function toIso(d) {
   const y = d.getFullYear();
@@ -56,10 +57,13 @@ function detectEmojiTrigger(value, cursorPos) {
 }
 
 export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate, onUpdate }) {
+  const { lists } = useLists();
   const assignableDates = getAssignableDates(todo?.day_assigned ?? defaults.day_assigned);
+
+  const defaultListId = todo?.list_id ?? defaults.list_id ?? lists[0]?.id ?? null;
   const [title, setTitle] = useState(todo?.title ?? '');
   const [description, setDescription] = useState(todo?.description ?? '');
-  const [listType, setListType] = useState(todo?.list_type ?? defaults.list_type ?? 'university');
+  const [listId, setListId] = useState(defaultListId);
   const [dayAssigned, setDayAssigned] = useState(todo?.day_assigned ?? defaults.day_assigned ?? '');
   const [recurrence, setRecurrence] = useState(
     todo?.recurrence_interval_days != null ? String(todo.recurrence_interval_days) : ''
@@ -73,6 +77,9 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
 
   const titleRef = useRef(null);
   const descRef = useRef(null);
+
+  // Update listId default when lists load (in case they weren't available initially)
+  const effectiveListId = listId ?? lists[0]?.id ?? null;
 
   function handleTitleChange(e) {
     const val = e.target.value;
@@ -111,13 +118,14 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
   async function handleSubmit(e) {
     e.preventDefault();
     if (!title.trim()) return setError('Title is required');
+    if (!effectiveListId) return setError('Please select a list');
     setError('');
     setLoading(true);
     try {
       const data = {
         title: title.trim(),
         description: description.trim(),
-        list_type: listType,
+        list_id: effectiveListId,
         day_assigned: dayAssigned || null,
         approx_time: approxTime === 'custom' ? (customTime.trim() || null) : (approxTime || null),
         recurrence_interval_days: recurrence === '' ? null : Number(recurrence),
@@ -229,13 +237,13 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
                 List
               </label>
               <select
-                value={listType}
-                onChange={e => setListType(e.target.value)}
+                value={effectiveListId ?? ''}
+                onChange={e => setListId(Number(e.target.value))}
                 className="w-full px-3.5 py-2.5 text-sm bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
               >
-                <option value="university">University</option>
-                <option value="private">Private</option>
-                <option value="future">Future</option>
+                {lists.map(l => (
+                  <option key={l.id} value={l.id}>{l.name}</option>
+                ))}
               </select>
             </div>
 

@@ -1,6 +1,7 @@
 import { useRef, useState, useMemo, useEffect } from 'react';
 import DayColumn from './DayColumn';
 import { useHolidays } from '../../hooks/useHolidays';
+import { useLists } from '../../context/ListsContext';
 
 function getWeekDates(offset = 0) {
   const today = new Date();
@@ -20,11 +21,17 @@ function getWeekDates(offset = 0) {
 }
 
 const WEEK_LABEL = { '-1': 'Last Week', '0': 'This Week', '1': 'Next Week' };
-const LIST_ORDER = { university: 0, private: 1, future: 2 };
 
 export default function WeeklyPlanner({ todos, isDragging, notes, onNoteChange, onUnassign, onComplete, onEdit, onDelete, onReorder, onAdd }) {
   const [weekOffset, setWeekOffset] = useState(0);
   const holidays = useHolidays();
+  const { lists } = useLists();
+
+  const listOrder = useMemo(() => {
+    const order = {};
+    lists.forEach((l, idx) => { order[l.id] = idx; });
+    return order;
+  }, [lists]);
 
   const weekDates = useMemo(() => getWeekDates(weekOffset), [weekOffset]);
 
@@ -37,11 +44,11 @@ export default function WeeklyPlanner({ todos, isDragging, notes, onNoteChange, 
           const ao = a.planner_order ?? Infinity;
           const bo = b.planner_order ?? Infinity;
           if (ao !== bo) return ao - bo;
-          return (LIST_ORDER[a.list_type] ?? 3) - (LIST_ORDER[b.list_type] ?? 3);
+          return (listOrder[a.list_id] ?? 999) - (listOrder[b.list_id] ?? 999);
         });
     }
     return result;
-  }, [todos, weekDates]);
+  }, [todos, weekDates, listOrder]);
 
   const scrollRef = useRef(null);
 

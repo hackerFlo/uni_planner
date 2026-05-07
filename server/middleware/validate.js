@@ -1,5 +1,4 @@
 const DAYS = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
-const LIST_TYPES = ['university','private','future'];
 
 function validateEmail(str) {
   return typeof str === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str) && str.length <= 254;
@@ -27,10 +26,6 @@ function sanitizeDescription(str) {
   return s;
 }
 
-function validateListType(str) {
-  return LIST_TYPES.includes(str) ? str : null;
-}
-
 function validateDayAssigned(val) {
   if (val === null || val === undefined || val === '') return null;
   if (typeof val !== 'string') return false;
@@ -48,4 +43,4 @@ function sanitizeDayNote(str) {
   return str.trim().slice(0, 200);
 }
 
-module.exports = { validateEmail, validateIdentifier, sanitizeTitle, sanitizeDescription, validateListType, validateDayAssigned, validateRecurrenceInterval, sanitizeDayNote };
+module.exports = { validateEmail, validateIdentifier, sanitizeTitle, sanitizeDescription, validateDayAssigned, validateRecurrenceInterval, sanitizeDayNote };

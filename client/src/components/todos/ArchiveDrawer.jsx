@@ -1,15 +1,12 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../api/client';
-
-const LIST_BADGE = {
-  university: 'bg-indigo-50 text-indigo-600',
-  private: 'bg-emerald-50 text-emerald-600',
-  future: 'bg-amber-50 text-amber-600',
-};
+import { useLists } from '../../context/ListsContext';
+import { LIST_PALETTE } from '../../constants/listPalette';
 
 export default function ArchiveDrawer({ onClose, onRestore, onDelete }) {
   const [todos, setTodos] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { getList } = useLists();
 
   useEffect(() => {
     api.get('/api/todos/archived')
@@ -52,37 +49,42 @@ export default function ArchiveDrawer({ onClose, onRestore, onDelete }) {
           {!loading && todos.length === 0 && (
             <p className="text-xs text-zinc-400 text-center py-8">Archive is empty</p>
           )}
-          {todos.map(todo => (
-            <div key={todo.id} className="bg-zinc-50 border border-zinc-100 rounded-lg p-3">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full uppercase tracking-wide ${LIST_BADGE[todo.list_type]}`}>
-                      {todo.list_type}
-                    </span>
+          {todos.map(todo => {
+            const list = getList(todo.list_id);
+            const palette = LIST_PALETTE[list?.color] ?? LIST_PALETTE.slate;
+            const listName = list?.name ?? '';
+            return (
+              <div key={todo.id} className="bg-zinc-50 border border-zinc-100 rounded-lg p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full uppercase tracking-wide ${palette.badge}`}>
+                        {listName}
+                      </span>
+                    </div>
+                    <p className="text-sm font-medium text-zinc-600 line-through truncate">{todo.title}</p>
+                    {todo.description && (
+                      <p className="text-xs text-zinc-400 mt-0.5 line-clamp-2">{todo.description}</p>
+                    )}
                   </div>
-                  <p className="text-sm font-medium text-zinc-600 line-through truncate">{todo.title}</p>
-                  {todo.description && (
-                    <p className="text-xs text-zinc-400 mt-0.5 line-clamp-2">{todo.description}</p>
-                  )}
+                </div>
+                <div className="flex gap-2 mt-2.5">
+                  <button
+                    onClick={() => handleRestore(todo.id)}
+                    className="flex-1 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 py-1.5 rounded-md transition"
+                  >
+                    Restore
+                  </button>
+                  <button
+                    onClick={() => handleDelete(todo.id)}
+                    className="flex-1 text-xs font-medium text-red-500 bg-red-50 hover:bg-red-100 py-1.5 rounded-md transition"
+                  >
+                    Delete
+                  </button>
                 </div>
               </div>
-              <div className="flex gap-2 mt-2.5">
-                <button
-                  onClick={() => handleRestore(todo.id)}
-                  className="flex-1 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 py-1.5 rounded-md transition"
-                >
-                  Restore
-                </button>
-                <button
-                  onClick={() => handleDelete(todo.id)}
-                  className="flex-1 text-xs font-medium text-red-500 bg-red-50 hover:bg-red-100 py-1.5 rounded-md transition"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </aside>
     </div>

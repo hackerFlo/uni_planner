@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ListsProvider } from './context/ListsContext';
 import PlannerPage from './pages/PlannerPage';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -27,15 +28,17 @@ export default function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <BrowserRouter>
-          <Suspense fallback={null}>
-            <Routes>
-              <Route path="/login" element={<PublicOnlyRoute><LoginPage /></PublicOnlyRoute>} />
-              <Route path="/" element={<ProtectedRoute><PlannerPage /></ProtectedRoute>} />
-              <Route path="*" element={<NotFoundPage />} />
-            </Routes>
-          </Suspense>
-        </BrowserRouter>
+        <ListsProvider>
+          <BrowserRouter>
+            <Suspense fallback={null}>
+              <Routes>
+                <Route path="/login" element={<PublicOnlyRoute><LoginPage /></PublicOnlyRoute>} />
+                <Route path="/" element={<ProtectedRoute><PlannerPage /></ProtectedRoute>} />
+                <Route path="*" element={<NotFoundPage />} />
+              </Routes>
+            </Suspense>
+          </BrowserRouter>
+        </ListsProvider>
       </AuthProvider>
     </ErrorBoundary>
   );

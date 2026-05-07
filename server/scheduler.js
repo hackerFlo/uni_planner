@@ -22,7 +22,9 @@ function startScheduler() {
     // Recurrence materialization at user-local midnight for all users with active templates
     let allUsers;
     try {
-      allUsers = db.prepare('SELECT DISTINCT u.id, u.notify_tz FROM users u INNER JOIN todos t ON t.user_id = u.id WHERE t.recurrence_interval_days IS NOT NULL AND t.archived = 0 AND t.recurrence_parent_id IS NULL').all();
+      allUsers = db.prepare(
+        'SELECT DISTINCT u.id, u.notify_tz FROM users u INNER JOIN todos t ON t.user_id = u.id WHERE t.recurrence_interval_days IS NOT NULL AND t.archived = 0 AND t.recurrence_parent_id IS NULL'
+      ).all();
     } catch { allUsers = []; }
 
     for (const u of allUsers) {
@@ -73,20 +75,23 @@ function startScheduler() {
         const tz = user.notify_tz || 'UTC';
 
         const completedTodos = db.prepare(
-          `SELECT title, list_type, approx_time FROM todos
-           WHERE user_id = ? AND completed = 1
-             AND completed_at >= ? AND completed_at < ?`
+          `SELECT t.title, t.approx_time, l.name AS list_name, l.color AS list_color
+           FROM todos t JOIN lists l ON l.id = t.list_id
+           WHERE t.user_id = ? AND t.completed = 1
+             AND t.completed_at >= ? AND t.completed_at < ?`
         ).all(user.id, `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`);
 
         const uncompletedTodos = db.prepare(
-          `SELECT title, list_type, approx_time FROM todos
-           WHERE user_id = ? AND day_assigned = ? AND completed = 0 AND archived = 0`
+          `SELECT t.title, t.approx_time, l.name AS list_name, l.color AS list_color
+           FROM todos t JOIN lists l ON l.id = t.list_id
+           WHERE t.user_id = ? AND t.day_assigned = ? AND t.completed = 0 AND t.archived = 0`
         ).all(user.id, today);
 
         const tomorrowTodos = db.prepare(
-          `SELECT title, list_type, approx_time FROM todos
-           WHERE user_id = ? AND day_assigned = ? AND archived = 0
-           ORDER BY planner_order ASC`
+          `SELECT t.title, t.approx_time, l.name AS list_name, l.color AS list_color
+           FROM todos t JOIN lists l ON l.id = t.list_id
+           WHERE t.user_id = ? AND t.day_assigned = ? AND t.archived = 0
+           ORDER BY t.planner_order ASC`
         ).all(user.id, tomorrow);
 
         if (completedTodos.length + uncompletedTodos.length + tomorrowTodos.length === 0) {

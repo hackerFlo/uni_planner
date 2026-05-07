@@ -3,12 +3,16 @@ import { DragDropContext } from '@hello-pangea/dnd';
 import { useTodos } from '../hooks/useTodos';
 import { useDayNotes } from '../hooks/useDayNotes';
 import { useShakeUndo } from '../hooks/useShakeUndo';
+import { useWhatsNew } from '../hooks/useWhatsNew';
+import { useLists } from '../context/ListsContext';
 import Navbar from '../components/layout/Navbar';
 import TodoList from '../components/todos/TodoList';
 import TodoForm from '../components/todos/TodoForm';
 import ArchiveDrawer from '../components/todos/ArchiveDrawer';
 import WeeklyPlanner from '../components/planner/WeeklyPlanner';
+import WhatsNewModal from '../components/layout/WhatsNewModal';
 import Tooltip from '../components/ui/Tooltip';
+import { CHANGELOG } from '../constants/changelog';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -29,6 +33,8 @@ function getRealId(draggableId) {
 export default function PlannerPage() {
   const { todos, loading, fetchTodos, createTodo, updateTodo, deleteTodo, assignDay, reorderDay, canUndo, undo } = useTodos();
   const { notes, setNote } = useDayNotes();
+  const { lists } = useLists();
+  const whatsNew = useWhatsNew();
   const [activeTodo, setActiveTodo] = useState(null);
   const [formState, setFormState] = useState(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
@@ -121,7 +127,6 @@ export default function PlannerPage() {
     const activeT = todos.find(t => t.id === realId);
 
     if (DATE_RE.test(srcId) && srcId === dstId) {
-      // Same-column reorder
       const dayTodos = todos
         .filter(t => t.day_assigned === srcId)
         .sort((a, b) => (a.planner_order ?? Infinity) - (b.planner_order ?? Infinity));
@@ -129,7 +134,6 @@ export default function PlannerPage() {
       return;
     }
 
-    // Cross-column (from another column or sidebar)
     const dstTodos = todos
       .filter(t => t.day_assigned === dstId && t.id !== realId)
       .sort((a, b) => (a.planner_order ?? Infinity) - (b.planner_order ?? Infinity));
@@ -143,7 +147,7 @@ export default function PlannerPage() {
 
   const plannerTodos = useMemo(() => todos.filter(t => t.day_assigned), [todos]);
 
-  const sidebarByType = useMemo(() => {
+  const sidebarByList = useMemo(() => {
     function sortSidebar(items) {
       const unassigned = items
         .filter(t => !t.day_assigned)
@@ -153,16 +157,16 @@ export default function PlannerPage() {
         .sort((a, b) => a.day_assigned.localeCompare(b.day_assigned));
       return [...unassigned, ...assigned];
     }
-    return {
-      university: sortSidebar(todos.filter(t => t.list_type === 'university')),
-      private:    sortSidebar(todos.filter(t => t.list_type === 'private')),
-      future:     sortSidebar(todos.filter(t => t.list_type === 'future')),
-    };
-  }, [todos]);
+    const result = {};
+    for (const list of lists) {
+      result[list.id] = sortSidebar(todos.filter(t => t.list_id === list.id));
+    }
+    return result;
+  }, [todos, lists]);
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-white">
-      <Navbar onArchiveToggle={() => setArchiveOpen(v => !v)} archiveOpen={archiveOpen} onUndo={undo} canUndo={canUndo} fetchTodos={fetchTodos} />
+      <Navbar onArchiveToggle={() => setArchiveOpen(v => !v)} archiveOpen={archiveOpen} fetchTodos={fetchTodos} onOpenWhatsNew={whatsNew.openManually} />
 
       <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
         <DragDropContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
@@ -204,33 +208,18 @@ export default function PlannerPage() {
                   scrollTimerRef.current = setTimeout(() => el.classList.remove('is-scrolling'), 800);
                 }}
               >
-                <TodoList
-                  type="university"
-                  todos={sidebarByType.university}
-                  loading={loading}
-                  onAdd={() => setFormState({ mode: 'create', defaults: { list_type: 'university' } })}
-                  onEdit={todo => setFormState({ mode: 'edit', todo })}
-                  onComplete={todo => updateTodo(todo.id, { completed: 1, archived: 1 })}
-                  onDelete={id => deleteTodo(id)}
-                />
-                <TodoList
-                  type="private"
-                  todos={sidebarByType.private}
-                  loading={loading}
-                  onAdd={() => setFormState({ mode: 'create', defaults: { list_type: 'private' } })}
-                  onEdit={todo => setFormState({ mode: 'edit', todo })}
-                  onComplete={todo => updateTodo(todo.id, { completed: 1, archived: 1 })}
-                  onDelete={id => deleteTodo(id)}
-                />
-                <TodoList
-                  type="future"
-                  todos={sidebarByType.future}
-                  loading={loading}
-                  onAdd={() => setFormState({ mode: 'create', defaults: { list_type: 'future' } })}
-                  onEdit={todo => setFormState({ mode: 'edit', todo })}
-                  onComplete={todo => updateTodo(todo.id, { completed: 1, archived: 1 })}
-                  onDelete={id => deleteTodo(id)}
-                />
+                {lists.map(list => (
+                  <TodoList
+                    key={list.id}
+                    list={list}
+                    todos={sidebarByList[list.id] ?? []}
+                    loading={loading}
+                    onAdd={() => setFormState({ mode: 'create', defaults: { list_id: list.id } })}
+                    onEdit={todo => setFormState({ mode: 'edit', todo })}
+                    onComplete={todo => updateTodo(todo.id, { completed: 1, archived: 1 })}
+                    onDelete={id => deleteTodo(id)}
+                  />
+                ))}
               </div>
             </aside>
 
@@ -291,6 +280,8 @@ export default function PlannerPage() {
           onDelete={deleteTodo}
         />
       )}
+
+      {whatsNew.open && <WhatsNewModal entry={CHANGELOG[0]} onClose={whatsNew.close} />}
     </div>
   );
 }

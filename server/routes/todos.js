@@ -1,7 +1,7 @@
 const express = require('express');
 const db = require('../db');
 const requireAuth = require('../middleware/auth');
-const { sanitizeTitle, sanitizeDescription, validateListType, validateDayAssigned, validateRecurrenceInterval } = require('../middleware/validate');
+const { sanitizeTitle, sanitizeDescription, validateDayAssigned, validateRecurrenceInterval } = require('../middleware/validate');
 const { materializeForTemplate } = require('../recurrence');
 
 const router = express.Router();
@@ -11,7 +11,7 @@ const NOW = () => new Date().toISOString();
 
 // Columns for a todo with effective recurrence_interval_days resolved via parent JOIN
 const TODO_SELECT = `
-  SELECT t.id, t.user_id, t.list_type, t.title, t.description, t.completed, t.archived,
+  SELECT t.id, t.user_id, t.list_id, t.title, t.description, t.completed, t.archived,
          t.day_assigned, t.created_at, t.updated_at, t.planner_order, t.approx_time,
          t.completed_at, t.recurrence_parent_id,
          COALESCE(t.recurrence_interval_days, p.recurrence_interval_days) AS recurrence_interval_days
@@ -20,6 +20,12 @@ const TODO_SELECT = `
 
 function getTodoById(id) {
   return db.prepare(`${TODO_SELECT} WHERE t.id = ?`).get(id);
+}
+
+function validateUserOwnsList(userId, listId) {
+  const n = parseInt(listId, 10);
+  if (!Number.isInteger(n) || n <= 0) return null;
+  return db.prepare('SELECT id FROM lists WHERE id = ? AND user_id = ?').get(n, userId) ? n : null;
 }
 
 router.get('/', (req, res) => {
@@ -37,7 +43,7 @@ router.get('/archived', (req, res) => {
 });
 
 router.post('/', (req, res) => {
-  const { title, description, list_type, day_assigned, approx_time, recurrence_interval_days } = req.body;
+  const { title, description, list_id, day_assigned, approx_time, recurrence_interval_days } = req.body;
 
   const cleanTitle = sanitizeTitle(title);
   if (!cleanTitle) return res.status(400).json({ error: 'Title is required (max 200 chars)' });
@@ -45,8 +51,8 @@ router.post('/', (req, res) => {
   const cleanDesc = sanitizeDescription(description);
   if (cleanDesc === null) return res.status(400).json({ error: 'Description too long (max 5000 chars)' });
 
-  const cleanListType = validateListType(list_type);
-  if (!cleanListType) return res.status(400).json({ error: 'list_type must be university or private' });
+  const cleanListId = validateUserOwnsList(req.user.id, list_id);
+  if (!cleanListId) return res.status(400).json({ error: 'Invalid list_id' });
 
   const cleanDay = validateDayAssigned(day_assigned);
   if (cleanDay === false) return res.status(400).json({ error: 'Invalid day_assigned value' });
@@ -58,8 +64,8 @@ router.post('/', (req, res) => {
   if (recurrenceInterval != null && !cleanDay) return res.status(400).json({ error: 'A start day is required for recurring tasks' });
 
   const result = db.prepare(
-    'INSERT INTO todos (user_id, list_type, title, description, day_assigned, approx_time, recurrence_interval_days) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).run(req.user.id, cleanListType, cleanTitle, cleanDesc, cleanDay, cleanTime, recurrenceInterval);
+    'INSERT INTO todos (user_id, list_id, title, description, day_assigned, approx_time, recurrence_interval_days) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(req.user.id, cleanListId, cleanTitle, cleanDesc, cleanDay, cleanTime, recurrenceInterval);
 
   const materialized = [];
   if (recurrenceInterval != null && cleanDay) {
@@ -120,10 +126,10 @@ router.patch('/:id', (req, res) => {
     seriesUpdates.description = d;
   }
 
-  if (req.body.list_type !== undefined) {
-    const lt = validateListType(req.body.list_type);
-    if (!lt) return res.status(400).json({ error: 'Invalid list_type' });
-    seriesUpdates.list_type = lt;
+  if (req.body.list_id !== undefined) {
+    const lid = validateUserOwnsList(req.user.id, req.body.list_id);
+    if (!lid) return res.status(400).json({ error: 'Invalid list_id' });
+    seriesUpdates.list_id = lid;
   }
 
   if ('approx_time' in req.body) {
@@ -167,7 +173,6 @@ router.patch('/:id', (req, res) => {
 
   const isChildEdit = existing.recurrence_parent_id != null;
 
-  // Pre-compute which IDs will be detached (child-edit path only) so we can re-select them after
   let willDetachIds = [];
   if (hasRecurrenceChange && isChildEdit) {
     const childDate = existing.day_assigned;
@@ -213,27 +218,23 @@ router.patch('/:id', (req, res) => {
       if (isChildEdit) {
         const childDate = existing.day_assigned;
 
-        // Detach earlier siblings — they become standalone non-recurring todos
         db.prepare(
           `UPDATE todos SET recurrence_parent_id = NULL, updated_at = ?
            WHERE user_id = ? AND recurrence_parent_id = ?
              AND day_assigned IS NOT NULL AND day_assigned < ?`
         ).run(now, req.user.id, templateId, childDate);
 
-        // Detach old template if its anchor is before the child's date
         if (willDetachIds.includes(templateId)) {
           db.prepare(
             `UPDATE todos SET recurrence_interval_days = NULL, updated_at = ? WHERE id = ? AND user_id = ?`
           ).run(now, templateId, req.user.id);
         }
 
-        // Delete future siblings (>= child's date) — the edited child is promoted, not deleted
         db.prepare(
           `DELETE FROM todos WHERE user_id = ? AND recurrence_parent_id = ?
            AND completed = 0 AND archived = 0 AND day_assigned >= ? AND id != ?`
         ).run(req.user.id, templateId, childDate, id);
 
-        // Promote the edited child to be the new template
         if (recurrenceInterval != null) {
           db.prepare(
             `UPDATE todos SET recurrence_parent_id = NULL, recurrence_interval_days = ?, updated_at = ?
@@ -247,7 +248,6 @@ router.patch('/:id', (req, res) => {
           ).run(now, id, req.user.id);
         }
       } else {
-        // Template-edit: today-based cutoff, re-materialize from existing anchor
         db.prepare(
           `DELETE FROM todos WHERE user_id = ? AND recurrence_parent_id = ? AND completed = 0 AND archived = 0 AND (day_assigned IS NULL OR day_assigned >= ?)`
         ).run(req.user.id, templateId, todayIso);
@@ -268,7 +268,6 @@ router.patch('/:id', (req, res) => {
   let materialized = [];
   if (hasRecurrenceChange) {
     if (isChildEdit) {
-      // Promoted child's new children + the detached rows (so client updates their recurrence fields)
       const newChildren = db.prepare(`${TODO_SELECT} WHERE t.recurrence_parent_id = ?`).all(id);
       const detachedRows = willDetachIds.length > 0
         ? db.prepare(`${TODO_SELECT} WHERE t.id IN (${willDetachIds.map(() => '?').join(',')})`).all(...willDetachIds)

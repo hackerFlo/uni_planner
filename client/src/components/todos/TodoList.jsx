@@ -1,35 +1,18 @@
 import { Droppable } from '@hello-pangea/dnd';
 import TodoCard from './TodoCard';
 import Tooltip from '../ui/Tooltip';
+import { LIST_PALETTE } from '../../constants/listPalette';
 
-const TYPE_CONFIG = {
-  university: {
-    label: 'University',
-    accent: 'text-indigo-600',
-    dot: 'bg-indigo-400',
-  },
-  private: {
-    label: 'Private',
-    accent: 'text-emerald-600',
-    dot: 'bg-emerald-400',
-  },
-  future: {
-    label: 'Future',
-    accent: 'text-amber-600',
-    dot: 'bg-amber-400',
-  },
-};
-
-export default function TodoList({ type, todos, loading, onAdd, onEdit, onComplete, onDelete }) {
-  const config = TYPE_CONFIG[type];
+export default function TodoList({ list, todos, loading, onAdd, onEdit, onComplete, onDelete }) {
+  const palette = LIST_PALETTE[list.color] ?? LIST_PALETTE.slate;
 
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <span className={`w-1.5 h-1.5 rounded-full ${config.dot}`} />
-          <h2 className={`text-xs font-semibold uppercase tracking-widest ${config.accent}`}>
-            {config.label}
+          <span className={`w-1.5 h-1.5 rounded-full ${palette.dot}`} />
+          <h2 className={`text-xs font-semibold uppercase tracking-widest ${palette.accent}`}>
+            {list.name}
           </h2>
         </div>
         <Tooltip text="Add item">
@@ -44,7 +27,7 @@ export default function TodoList({ type, todos, loading, onAdd, onEdit, onComple
         </Tooltip>
       </div>
 
-      <Droppable droppableId={`${type}-list`} isDropDisabled={true}>
+      <Droppable droppableId={`${list.id}-list`} isDropDisabled={true}>
         {(provided) => (
           <div
             ref={provided.innerRef}

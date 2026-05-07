@@ -40,6 +40,39 @@ router.post('/login', async (req, res) => {
   res.json({ user: { id: user.id, email: user.email, created_at: user.created_at } });
 });
 
+router.post('/register', async (req, res) => {
+  const { email, password } = req.body;
+
+  if (!validateIdentifier(email)) return res.status(400).json({ error: 'Invalid username or email' });
+  if (typeof password !== 'string' || password.length < 8 || password.length > 128) {
+    return res.status(400).json({ error: 'Password must be 8–128 characters' });
+  }
+
+  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email.trim().toLowerCase());
+  if (existing) return res.status(409).json({ error: 'Username or email already in use' });
+
+  const passwordHash = await bcrypt.hash(password, 12);
+
+  const userId = db.transaction(() => {
+    const result = db.prepare(
+      'INSERT INTO users (email, password_hash) VALUES (?, ?)'
+    ).run(email.trim().toLowerCase(), passwordHash);
+    const newId = result.lastInsertRowid;
+    db.prepare(
+      'INSERT INTO lists (user_id, name, color, sort_order) VALUES (?, ?, ?, ?)'
+    ).run(newId, 'Tasks', 'indigo', 0);
+    return newId;
+  })();
+
+  const user = db.prepare('SELECT id, email, created_at FROM users WHERE id = ?').get(userId);
+  const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRES_IN,
+  });
+
+  res.cookie('token', token, COOKIE_OPTS);
+  res.status(201).json({ user: { id: user.id, email: user.email, created_at: user.created_at } });
+});
+
 router.post('/logout', (_req, res) => {
   res.clearCookie('token', { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production' });
   res.json({ ok: true });
@@ -173,20 +206,23 @@ router.post('/test-email', requireAuth, async (req, res) => {
   const tomorrow = tomorrowDate.toISOString().slice(0, 10);
 
   const completedTodos = db.prepare(
-    `SELECT title, list_type, approx_time FROM todos
-     WHERE user_id = ? AND completed = 1
-       AND completed_at >= ? AND completed_at < ?`
+    `SELECT t.title, t.approx_time, l.name AS list_name, l.color AS list_color
+     FROM todos t JOIN lists l ON l.id = t.list_id
+     WHERE t.user_id = ? AND t.completed = 1
+       AND t.completed_at >= ? AND t.completed_at < ?`
   ).all(req.user.id, `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`);
 
   const uncompletedTodos = db.prepare(
-    `SELECT title, list_type, approx_time FROM todos
-     WHERE user_id = ? AND day_assigned = ? AND completed = 0 AND archived = 0`
+    `SELECT t.title, t.approx_time, l.name AS list_name, l.color AS list_color
+     FROM todos t JOIN lists l ON l.id = t.list_id
+     WHERE t.user_id = ? AND t.day_assigned = ? AND t.completed = 0 AND t.archived = 0`
   ).all(req.user.id, today);
 
   const tomorrowTodos = db.prepare(
-    `SELECT title, list_type, approx_time FROM todos
-     WHERE user_id = ? AND day_assigned = ? AND archived = 0
-     ORDER BY planner_order ASC`
+    `SELECT t.title, t.approx_time, l.name AS list_name, l.color AS list_color
+     FROM todos t JOIN lists l ON l.id = t.list_id
+     WHERE t.user_id = ? AND t.day_assigned = ? AND t.archived = 0
+     ORDER BY t.planner_order ASC`
   ).all(req.user.id, tomorrow);
 
   const userName = (user.email || '').split('@')[0] || 'there';

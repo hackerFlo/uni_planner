@@ -2,16 +2,17 @@ import { useEffect, useRef, useState } from 'react';
 import { Draggable } from '@hello-pangea/dnd';
 import LinkText from '../ui/LinkText';
 import Tooltip, { recurrenceLabel } from '../ui/Tooltip';
+import { useLists } from '../../context/ListsContext';
+import { LIST_PALETTE } from '../../constants/listPalette';
 
 function fmtTime(t) { return t ? t.replace(' min', 'm') : t; }
 
-const LIST_BADGE = {
-  university: 'bg-indigo-50 text-indigo-500',
-  private: 'bg-emerald-50 text-emerald-600',
-  future: 'bg-amber-50 text-amber-600',
-};
-
 function CardBody({ provided, snapshot, todo, checked, onComplete, onUnassign, onEdit, onDelete }) {
+  const { getList } = useLists();
+  const list = getList(todo.list_id);
+  const palette = LIST_PALETTE[list?.color] ?? LIST_PALETTE.slate;
+  const listName = list?.name ?? '';
+
   const [rotation, setRotation] = useState(0);
   const prevXRef = useRef(null);
   const decayRef = useRef(null);
@@ -99,8 +100,8 @@ function CardBody({ provided, snapshot, todo, checked, onComplete, onUnassign, o
           </svg>
         </button>
         </Tooltip>
-        <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full uppercase tracking-wide ${LIST_BADGE[todo.list_type]}`}>
-          {todo.list_type}
+        <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full uppercase tracking-wide ${palette.badge}`}>
+          {listName}
         </span>
         {todo.approx_time && (
           <span className="text-[9px] font-medium text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded-full truncate">

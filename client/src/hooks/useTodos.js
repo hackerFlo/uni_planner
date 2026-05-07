@@ -19,7 +19,7 @@ export function useTodos() {
     undoTimerRef.current = setTimeout(() => {
       undoFnRef.current = null;
       setCanUndo(false);
-    }, 60000);
+    }, 30000);
   }, []);
 
   const undo = useCallback(async () => {
