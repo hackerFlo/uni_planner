@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import useIsMobile from '../hooks/useIsMobile';
 import { DragDropContext } from '@hello-pangea/dnd';
 import { useTodos } from '../hooks/useTodos';
 import { useDayNotes } from '../hooks/useDayNotes';
@@ -40,8 +41,10 @@ export default function PlannerPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(288);
   const [isResizing, setIsResizing] = useState(false);
-  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
+  const isMobile = useIsMobile();
   const sidebarScrollRef = useRef(null);
+  const todosRef = useRef(todos);
+  useEffect(() => { todosRef.current = todos; }, [todos]);
   const scrollTimerRef = useRef(null);
   const resizeStartRef = useRef({ x: 0, width: 0 });
 
@@ -64,12 +67,6 @@ export default function PlannerPage() {
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [canUndo, undo]);
 
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 767px)');
-    const handler = (e) => setIsMobile(e.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
 
   useEffect(() => {
     if (!isResizing) return;
@@ -96,6 +93,17 @@ export default function PlannerPage() {
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
   }, [isResizing]);
+
+  async function handleCreate(data) {
+    const todo = await createTodo(data);
+    if (todo?.day_assigned) {
+      const existing = todosRef.current
+        .filter(t => t.day_assigned === todo.day_assigned && t.id !== todo.id)
+        .sort((a, b) => (a.planner_order ?? Infinity) - (b.planner_order ?? Infinity));
+      await reorderDay([...existing, todo]);
+    }
+    return todo;
+  }
 
   function startResize(e) {
     e.preventDefault();
@@ -267,8 +275,10 @@ export default function PlannerPage() {
           todo={formState.todo}
           defaults={formState.defaults}
           onClose={() => setFormState(null)}
-          onCreate={createTodo}
+          onCreate={handleCreate}
           onUpdate={(id, data) => updateTodo(id, data)}
+          onComplete={todo => updateTodo(todo.id, { completed: 1, archived: 1 })}
+          onDelete={deleteTodo}
         />
       )}
 

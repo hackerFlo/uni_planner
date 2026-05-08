@@ -34,6 +34,24 @@ export const CHANGELOG = [
       },
       {
         icon: 'blue',
+        name: 'Cleaner mobile planner cards',
+        desc: 'Tap an assigned task on mobile to edit it; long-press still drags. The action buttons in the edit form are now compact icons on phones to save space.',
+        svgPath: 'M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z',
+      },
+      {
+        icon: 'blue',
+        name: 'Mobile-friendly todo cards',
+        desc: 'Tap a todo on mobile to open it. The edit form now has bigger buttons for Mark complete, Unassign, and Delete. Tooltips no longer linger on touch.',
+        svgPath: 'M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z',
+      },
+      {
+        icon: 'green',
+        name: 'New tasks land at the bottom',
+        desc: 'Tasks created with the + button on a planner day now consistently appear at the bottom of that day\'s list.',
+        svgPath: 'M19 14l-7 7m0 0l-7-7m7 7V3',
+      },
+      {
+        icon: 'blue',
         name: 'Tooltip overlap fix',
         desc: 'Tooltips no longer pop up over modals and dialogs when the underlying button is hidden by an overlay.',
         svgPath: 'M5 13l4 4L19 7',

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import useIsMobile from '../../hooks/useIsMobile';
 
 export function recurrenceLabel(days) {
   if (days === 1) return 'Repeats daily';
@@ -12,6 +13,7 @@ const HIDE_FADE = 150;
 const MARGIN = 8;
 
 export default function Tooltip({ text, children, className = '' }) {
+  const isMobile = useIsMobile();
   const triggerRef = useRef(null);
   const tipRef = useRef(null);
   const showTimer = useRef(null);
@@ -63,6 +65,8 @@ export default function Tooltip({ text, children, className = '' }) {
     clearTimeout(showTimer.current);
     clearTimeout(hideTimer.current);
   }, []);
+
+  if (isMobile) return <span className={`inline-flex ${className}`}>{children}</span>;
 
   return (
     <>

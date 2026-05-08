@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import EmojiPicker from '../ui/EmojiPicker';
 import { useLists } from '../../context/ListsContext';
 import { loadEmojis, getLoadedEmojis } from '../../data/loadEmojis';
+import useIsMobile from '../../hooks/useIsMobile';
 
 function toIso(d) {
   const y = d.getFullYear();
@@ -72,7 +73,8 @@ function detectEmojiTrigger(value, cursorPos) {
   return { query, triggerStart: colonIdx };
 }
 
-export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate, onUpdate }) {
+export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate, onUpdate, onComplete, onDelete }) {
+  const isMobile = useIsMobile();
   const { lists } = useLists();
   const assignableDates = getAssignableDates(todo?.day_assigned ?? defaults.day_assigned);
 
@@ -363,6 +365,47 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
               </select>
             </div>
           </div>
+
+          {mode === 'edit' && (
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => { onComplete(todo); onClose(); }}
+                className="flex-1 py-3 text-sm font-medium rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition flex items-center justify-center"
+              >
+                {isMobile ? (
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                ) : 'Mark complete'}
+              </button>
+              {dayAssigned && (
+                <button
+                  type="button"
+                  onClick={() => { onUpdate(todo.id, { day_assigned: null }); onClose(); }}
+                  className="flex-1 py-3 text-sm font-medium rounded-lg bg-zinc-100 text-zinc-700 hover:bg-zinc-200 transition flex items-center justify-center"
+                >
+                  {isMobile ? (
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M10 14l4 4m0-4l-4 4" />
+                    </svg>
+                  ) : 'Unassign'}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => { if (window.confirm('Delete this task?')) { onDelete(todo.id); onClose(); } }}
+                className="flex-1 py-3 text-sm font-medium rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition flex items-center justify-center"
+              >
+                {isMobile ? (
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                ) : 'Delete'}
+              </button>
+            </div>
+          )}
 
           <div className="flex gap-2 pt-1">
             <button

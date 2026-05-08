@@ -4,6 +4,7 @@ import LinkText from '../ui/LinkText';
 import Tooltip, { recurrenceLabel } from '../ui/Tooltip';
 import { useLists } from '../../context/ListsContext';
 import { LIST_PALETTE } from '../../constants/listPalette';
+import useIsMobile from '../../hooks/useIsMobile';
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -16,6 +17,7 @@ function dayLabel(iso) {
 }
 
 function TodoCardBody({ provided, snapshot, todo, isAssigned, checked, onComplete, onEdit, onDelete }) {
+  const isMobile = useIsMobile();
   const { getList } = useLists();
   const list = getList(todo.list_id);
   const palette = LIST_PALETTE[list?.color] ?? LIST_PALETTE.slate;
@@ -115,11 +117,14 @@ function TodoCardBody({ provided, snapshot, todo, isAssigned, checked, onComplet
           </div>
         </>
       ) : (
-        <div className="relative flex items-start gap-2.5">
+        <div
+          className="relative flex items-start gap-2.5"
+          onClick={isMobile ? () => onEdit(todo) : undefined}
+        >
           <Tooltip text="Mark complete">
           <button
             onPointerDown={e => e.stopPropagation()}
-            onClick={onComplete}
+            onClick={e => { e.stopPropagation(); onComplete(e); }}
             className={`mt-0.5 flex-shrink-0 w-4 h-4 rounded border transition-all duration-150 flex items-center justify-center ${
               checked
                 ? 'bg-indigo-500 border-indigo-500'
@@ -169,32 +174,34 @@ function TodoCardBody({ provided, snapshot, todo, isAssigned, checked, onComplet
             )}
           </div>
 
-          <div
-            className="absolute right-0 top-0 hidden group-hover:flex items-center gap-1 pl-4"
-            style={{ background: `linear-gradient(to right, transparent, ${isAssigned ? '#fafafa' : '#ffffff'} 40%)` }}
-            onPointerDown={e => e.stopPropagation()}
-          >
-            <Tooltip text="Edit">
-              <button
-                onClick={e => { e.stopPropagation(); onEdit(todo); }}
-                className="p-1 rounded hover:bg-zinc-100 text-zinc-400 hover:text-zinc-600 transition"
-              >
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-              </button>
-            </Tooltip>
-            <Tooltip text="Delete">
-              <button
-                onClick={e => { e.stopPropagation(); onDelete(todo.id); }}
-                className="p-1 rounded hover:bg-red-50 text-zinc-400 hover:text-red-500 transition"
-              >
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-              </button>
-            </Tooltip>
-          </div>
+          {!isMobile && (
+            <div
+              className="absolute right-0 top-0 hidden group-hover:flex items-center gap-1 pl-4"
+              style={{ background: `linear-gradient(to right, transparent, ${isAssigned ? '#fafafa' : '#ffffff'} 40%)` }}
+              onPointerDown={e => e.stopPropagation()}
+            >
+              <Tooltip text="Edit">
+                <button
+                  onClick={e => { e.stopPropagation(); onEdit(todo); }}
+                  className="p-1 rounded hover:bg-zinc-100 text-zinc-400 hover:text-zinc-600 transition"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </button>
+              </Tooltip>
+              <Tooltip text="Delete">
+                <button
+                  onClick={e => { e.stopPropagation(); onDelete(todo.id); }}
+                  className="p-1 rounded hover:bg-red-50 text-zinc-400 hover:text-red-500 transition"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              </Tooltip>
+            </div>
+          )}
         </div>
       )}
     </div>
