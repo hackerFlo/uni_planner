@@ -18,3 +18,14 @@ IDEAS.txt
 dev-commands.txt
 CLAUDE.md
 start.sh
+
+# Local env overrides (machine-specific, may contain test credentials)
+.env.local
+.env.*.local
+server/.env.local
+server/.env.*.local
+
+# Claude/AI plan & memory artifacts
+*.plan.md
+PLAN.md
+plans/
