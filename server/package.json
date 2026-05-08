@@ -1,6 +1,6 @@
 {
   "name": "uni-planner-server",
-  "version": "1.0.1",
+  "version": "1.4",
   "private": true,
   "scripts": {
     "dev": "node --watch index.js"

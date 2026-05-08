@@ -2,11 +2,24 @@
 // Bump this on every push so the "What's New" popup auto-shows after a Watchtower update.
 // Versioning: X.Y — increment Y for regular updates, bump X (reset Y to 0) for big releases.
 // Add a new entry to CHANGELOG (newest first) to describe the changes.
-export const CURRENT_VERSION = '1.3';
+export const CURRENT_VERSION = '1.4';
 
 // icon: 'purple' | 'green' | 'amber' | 'blue' | 'rose'
 // Each feature needs: icon, name, desc, and a 24×24 SVG path string (stroke icons).
 export const CHANGELOG = [
+  {
+    version: '1.4',
+    date: '2026-05-08',
+    title: 'UI polish',
+    features: [
+      {
+        icon: 'amber',
+        name: 'Slower tooltip delay',
+        desc: 'Tooltips now wait a little longer before appearing, so they stay out of the way during normal navigation.',
+        svgPath: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+      },
+    ],
+  },
   {
     version: '1.3',
     date: '2026-05-08',

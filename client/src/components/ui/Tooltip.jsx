@@ -7,7 +7,7 @@ export function recurrenceLabel(days) {
   return `Repeats every ${days} days`;
 }
 
-const SHOW_DELAY = 400;
+const SHOW_DELAY = 800;
 const HIDE_FADE = 150;
 const MARGIN = 8;
 
