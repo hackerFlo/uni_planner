@@ -1,7 +1,9 @@
 // CURRENT_VERSION is compared against localStorage 'uniPlanner.lastSeenVersion'.
-// Bump this on every push so the "What's New" popup auto-shows after a Watchtower update.
+// Bump CURRENT_VERSION only on the FIRST push of each Watchtower window (04:00–04:00 local time).
+// Subsequent pushes in the same window append features to the top entry instead of bumping.
+// This way every Watchtower deploy maps to exactly one version.
 // Versioning: X.Y — increment Y for regular updates, bump X (reset Y to 0) for big releases.
-// Add a new entry to CHANGELOG (newest first) to describe the changes.
+// Add a new entry to CHANGELOG (newest first) on first push of a window; append to top entry otherwise.
 export const CURRENT_VERSION = '1.4';
 
 // icon: 'purple' | 'green' | 'amber' | 'blue' | 'rose'
