@@ -160,7 +160,7 @@ export default function DayColumn({ date, todos, holiday, isDragging, note, onNo
                 <p className="text-[11px] text-zinc-300 text-center py-2">Drop here</p>
               )}
               {!isDragging && (
-                <Tooltip text="Add item">
+                <Tooltip text="Add item" className="w-full">
                   <button
                     onPointerDown={e => e.stopPropagation()}
                     onClick={() => onAdd(date)}
