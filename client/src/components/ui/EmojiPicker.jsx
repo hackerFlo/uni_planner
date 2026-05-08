@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { EMOJIS } from '../../data/emojis';
 
 const RECENT_KEY = 'recentEmojis';
 function getRecents() {
@@ -10,13 +9,27 @@ function addRecent(emoji) {
   localStorage.setItem(RECENT_KEY, JSON.stringify(list));
 }
 
+function rank(names, q) {
+  if (names.some(n => n === q)) return 0;
+  if (names.some(n => n.startsWith(q))) return 1;
+  return 2;
+}
+
 export default function EmojiPicker({ query, onSelect, onClose }) {
+  const [emojis, setEmojis] = useState(null);
   const [idx, setIdx] = useState(0);
 
+  useEffect(() => {
+    import('../../data/emojis.js').then(m => setEmojis(m.EMOJIS));
+  }, []);
+
   const q = query.toLowerCase();
-  const results = q.length > 0
-    ? EMOJIS.filter(({ n }) => n.some(name => name.startsWith(q))).slice(0, 8)
-    : getRecents().map(e => EMOJIS.find(em => em.e === e) ?? { e, n: [e] });
+  const results = emojis == null ? [] : q.length > 0
+    ? emojis
+        .filter(({ n }) => n.some(name => name.startsWith(q) || name.includes(q)))
+        .sort((a, b) => rank(a.n, q) - rank(b.n, q))
+        .slice(0, 8)
+    : getRecents().map(e => emojis.find(em => em.e === e) ?? { e, n: [e] });
 
   useEffect(() => { setIdx(0); }, [query]);
 

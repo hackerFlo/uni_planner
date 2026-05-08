@@ -49,7 +49,7 @@ function isPreset(v) { return v === '' || TIME_PRESETS.includes(v); }
 
 function detectEmojiTrigger(value, cursorPos) {
   const before = value.substring(0, cursorPos);
-  const match = before.match(/(^|[^:\w]):([\w]*)$/);
+  const match = before.match(/(^|[^:\w]):([\w-]*)$/);
   if (!match) return null;
   const query = match[2];
   const colonIdx = match.index + match[1].length;

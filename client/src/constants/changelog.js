@@ -12,8 +12,14 @@ export const CHANGELOG = [
   {
     version: '1.4',
     date: '2026-05-08',
-    title: 'UI polish',
+    title: 'Emoji & UI polish',
     features: [
+      {
+        icon: 'purple',
+        name: 'Full emoji set',
+        desc: 'The emoji picker now includes all iOS-supported emoji — flags, food, travel, objects, and more. Type `:` in any task field to search by name.',
+        svgPath: 'M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+      },
       {
         icon: 'amber',
         name: 'Slower tooltip delay',
