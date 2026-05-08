@@ -12,7 +12,6 @@ import ArchiveDrawer from '../components/todos/ArchiveDrawer';
 import WeeklyPlanner from '../components/planner/WeeklyPlanner';
 import WhatsNewModal from '../components/layout/WhatsNewModal';
 import Tooltip from '../components/ui/Tooltip';
-import { CHANGELOG } from '../constants/changelog';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -281,7 +280,7 @@ export default function PlannerPage() {
         />
       )}
 
-      {whatsNew.open && <WhatsNewModal entry={CHANGELOG[0]} onClose={whatsNew.close} />}
+      {whatsNew.open && <WhatsNewModal entries={whatsNew.entries} onClose={whatsNew.close} />}
     </div>
   );
 }

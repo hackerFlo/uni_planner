@@ -1,13 +1,27 @@
 // CURRENT_VERSION is compared against localStorage 'uniPlanner.lastSeenVersion'.
 // Bump this on every push so the "What's New" popup auto-shows after a Watchtower update.
+// Versioning: X.Y — increment Y for regular updates, bump X (reset Y to 0) for big releases.
 // Add a new entry to CHANGELOG (newest first) to describe the changes.
-export const CURRENT_VERSION = '1.0.2';
+export const CURRENT_VERSION = '1.3';
 
 // icon: 'purple' | 'green' | 'amber' | 'blue' | 'rose'
 // Each feature needs: icon, name, desc, and a 24×24 SVG path string (stroke icons).
 export const CHANGELOG = [
   {
-    version: '1.0.2',
+    version: '1.3',
+    date: '2026-05-08',
+    title: 'Update popup improvements',
+    features: [
+      {
+        icon: 'purple',
+        name: 'Better update notifications',
+        desc: 'The update popup now shows all releases you missed since your last visit — not just the most recent one. A scroll indicator lets you know when there is more to read.',
+        svgPath: 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9',
+      },
+    ],
+  },
+  {
+    version: '1.2',
     date: '2026-05-08',
     title: 'Bug fixes',
     features: [
@@ -20,7 +34,7 @@ export const CHANGELOG = [
     ],
   },
   {
-    version: '1.0.1',
+    version: '1.1',
     date: '2026-05-08',
     title: 'Bug fixes',
     features: [
@@ -33,7 +47,7 @@ export const CHANGELOG = [
     ],
   },
   {
-    version: '1.0.0',
+    version: '1.0',
     date: '2026-05-07',
     title: 'New version installed overnight',
     features: [

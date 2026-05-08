@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useLayoutEffect, useState } from 'react';
 
 const ICON_COLORS = {
   purple: 'bg-indigo-50 text-indigo-500',
@@ -20,15 +20,35 @@ function FeatureIcon({ svgPath, color }) {
 
 function formatDate(iso) {
   const [year, month, day] = iso.split('-').map(Number);
-  return new Date(year, month - 1, day).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  return new Date(year, month - 1, day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-export default function WhatsNewModal({ entry, onClose }) {
+export default function WhatsNewModal({ entries, onClose }) {
+  const scrollRef = useRef(null);
+  const [showScrollCue, setShowScrollCue] = useState(false);
+
   useEffect(() => {
     function onKey(e) { if (e.key === 'Escape') onClose(); }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  // Check on mount whether the list overflows and needs the scroll cue.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setShowScrollCue(el.scrollHeight > el.clientHeight);
+  }, [entries]);
+
+  function handleScroll() {
+    const el = scrollRef.current;
+    if (!el) return;
+    setShowScrollCue(el.scrollHeight - el.scrollTop - el.clientHeight > 8);
+  }
+
+  const isMulti = entries.length > 1;
+  const newest = entries[0];
+  const totalFeatures = entries.reduce((n, e) => n + e.features.length, 0);
 
   return (
     <div
@@ -44,11 +64,16 @@ export default function WhatsNewModal({ entry, onClose }) {
               <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
                 <path d="M8 1L9.5 6H14.5L10.5 9.5L12 14L8 11L4 14L5.5 9.5L1.5 6H6.5L8 1Z" fill="#6366f1"/>
               </svg>
-              What's new · v{entry.version}
+              {isMulti ? `What's new · ${entries.length} updates` : `What's new · v${newest.version}`}
             </span>
-            <h2 className="text-lg font-semibold text-zinc-900 tracking-tight">{entry.title}</h2>
+            <h2 className="text-lg font-semibold text-zinc-900 tracking-tight">
+              {isMulti ? `${entries.length} updates since you were last here` : newest.title}
+            </h2>
             <p className="text-[13px] text-zinc-400">
-              Released {formatDate(entry.date)} · {entry.features.length} new feature{entry.features.length !== 1 ? 's' : ''}
+              {isMulti
+                ? `v${entries[entries.length - 1].version} – v${newest.version} · ${totalFeatures} new feature${totalFeatures !== 1 ? 's' : ''}`
+                : `Released ${formatDate(newest.date)} · ${newest.features.length} new feature${newest.features.length !== 1 ? 's' : ''}`
+              }
             </p>
           </div>
           <button
@@ -62,20 +87,57 @@ export default function WhatsNewModal({ entry, onClose }) {
           </button>
         </div>
 
-        {/* Feature list */}
-        <div className="max-h-[380px] overflow-y-auto">
-          {entry.features.map((f, i) => (
-            <div
-              key={i}
-              className={`flex items-start gap-4 px-7 py-4 hover:bg-zinc-50 transition-colors ${i > 0 ? 'border-t border-zinc-100' : ''}`}
-            >
-              <FeatureIcon svgPath={f.svgPath} color={f.icon} />
-              <div className="flex flex-col gap-0.5">
-                <span className="text-sm font-semibold text-zinc-900 tracking-tight">{f.name}</span>
-                <span className="text-[13px] text-zinc-500 leading-relaxed">{f.desc}</span>
+        {/* Scrollable feature list with fade cue */}
+        <div className="relative">
+          <div
+            ref={scrollRef}
+            onScroll={handleScroll}
+            className="max-h-[360px] overflow-y-auto"
+          >
+            {entries.map((entry, ei) => (
+              <div key={entry.version}>
+                {isMulti && (
+                  <div className="px-7 pt-4 pb-1.5 flex items-center gap-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">
+                      v{entry.version}
+                    </span>
+                    <span className="text-[10px] text-zinc-300">·</span>
+                    <span className="text-[10px] text-zinc-400">{formatDate(entry.date)}</span>
+                    {ei === 0 && (
+                      <span className="ml-1 text-[9px] font-semibold bg-indigo-100 text-indigo-500 rounded-full px-1.5 py-0.5 uppercase tracking-wide">Latest</span>
+                    )}
+                  </div>
+                )}
+                {entry.features.map((f, fi) => (
+                  <div
+                    key={fi}
+                    className={`flex items-start gap-4 px-7 py-4 hover:bg-zinc-50 transition-colors ${(isMulti ? fi > 0 : fi > 0 || ei > 0) ? 'border-t border-zinc-100' : ''}`}
+                  >
+                    <FeatureIcon svgPath={f.svgPath} color={f.icon} />
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-sm font-semibold text-zinc-900 tracking-tight">{f.name}</span>
+                      <span className="text-[13px] text-zinc-500 leading-relaxed">{f.desc}</span>
+                    </div>
+                  </div>
+                ))}
+                {isMulti && ei < entries.length - 1 && (
+                  <div className="mx-7 border-t-2 border-dashed border-zinc-100" />
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Scroll cue: bottom fade + bouncing chevron */}
+          {showScrollCue && (
+            <div className="pointer-events-none absolute bottom-0 left-0 right-0 flex flex-col items-center">
+              <div className="w-full h-14 bg-gradient-to-t from-white to-transparent" />
+              <div className="absolute bottom-2 animate-bounce text-zinc-300">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M19 9l-7 7-7-7" />
+                </svg>
               </div>
             </div>
-          ))}
+          )}
         </div>
 
         {/* Footer */}
