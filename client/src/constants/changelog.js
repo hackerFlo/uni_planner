@@ -1,11 +1,24 @@
 // CURRENT_VERSION is compared against localStorage 'uniPlanner.lastSeenVersion'.
 // Bump this on every push so the "What's New" popup auto-shows after a Watchtower update.
 // Add a new entry to CHANGELOG (newest first) to describe the changes.
-export const CURRENT_VERSION = '1.0.1';
+export const CURRENT_VERSION = '1.0.2';
 
 // icon: 'purple' | 'green' | 'amber' | 'blue' | 'rose'
 // Each feature needs: icon, name, desc, and a 24×24 SVG path string (stroke icons).
 export const CHANGELOG = [
+  {
+    version: '1.0.2',
+    date: '2026-05-08',
+    title: 'Bug fixes',
+    features: [
+      {
+        icon: 'blue',
+        name: 'Email delivery fix',
+        desc: 'Daily summary emails now send reliably even when the server restarts at the scheduled time (e.g. during a Watchtower update).',
+        svgPath: 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
+      },
+    ],
+  },
   {
     version: '1.0.1',
     date: '2026-05-08',

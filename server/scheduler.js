@@ -66,8 +66,10 @@ function startScheduler() {
         continue;
       }
 
-      if (hhmm !== user.notify_time) continue;
+      // Send when user-local time is at or past notify_time and we haven't sent today.
+      // Lexicographic compare is correct for zero-padded "HH:MM".
       if (user.notify_last_sent && user.notify_last_sent >= today) continue;
+      if (hhmm < user.notify_time) continue;
 
       try {
         if (!user.notify_email_enc) continue;

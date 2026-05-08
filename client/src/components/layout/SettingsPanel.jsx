@@ -319,7 +319,7 @@ export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
               onClick={() => { onClose(); onOpenWhatsNew?.(); }}
               className="w-full text-xs font-medium border border-indigo-300 text-indigo-600 hover:bg-indigo-50 py-2 rounded-lg transition"
             >
-              What's changed since the last update
+              See what's changed
             </button>
           </div>
 
