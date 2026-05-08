@@ -35,6 +35,13 @@ export default function Tooltip({ text, children, className = '' }) {
   useEffect(() => {
     if (!mounted) return;
     const tr = triggerRef.current.getBoundingClientRect();
+    const cx = tr.left + tr.width / 2;
+    const cy = tr.top + tr.height / 2;
+    const topEl = document.elementFromPoint(cx, cy);
+    if (topEl && !triggerRef.current.contains(topEl)) {
+      setMounted(false);
+      return;
+    }
     const tip = tipRef.current.getBoundingClientRect();
     const vw = window.innerWidth;
     const vh = window.innerHeight;

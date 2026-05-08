@@ -32,6 +32,12 @@ export const CHANGELOG = [
         desc: 'Tooltips now wait a little longer before appearing, so they stay out of the way during normal navigation.',
         svgPath: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
       },
+      {
+        icon: 'blue',
+        name: 'Tooltip overlap fix',
+        desc: 'Tooltips no longer pop up over modals and dialogs when the underlying button is hidden by an overlay.',
+        svgPath: 'M5 13l4 4L19 7',
+      },
     ],
   },
   {
