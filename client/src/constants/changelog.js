@@ -1,11 +1,24 @@
 // CURRENT_VERSION is compared against localStorage 'uniPlanner.lastSeenVersion'.
 // Bump this on every push so the "What's New" popup auto-shows after a Watchtower update.
 // Add a new entry to CHANGELOG (newest first) to describe the changes.
-export const CURRENT_VERSION = '1.0.0';
+export const CURRENT_VERSION = '1.0.1';
 
 // icon: 'purple' | 'green' | 'amber' | 'blue' | 'rose'
 // Each feature needs: icon, name, desc, and a 24×24 SVG path string (stroke icons).
 export const CHANGELOG = [
+  {
+    version: '1.0.1',
+    date: '2026-05-08',
+    title: 'Bug fixes',
+    features: [
+      {
+        icon: 'rose',
+        name: 'Server crash fix',
+        desc: 'Fixed a crash loop that prevented the server from starting after the first Docker deploy.',
+        svgPath: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z',
+      },
+    ],
+  },
   {
     version: '1.0.0',
     date: '2026-05-07',

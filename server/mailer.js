@@ -6,7 +6,10 @@ const GMAIL_USER = process.env.GMAIL_USER;
 const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
 const APP_URL = process.env.CORS_ORIGIN || 'https://planner.example.com/';
 
-const LOGO_PNG = fs.readFileSync(path.join(__dirname, '..', 'client', 'public', 'pwa-192.png'));
+const LOGO_PNG_PATH = path.join(__dirname, 'assets', 'pwa-192.png');
+let LOGO_PNG = null;
+try { LOGO_PNG = fs.readFileSync(LOGO_PNG_PATH); }
+catch (err) { console.warn('[mailer] logo not found, emails will be sent without logo:', err.message); }
 
 const PALETTE = {
   indigo:  { color: '#6366f1', bg: '#eef2ff' },
@@ -385,14 +388,14 @@ async function sendDailySummary(toEmail, { completedTodos, uncompletedTodos, tom
     to: toEmail,
     subject: `Your daily summary – ${dateStr}`,
     html: buildHtml({ completedTodos, uncompletedTodos, tomorrowTodos, dateStr, tomorrowStr, userName, hour }),
-    attachments: [
+    attachments: LOGO_PNG ? [
       {
         filename: 'logo.png',
         content: LOGO_PNG,
         contentType: 'image/png',
         cid: 'logo@uni-planner',
       },
-    ],
+    ] : [],
   });
 }
 
