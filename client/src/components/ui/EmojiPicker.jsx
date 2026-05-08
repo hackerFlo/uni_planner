@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { loadEmojis } from '../../data/loadEmojis';
 
 const RECENT_KEY = 'recentEmojis';
 function getRecents() {
@@ -20,13 +21,13 @@ export default function EmojiPicker({ query, onSelect, onClose }) {
   const [idx, setIdx] = useState(0);
 
   useEffect(() => {
-    import('../../data/emojis.js').then(m => setEmojis(m.EMOJIS));
+    loadEmojis().then(setEmojis);
   }, []);
 
   const q = query.toLowerCase();
   const results = emojis == null ? [] : q.length > 0
     ? emojis
-        .filter(({ n }) => n.some(name => name.startsWith(q) || name.includes(q)))
+        .filter(({ n }) => n.some(name => name.startsWith(q)))
         .sort((a, b) => rank(a.n, q) - rank(b.n, q))
         .slice(0, 8)
     : getRecents().map(e => emojis.find(em => em.e === e) ?? { e, n: [e] });
@@ -34,7 +35,7 @@ export default function EmojiPicker({ query, onSelect, onClose }) {
   useEffect(() => { setIdx(0); }, [query]);
 
   useEffect(() => {
-    if (results.length === 0) { onClose(); return; }
+    if (emojis !== null && results.length === 0) { onClose(); return; }
 
     function onKey(e) {
       if (e.key === 'ArrowRight') {

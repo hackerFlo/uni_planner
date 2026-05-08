@@ -1,6 +1,7 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import EmojiPicker from '../ui/EmojiPicker';
 import { useLists } from '../../context/ListsContext';
+import { loadEmojis, getLoadedEmojis } from '../../data/loadEmojis';
 
 function toIso(d) {
   const y = d.getFullYear();
@@ -47,6 +48,21 @@ function getAssignableDates(extraDate) {
 const TIME_PRESETS = ['5m', '10m', '15m', '30m', '45m', '90m', '1h', '2h', '3h', '4h'];
 function isPreset(v) { return v === '' || TIME_PRESETS.includes(v); }
 
+function tryAutoConvert(value, cursorPos) {
+  const before = value.substring(0, cursorPos);
+  const match = before.match(/(^|[^:\w]):([\w-]+):$/);
+  if (!match) return null;
+  const emojis = getLoadedEmojis();
+  if (!emojis) return null;
+  const q = match[2].toLowerCase();
+  const hit = emojis.find(({ n }) => n[0] === q) || emojis.find(({ n }) => n.includes(q));
+  if (!hit) return null;
+  const tokenStart = match.index + match[1].length;
+  const newVal = value.substring(0, tokenStart) + hit.e + ' ' + value.substring(cursorPos);
+  const newCursor = tokenStart + hit.e.length + 1;
+  return { newVal, newCursor };
+}
+
 function detectEmojiTrigger(value, cursorPos) {
   const before = value.substring(0, cursorPos);
   const match = before.match(/(^|[^:\w]):([\w-]*)$/);
@@ -78,12 +94,27 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
   const titleRef = useRef(null);
   const descRef = useRef(null);
 
+  useEffect(() => { loadEmojis(); }, []);
+
   // Update listId default when lists load (in case they weren't available initially)
   const effectiveListId = listId ?? lists[0]?.id ?? null;
+
+  function applyAutoConvert(ref, val, cursorPos, setter) {
+    const converted = tryAutoConvert(val, cursorPos);
+    if (!converted) return false;
+    setter(converted.newVal);
+    setEmojiState(null);
+    setTimeout(() => {
+      ref.current?.focus();
+      ref.current?.setSelectionRange(converted.newCursor, converted.newCursor);
+    }, 0);
+    return true;
+  }
 
   function handleTitleChange(e) {
     const val = e.target.value;
     setTitle(val);
+    if (applyAutoConvert(titleRef, val, e.target.selectionStart, setTitle)) return;
     const trigger = detectEmojiTrigger(val, e.target.selectionStart);
     setEmojiState(trigger ? { field: 'title', ...trigger } : null);
   }
@@ -91,6 +122,7 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
   function handleDescChange(e) {
     const val = e.target.value;
     setDescription(val);
+    if (applyAutoConvert(descRef, val, e.target.selectionStart, setDescription)) return;
     const trigger = detectEmojiTrigger(val, e.target.selectionStart);
     setEmojiState(trigger ? { field: 'description', ...trigger } : null);
   }
@@ -108,7 +140,7 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
       setDescription(newVal);
     }
     setEmojiState(null);
-    const newCursor = emojiState.triggerStart + [...emoji].length + 1;
+    const newCursor = emojiState.triggerStart + emoji.length + 1;
     setTimeout(() => {
       ref.current?.focus();
       ref.current?.setSelectionRange(newCursor, newCursor);

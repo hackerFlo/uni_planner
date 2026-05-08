@@ -21,6 +21,12 @@ export const CHANGELOG = [
         svgPath: 'M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
       },
       {
+        icon: 'green',
+        name: 'Auto-convert :name: shortcuts',
+        desc: 'Type a complete shortcode like `:burger:` or `:rocket:` and it instantly becomes the emoji — no picker needed. Works in title and description fields.',
+        svgPath: 'M13 10V3L4 14h7v7l9-11h-7z',
+      },
+      {
         icon: 'amber',
         name: 'Slower tooltip delay',
         desc: 'Tooltips now wait a little longer before appearing, so they stay out of the way during normal navigation.',
