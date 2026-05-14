@@ -2,9 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { Draggable } from '@hello-pangea/dnd';
 import LinkText from '../ui/LinkText';
 import Tooltip, { recurrenceLabel } from '../ui/Tooltip';
+import ConfirmPopover from '../ui/ConfirmPopover';
 import { useLists } from '../../context/ListsContext';
 import { LIST_PALETTE } from '../../constants/listPalette';
 import useIsMobile from '../../hooks/useIsMobile';
+import { useAnyModalOpen } from '../../context/ModalContext';
+
+function isRecurring(todo) {
+  return todo.recurrence_parent_id != null || todo.recurrence_interval_days != null || todo.recurrence_pattern != null;
+}
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -18,6 +24,7 @@ function dayLabel(iso) {
 
 function TodoCardBody({ provided, snapshot, todo, isAssigned, checked, onComplete, onEdit, onDelete }) {
   const isMobile = useIsMobile();
+  const anyModalOpen = useAnyModalOpen();
   const { getList } = useLists();
   const list = getList(todo.list_id);
   const palette = LIST_PALETTE[list?.color] ?? LIST_PALETTE.slate;
@@ -156,8 +163,8 @@ function TodoCardBody({ provided, snapshot, todo, isAssigned, checked, onComplet
                   {fmtTime(todo.approx_time)}
                 </span>
               )}
-              {todo.recurrence_interval_days != null && (
-                <Tooltip text={recurrenceLabel(todo.recurrence_interval_days)}>
+              {(todo.recurrence_interval_days != null || todo.recurrence_pattern != null) && (
+                <Tooltip text={recurrenceLabel(todo.recurrence_interval_days, todo.recurrence_pattern)}>
                   <svg className="flex-shrink-0 w-3 h-3 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                     <path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
                   </svg>
@@ -176,7 +183,7 @@ function TodoCardBody({ provided, snapshot, todo, isAssigned, checked, onComplet
 
           {!isMobile && (
             <div
-              className="absolute right-0 top-0 hidden group-hover:flex items-center gap-1 pl-4"
+              className={`absolute right-0 top-0 items-center gap-1 pl-4 ${anyModalOpen ? 'hidden' : 'hidden group-hover:flex'}`}
               style={{ background: `linear-gradient(to right, transparent, ${isAssigned ? '#fafafa' : '#ffffff'} 40%)` }}
               onPointerDown={e => e.stopPropagation()}
             >
@@ -190,16 +197,35 @@ function TodoCardBody({ provided, snapshot, todo, isAssigned, checked, onComplet
                   </svg>
                 </button>
               </Tooltip>
-              <Tooltip text="Delete">
-                <button
-                  onClick={e => { e.stopPropagation(); onDelete(todo.id); }}
-                  className="p-1 rounded hover:bg-red-50 text-zinc-400 hover:text-red-500 transition"
+              {isRecurring(todo) ? (
+                <ConfirmPopover
+                  options={[
+                    { label: 'Delete this item', tone: 'danger' },
+                    { label: 'Delete all items', tone: 'danger' },
+                  ]}
+                  onSelect={label => {
+                    onDelete(todo.id, label === 'Delete all items' ? 'all' : 'single');
+                  }}
+                  tooltipText="Delete"
                 >
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </button>
-              </Tooltip>
+                  <button className="p-1 rounded hover:bg-red-50 text-zinc-400 hover:text-red-500 transition">
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </ConfirmPopover>
+              ) : (
+                <Tooltip text="Delete">
+                  <button
+                    onClick={e => { e.stopPropagation(); onDelete(todo.id); }}
+                    className="p-1 rounded hover:bg-red-50 text-zinc-400 hover:text-red-500 transition"
+                  >
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </Tooltip>
+              )}
             </div>
           )}
         </div>

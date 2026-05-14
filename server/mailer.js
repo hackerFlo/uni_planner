@@ -72,7 +72,7 @@ function completedTaskRow(t) {
   return taskCard(t, {
     cardBg: '#ffffff',
     cardBorder: '#f0f0f5',
-    checkboxHtml: `<div style="width:14px;height:14px;background:#6366f1;border-radius:4px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><path d="M5 13l4 4L19 7"/></svg></div>`,
+    checkboxHtml: `<div style="width:14px;height:14px;background:#6366f1;border-radius:4px;text-align:center;line-height:14px;"><span style="font-family:Arial,sans-serif;font-size:11px;font-weight:700;color:#ffffff;line-height:14px;">&#10003;</span></div>`,
     titleColor: '#a0a0b8',
   });
 }
@@ -122,8 +122,8 @@ function buildHtml({ completedTodos, uncompletedTodos, tomorrowTodos, dateStr, t
               <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td style="vertical-align:middle;padding-right:8px;">
-                    <div style="width:20px;height:20px;background:#edfaf4;border-radius:50%;display:inline-block;vertical-align:middle;">
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c27b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><path d="M5 13l4 4L19 7"/></svg>
+                    <div style="width:20px;height:20px;background:#edfaf4;border-radius:50%;display:inline-block;vertical-align:middle;text-align:center;line-height:20px;">
+                      <span style="font-family:Arial,sans-serif;font-size:13px;font-weight:700;color:#22c27b;line-height:20px;">&#10003;</span>
                     </div>
                   </td>
                   <td style="vertical-align:middle;">
@@ -218,8 +218,8 @@ function buildHtml({ completedTodos, uncompletedTodos, tomorrowTodos, dateStr, t
               <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td style="vertical-align:middle;padding-right:8px;">
-                    <div style="width:20px;height:20px;background:#eef0ff;border-radius:50%;display:inline-block;vertical-align:middle;">
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                    <div style="width:20px;height:20px;background:#eef0ff;border-radius:50%;display:inline-block;vertical-align:middle;text-align:center;line-height:20px;">
+                      <span style="font-family:Arial,sans-serif;font-size:13px;font-weight:700;color:#6366f1;line-height:20px;">&#8594;</span>
                     </div>
                   </td>
                   <td style="vertical-align:middle;">

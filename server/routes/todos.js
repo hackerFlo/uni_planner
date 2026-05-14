@@ -1,7 +1,7 @@
 const express = require('express');
 const db = require('../db');
 const requireAuth = require('../middleware/auth');
-const { sanitizeTitle, sanitizeDescription, validateDayAssigned, validateRecurrenceInterval } = require('../middleware/validate');
+const { sanitizeTitle, sanitizeDescription, validateDayAssigned, validateRecurrenceInterval, validateRecurrencePattern } = require('../middleware/validate');
 const { materializeForTemplate } = require('../recurrence');
 
 const router = express.Router();
@@ -9,12 +9,13 @@ router.use(requireAuth);
 
 const NOW = () => new Date().toISOString();
 
-// Columns for a todo with effective recurrence_interval_days resolved via parent JOIN
+// Columns for a todo with effective recurrence fields resolved via parent JOIN
 const TODO_SELECT = `
   SELECT t.id, t.user_id, t.list_id, t.title, t.description, t.completed, t.archived,
          t.day_assigned, t.created_at, t.updated_at, t.planner_order, t.approx_time,
          t.completed_at, t.recurrence_parent_id,
-         COALESCE(t.recurrence_interval_days, p.recurrence_interval_days) AS recurrence_interval_days
+         COALESCE(t.recurrence_interval_days, p.recurrence_interval_days) AS recurrence_interval_days,
+         COALESCE(t.recurrence_pattern, p.recurrence_pattern) AS recurrence_pattern
   FROM todos t
   LEFT JOIN todos p ON p.id = t.recurrence_parent_id`;
 
@@ -43,7 +44,7 @@ router.get('/archived', (req, res) => {
 });
 
 router.post('/', (req, res) => {
-  const { title, description, list_id, day_assigned, approx_time, recurrence_interval_days } = req.body;
+  const { title, description, list_id, day_assigned, approx_time, recurrence_interval_days, recurrence_pattern } = req.body;
 
   const cleanTitle = sanitizeTitle(title);
   if (!cleanTitle) return res.status(400).json({ error: 'Title is required (max 200 chars)' });
@@ -61,14 +62,20 @@ router.post('/', (req, res) => {
 
   const recurrenceInterval = validateRecurrenceInterval(recurrence_interval_days);
   if (recurrenceInterval === false) return res.status(400).json({ error: 'recurrence_interval_days must be 1-7 or null' });
-  if (recurrenceInterval != null && !cleanDay) return res.status(400).json({ error: 'A start day is required for recurring tasks' });
+
+  const recurrencePattern = validateRecurrencePattern(recurrence_pattern);
+  if (recurrencePattern === false) return res.status(400).json({ error: 'recurrence_pattern must be weekdays, weekends, or null' });
+  if (recurrenceInterval != null && recurrencePattern != null) return res.status(400).json({ error: 'Cannot set both recurrence_interval_days and recurrence_pattern' });
+
+  const isRecurringCreate = recurrenceInterval != null || recurrencePattern != null;
+  if (isRecurringCreate && !cleanDay) return res.status(400).json({ error: 'A start day is required for recurring tasks' });
 
   const result = db.prepare(
-    'INSERT INTO todos (user_id, list_id, title, description, day_assigned, approx_time, recurrence_interval_days) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).run(req.user.id, cleanListId, cleanTitle, cleanDesc, cleanDay, cleanTime, recurrenceInterval);
+    'INSERT INTO todos (user_id, list_id, title, description, day_assigned, approx_time, recurrence_interval_days, recurrence_pattern) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(req.user.id, cleanListId, cleanTitle, cleanDesc, cleanDay, cleanTime, recurrenceInterval, recurrencePattern);
 
   const materialized = [];
-  if (recurrenceInterval != null && cleanDay) {
+  if (isRecurringCreate && cleanDay) {
     const userRow = db.prepare('SELECT notify_tz FROM users WHERE id = ?').get(req.user.id);
     materializeForTemplate(result.lastInsertRowid, userRow?.notify_tz || 'UTC');
     const children = db.prepare(`${TODO_SELECT} WHERE t.recurrence_parent_id = ?`).all(result.lastInsertRowid);
@@ -107,7 +114,7 @@ router.patch('/:id', (req, res) => {
   if (!existing) return res.status(404).json({ error: 'Todo not found' });
 
   const templateId = existing.recurrence_parent_id ?? existing.id;
-  const isRecurring = existing.recurrence_interval_days != null || existing.recurrence_parent_id != null;
+  const isRecurring = existing.recurrence_interval_days != null || existing.recurrence_pattern != null || existing.recurrence_parent_id != null;
 
   // Fields that propagate to the whole series
   const seriesUpdates = {};
@@ -161,12 +168,17 @@ router.patch('/:id', (req, res) => {
     instanceUpdates.day_assigned = d;
   }
 
-  const hasRecurrenceChange = 'recurrence_interval_days' in req.body;
-  let recurrenceInterval;
+  const hasRecurrenceChange = 'recurrence_interval_days' in req.body || 'recurrence_pattern' in req.body;
+  let recurrenceInterval = null;
+  let recurrencePattern = null;
   if (hasRecurrenceChange) {
     recurrenceInterval = validateRecurrenceInterval(req.body.recurrence_interval_days);
     if (recurrenceInterval === false) return res.status(400).json({ error: 'recurrence_interval_days must be 1-7 or null' });
+    recurrencePattern = validateRecurrencePattern(req.body.recurrence_pattern);
+    if (recurrencePattern === false) return res.status(400).json({ error: 'recurrence_pattern must be weekdays, weekends, or null' });
+    if (recurrenceInterval != null && recurrencePattern != null) return res.status(400).json({ error: 'Cannot set both recurrence_interval_days and recurrence_pattern' });
   }
+  const isNewRecurring = recurrenceInterval != null || recurrencePattern != null;
 
   const totalChanges = Object.keys(instanceUpdates).length + Object.keys(seriesUpdates).length + (hasRecurrenceChange ? 1 : 0);
   if (totalChanges === 0) return res.status(400).json({ error: 'No valid fields to update' });
@@ -226,7 +238,7 @@ router.patch('/:id', (req, res) => {
 
         if (willDetachIds.includes(templateId)) {
           db.prepare(
-            `UPDATE todos SET recurrence_interval_days = NULL, updated_at = ? WHERE id = ? AND user_id = ?`
+            `UPDATE todos SET recurrence_interval_days = NULL, recurrence_pattern = NULL, updated_at = ? WHERE id = ? AND user_id = ?`
           ).run(now, templateId, req.user.id);
         }
 
@@ -235,15 +247,15 @@ router.patch('/:id', (req, res) => {
            AND completed = 0 AND archived = 0 AND day_assigned >= ? AND id != ?`
         ).run(req.user.id, templateId, childDate, id);
 
-        if (recurrenceInterval != null) {
+        if (isNewRecurring) {
           db.prepare(
-            `UPDATE todos SET recurrence_parent_id = NULL, recurrence_interval_days = ?, updated_at = ?
+            `UPDATE todos SET recurrence_parent_id = NULL, recurrence_interval_days = ?, recurrence_pattern = ?, updated_at = ?
              WHERE id = ? AND user_id = ?`
-          ).run(recurrenceInterval, now, id, req.user.id);
+          ).run(recurrenceInterval, recurrencePattern, now, id, req.user.id);
           materializeForTemplate(id, userTz);
         } else {
           db.prepare(
-            `UPDATE todos SET recurrence_parent_id = NULL, recurrence_interval_days = NULL, updated_at = ?
+            `UPDATE todos SET recurrence_parent_id = NULL, recurrence_interval_days = NULL, recurrence_pattern = NULL, updated_at = ?
              WHERE id = ? AND user_id = ?`
           ).run(now, id, req.user.id);
         }
@@ -252,10 +264,10 @@ router.patch('/:id', (req, res) => {
           `DELETE FROM todos WHERE user_id = ? AND recurrence_parent_id = ? AND completed = 0 AND archived = 0 AND (day_assigned IS NULL OR day_assigned >= ?)`
         ).run(req.user.id, templateId, todayIso);
 
-        db.prepare(`UPDATE todos SET recurrence_interval_days = ?, updated_at = ? WHERE id = ?`)
-          .run(recurrenceInterval, now, templateId);
+        db.prepare(`UPDATE todos SET recurrence_interval_days = ?, recurrence_pattern = ?, updated_at = ? WHERE id = ?`)
+          .run(recurrenceInterval, recurrencePattern, now, templateId);
 
-        if (recurrenceInterval != null) {
+        if (isNewRecurring) {
           materializeForTemplate(templateId, userTz);
         }
       }
@@ -285,12 +297,15 @@ router.delete('/:id', (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
 
-  const existing = db.prepare('SELECT recurrence_interval_days, recurrence_parent_id FROM todos WHERE id = ? AND user_id = ?').get(id, req.user.id);
+  const scope = req.query.scope ?? 'single';
+  if (scope !== 'single' && scope !== 'all') return res.status(400).json({ error: 'scope must be single or all' });
+
+  const existing = db.prepare('SELECT recurrence_interval_days, recurrence_pattern, recurrence_parent_id FROM todos WHERE id = ? AND user_id = ?').get(id, req.user.id);
   if (!existing) return res.status(404).json({ error: 'Todo not found' });
 
-  const isTemplate = existing.recurrence_parent_id == null && existing.recurrence_interval_days != null;
-  if (isTemplate) {
-    db.prepare('DELETE FROM todos WHERE user_id = ? AND (id = ? OR recurrence_parent_id = ?)').run(req.user.id, id, id);
+  if (scope === 'all') {
+    const templateId = existing.recurrence_parent_id ?? id;
+    db.prepare('DELETE FROM todos WHERE user_id = ? AND (id = ? OR recurrence_parent_id = ?)').run(req.user.id, templateId, templateId);
   } else {
     db.prepare('DELETE FROM todos WHERE id = ? AND user_id = ?').run(id, req.user.id);
   }

@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import useIsMobile from '../../hooks/useIsMobile';
+import { useAnyModalOpen } from '../../context/ModalContext';
 
-export function recurrenceLabel(days) {
+export function recurrenceLabel(days, pattern) {
+  if (pattern === 'weekdays') return 'Repeats on weekdays';
+  if (pattern === 'weekends') return 'Repeats on weekends';
   if (days === 1) return 'Repeats daily';
   if (days === 7) return 'Repeats weekly';
   return `Repeats every ${days} days`;
@@ -12,8 +15,13 @@ const SHOW_DELAY = 800;
 const HIDE_FADE = 150;
 const MARGIN = 8;
 
+function isInsideModal(el) {
+  return !!el?.closest('[data-modal-root]');
+}
+
 export default function Tooltip({ text, children, className = '' }) {
   const isMobile = useIsMobile();
+  const anyModalOpen = useAnyModalOpen();
   const triggerRef = useRef(null);
   const tipRef = useRef(null);
   const showTimer = useRef(null);
@@ -25,6 +33,7 @@ export default function Tooltip({ text, children, className = '' }) {
   function show() {
     clearTimeout(hideTimer.current);
     if (mounted) return;
+    if (anyModalOpen && !isInsideModal(triggerRef.current)) return;
     showTimer.current = setTimeout(() => setMounted(true), SHOW_DELAY);
   }
 
@@ -36,6 +45,10 @@ export default function Tooltip({ text, children, className = '' }) {
 
   useEffect(() => {
     if (!mounted) return;
+    if (anyModalOpen && !isInsideModal(triggerRef.current)) {
+      setMounted(false);
+      return;
+    }
     const tr = triggerRef.current.getBoundingClientRect();
     const cx = tr.left + tr.width / 2;
     const cy = tr.top + tr.height / 2;
@@ -59,7 +72,7 @@ export default function Tooltip({ text, children, className = '' }) {
     setPos({ top, left, placement });
     const id = requestAnimationFrame(() => setShown(true));
     return () => cancelAnimationFrame(id);
-  }, [mounted, text]);
+  }, [mounted, text, anyModalOpen]);
 
   useEffect(() => () => {
     clearTimeout(showTimer.current);

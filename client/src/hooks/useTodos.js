@@ -111,10 +111,15 @@ export function useTodos() {
     return todo;
   }, [recordUndo]);
 
-  const deleteTodo = useCallback(async (id) => {
+  const deleteTodo = useCallback(async (id, scope = 'single') => {
     const prevTodo = todosRef.current.find(t => t.id === id);
-    await api.delete(`/api/todos/${id}`);
-    setTodos(prev => prev.filter(t => t.id !== id));
+    await api.delete(`/api/todos/${id}?scope=${scope}`);
+    if (scope === 'all') {
+      const templateId = prevTodo?.recurrence_parent_id ?? id;
+      setTodos(prev => prev.filter(t => t.id !== templateId && t.recurrence_parent_id !== templateId));
+    } else {
+      setTodos(prev => prev.filter(t => t.id !== id));
+    }
     if (prevTodo) {
       const { id: _id, ...createData } = prevTodo;
       recordUndo(async () => {

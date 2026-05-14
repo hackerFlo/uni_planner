@@ -67,6 +67,10 @@ if (!todoCols.some(c => c.name === 'recurrence_parent_id')) {
   db.exec(`ALTER TABLE todos ADD COLUMN recurrence_parent_id INTEGER`);
   console.log('[db] Migrated: added recurrence_parent_id column');
 }
+if (!todoCols.some(c => c.name === 'recurrence_pattern')) {
+  db.exec(`ALTER TABLE todos ADD COLUMN recurrence_pattern TEXT`);
+  console.log('[db] Migrated: added recurrence_pattern column');
+}
 db.exec(`CREATE INDEX IF NOT EXISTS idx_todos_recurrence_parent ON todos(recurrence_parent_id)`);
 
 // Migrate: if todos table still has the day-name CHECK constraint, recreate without it
@@ -173,7 +177,8 @@ if (currentTodoCols.includes('list_type')) {
       approx_time              TEXT,
       recurrence_interval_days INTEGER,
       recurrence_parent_id     INTEGER,
-      completed_at             TEXT
+      completed_at             TEXT,
+      recurrence_pattern       TEXT
     );
     INSERT INTO todos_new (id, user_id, list_id, title, description, completed, archived,
                            day_assigned, created_at, updated_at, planner_order, approx_time,

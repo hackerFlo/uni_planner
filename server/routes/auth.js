@@ -6,6 +6,7 @@ const requireAuth = require('../middleware/auth');
 const { validateEmail, validateIdentifier } = require('../middleware/validate');
 const { encryptEmail, decryptEmail } = require('../crypto');
 const { sendDailySummary } = require('../mailer');
+const { localDayBoundsUtc } = require('../time');
 
 const router = express.Router();
 
@@ -41,6 +42,9 @@ router.post('/login', async (req, res) => {
 });
 
 router.post('/register', async (req, res) => {
+  if (process.env.ALLOW_REGISTER !== 'true') {
+    return res.status(403).json({ error: 'Registration is disabled' });
+  }
   const { email, password } = req.body;
 
   if (!validateIdentifier(email)) return res.status(400).json({ error: 'Invalid username or email' });
@@ -187,7 +191,7 @@ router.patch('/notification-settings', requireAuth, (req, res) => {
 });
 
 router.post('/test-email', requireAuth, async (req, res) => {
-  const user = db.prepare('SELECT notify_email_enc, email FROM users WHERE id = ?').get(req.user.id);
+  const user = db.prepare('SELECT notify_email_enc, email, notify_tz FROM users WHERE id = ?').get(req.user.id);
   if (!user || !user.notify_email_enc) {
     return res.status(400).json({ error: 'No notification email saved. Save your settings first.' });
   }
@@ -199,18 +203,24 @@ router.post('/test-email', requireAuth, async (req, res) => {
     return res.status(500).json({ error: 'Encryption not configured on server.' });
   }
 
+  const tz = user.notify_tz || 'UTC';
   const now = new Date();
-  const today = now.toISOString().slice(0, 10);
-  const tomorrowDate = new Date(now);
-  tomorrowDate.setDate(tomorrowDate.getDate() + 1);
-  const tomorrow = tomorrowDate.toISOString().slice(0, 10);
+  const today = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(now);
+  const { startIso, endIso } = localDayBoundsUtc(today, tz);
+  const tomorrowDate = new Date(today + 'T12:00:00Z');
+  tomorrowDate.setUTCDate(tomorrowDate.getUTCDate() + 1);
+  const tomorrow = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(tomorrowDate);
 
   const completedTodos = db.prepare(
     `SELECT t.title, t.approx_time, l.name AS list_name, l.color AS list_color
      FROM todos t JOIN lists l ON l.id = t.list_id
      WHERE t.user_id = ? AND t.completed = 1
        AND t.completed_at >= ? AND t.completed_at < ?`
-  ).all(req.user.id, `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`);
+  ).all(req.user.id, startIso, endIso);
 
   const uncompletedTodos = db.prepare(
     `SELECT t.title, t.approx_time, l.name AS list_name, l.color AS list_color
@@ -226,11 +236,12 @@ router.post('/test-email', requireAuth, async (req, res) => {
   ).all(req.user.id, tomorrow);
 
   const userName = (user.email || '').split('@')[0] || 'there';
-  const dateStr = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-  const tomorrowStr = tomorrowDate.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+  const dateStr = now.toLocaleDateString('en-GB', { timeZone: tz, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const tomorrowStr = tomorrowDate.toLocaleDateString('en-GB', { timeZone: tz, weekday: 'long', day: 'numeric', month: 'long' });
 
   try {
-    await sendDailySummary(toEmail, { completedTodos, uncompletedTodos, tomorrowTodos, dateStr, tomorrowStr, userName, hour: now.getHours() });
+    const hour = parseInt(new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: 'numeric', hour12: false }).format(now), 10);
+    await sendDailySummary(toEmail, { completedTodos, uncompletedTodos, tomorrowTodos, dateStr, tomorrowStr, userName, hour });
     res.json({ ok: true, sentTo: toEmail });
   } catch (err) {
     console.error('[test-email] Send failed:', err.message);

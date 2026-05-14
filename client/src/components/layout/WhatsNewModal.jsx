@@ -1,4 +1,5 @@
 import { useEffect, useRef, useLayoutEffect, useState } from 'react';
+import { useRegisterModal } from '../../context/ModalContext';
 
 const ICON_COLORS = {
   purple: 'bg-indigo-50 text-indigo-500',
@@ -24,6 +25,7 @@ function formatDate(iso) {
 }
 
 export default function WhatsNewModal({ entries, onClose }) {
+  useRegisterModal();
   const scrollRef = useRef(null);
   const [showScrollCue, setShowScrollCue] = useState(false);
 
@@ -52,6 +54,7 @@ export default function WhatsNewModal({ entries, onClose }) {
 
   return (
     <div
+      data-modal-root
       className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/30 backdrop-blur-[3px] animate-[fadeIn_0.2s_ease]"
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >

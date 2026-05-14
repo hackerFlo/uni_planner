@@ -4,16 +4,53 @@
 // This way every Watchtower deploy maps to exactly one version.
 // Versioning: X.Y — increment Y for regular updates, bump X (reset Y to 0) for big releases.
 // Add a new entry to CHANGELOG (newest first) on first push of a window; append to top entry otherwise.
-export const CURRENT_VERSION = '1.4';
+export const CURRENT_VERSION = '1.5';
 
 // icon: 'purple' | 'green' | 'amber' | 'blue' | 'rose'
 // Each feature needs: icon, name, desc, and a 24×24 SVG path string (stroke icons).
 export const CHANGELOG = [
   {
+    version: '1.5',
+    date: '2026-05-14',
+    title: 'Weekday & weekend recurrence',
+    features: [
+      {
+        icon: 'blue',
+        name: 'No stray icons behind open dialogs',
+        desc: 'Cards behind an open edit dialog, settings panel, or other modal no longer reveal their hover icons or tooltips when you move the mouse across them.',
+        svgPath: 'M5 13l4 4L19 7',
+      },
+      {
+        icon: 'blue',
+        name: 'Daily email icons now render in Gmail',
+        desc: 'The completed-task checkmark and the "Coming up" arrow now display correctly in Gmail (web and iOS). Already-completed tasks are also no longer listed in the "Coming up" section, so the email always reflects your actual state.',
+        svgPath: 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
+      },
+      {
+        icon: 'green',
+        name: 'Weekday and weekend repeat options',
+        desc: 'Tasks can now repeat "Every weekday (Mon–Fri)" or "Every weekend (Sat–Sun)" — handy for habits that follow your work schedule or leisure days.',
+        svgPath: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',
+      },
+      {
+        icon: 'rose',
+        name: 'Choose what to delete for recurring tasks',
+        desc: 'Deleting a recurring task now asks whether to remove just that one occurrence or all past and future instances — no more accidental cascade or stranded copies.',
+        svgPath: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16',
+      },
+    ],
+  },
+  {
     version: '1.4',
     date: '2026-05-08',
     title: 'Emoji & UI polish',
     features: [
+      {
+        icon: 'blue',
+        name: 'Daily summary counts cross-day completions',
+        desc: 'Tasks you complete today now appear in the "Completed today" email section even if they were assigned to a different day. Fixes a timezone-related window where some completions near midnight could be missed.',
+        svgPath: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
+      },
       {
         icon: 'purple',
         name: 'Full emoji set',
@@ -49,6 +86,18 @@ export const CHANGELOG = [
         name: 'New tasks land at the bottom',
         desc: 'Tasks created with the + button on a planner day now consistently appear at the bottom of that day\'s list.',
         svgPath: 'M19 14l-7 7m0 0l-7-7m7 7V3',
+      },
+      {
+        icon: 'blue',
+        name: 'Cleaner desktop edit dialog',
+        desc: 'The Mark complete, Unassign, and Delete buttons inside the edit dialog are now hidden on desktop — use the card\'s hover actions instead. Mobile keeps the in-form buttons.',
+        svgPath: 'M4 6h16M4 12h10M4 18h7',
+      },
+      {
+        icon: 'rose',
+        name: 'Signups disabled',
+        desc: 'New accounts can no longer be registered. Existing accounts continue to work as normal.',
+        svgPath: 'M12 15v2m0 0v.01M4.93 4.93l14.14 14.14M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
       },
       {
         icon: 'blue',

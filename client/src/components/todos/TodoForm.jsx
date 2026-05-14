@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import EmojiPicker from '../ui/EmojiPicker';
+import ConfirmPopover from '../ui/ConfirmPopover';
 import { useLists } from '../../context/ListsContext';
 import { loadEmojis, getLoadedEmojis } from '../../data/loadEmojis';
 import useIsMobile from '../../hooks/useIsMobile';
+import { useRegisterModal } from '../../context/ModalContext';
 
 function toIso(d) {
   const y = d.getFullYear();
@@ -74,6 +76,7 @@ function detectEmojiTrigger(value, cursorPos) {
 }
 
 export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate, onUpdate, onComplete, onDelete }) {
+  useRegisterModal();
   const isMobile = useIsMobile();
   const { lists } = useLists();
   const assignableDates = getAssignableDates(todo?.day_assigned ?? defaults.day_assigned);
@@ -84,7 +87,7 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
   const [listId, setListId] = useState(defaultListId);
   const [dayAssigned, setDayAssigned] = useState(todo?.day_assigned ?? defaults.day_assigned ?? '');
   const [recurrence, setRecurrence] = useState(
-    todo?.recurrence_interval_days != null ? String(todo.recurrence_interval_days) : ''
+    todo?.recurrence_pattern ?? (todo?.recurrence_interval_days != null ? String(todo.recurrence_interval_days) : '')
   );
   const initialApproxTime = todo?.approx_time ?? '';
   const [approxTime, setApproxTime] = useState(isPreset(initialApproxTime) ? initialApproxTime : 'custom');
@@ -162,7 +165,8 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
         list_id: effectiveListId,
         day_assigned: dayAssigned || null,
         approx_time: approxTime === 'custom' ? (customTime.trim() || null) : (approxTime || null),
-        recurrence_interval_days: recurrence === '' ? null : Number(recurrence),
+        recurrence_interval_days: (recurrence === '' || recurrence === 'weekdays' || recurrence === 'weekends') ? null : Number(recurrence),
+        recurrence_pattern: (recurrence === 'weekdays' || recurrence === 'weekends') ? recurrence : null,
       };
       if (mode === 'edit') {
         await onUpdate(todo.id, data);
@@ -179,6 +183,7 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
 
   return (
     <div
+      data-modal-root
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm px-4"
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
       onKeyDown={e => { if (e.key === 'Escape' && !emojiState) onClose(); }}
@@ -362,11 +367,13 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
                 <option value="5">Every 5 days</option>
                 <option value="6">Every 6 days</option>
                 <option value="7">Every week</option>
+                <option value="weekdays">Weekdays</option>
+                <option value="weekends">Weekends</option>
               </select>
             </div>
           </div>
 
-          {mode === 'edit' && (
+          {mode === 'edit' && isMobile && (
             <div className="flex gap-2">
               <button
                 type="button"
@@ -393,17 +400,37 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
                   ) : 'Unassign'}
                 </button>
               )}
-              <button
-                type="button"
-                onClick={() => { if (window.confirm('Delete this task?')) { onDelete(todo.id); onClose(); } }}
-                className="flex-1 py-3 text-sm font-medium rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition flex items-center justify-center"
-              >
-                {isMobile ? (
+              {(todo?.recurrence_parent_id != null || todo?.recurrence_interval_days != null || todo?.recurrence_pattern != null) ? (
+                <ConfirmPopover
+                  options={[
+                    { label: 'Delete this item', tone: 'danger' },
+                    { label: 'Delete all items', tone: 'danger' },
+                  ]}
+                  onSelect={label => {
+                    onDelete(todo.id, label === 'Delete all items' ? 'all' : 'single');
+                    onClose();
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="flex-1 py-3 text-sm font-medium rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition flex items-center justify-center"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </ConfirmPopover>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => { if (window.confirm('Delete this task?')) { onDelete(todo.id); onClose(); } }}
+                  className="flex-1 py-3 text-sm font-medium rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition flex items-center justify-center"
+                >
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
-                ) : 'Delete'}
-              </button>
+                </button>
+              )}
             </div>
           )}
 

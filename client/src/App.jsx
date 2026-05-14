@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ListsProvider } from './context/ListsContext';
+import { ModalProvider } from './context/ModalContext';
 import PlannerPage from './pages/PlannerPage';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -27,6 +28,7 @@ function PublicOnlyRoute({ children }) {
 export default function App() {
   return (
     <ErrorBoundary>
+      <ModalProvider>
       <AuthProvider>
         <ListsProvider>
           <BrowserRouter>
@@ -40,6 +42,7 @@ export default function App() {
           </BrowserRouter>
         </ListsProvider>
       </AuthProvider>
+      </ModalProvider>
     </ErrorBoundary>
   );
 }

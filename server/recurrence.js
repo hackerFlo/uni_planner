@@ -39,31 +39,27 @@ function getWindowBounds(userTz) {
   return { windowStart, windowEnd };
 }
 
+function isPatternMatch(isoDate, pattern) {
+  const [y, m, d] = isoDate.split('-').map(Number);
+  const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay(); // 0=Sun, 6=Sat
+  if (pattern === 'weekdays') return dow >= 1 && dow <= 5;
+  if (pattern === 'weekends') return dow === 0 || dow === 6;
+  return false;
+}
+
 function materializeForTemplate(templateId, userTz) {
   const tz = userTz || 'UTC';
   const template = db.prepare(
     'SELECT * FROM todos WHERE id = ? AND recurrence_parent_id IS NULL'
   ).get(templateId);
 
-  if (!template || !template.recurrence_interval_days || !template.day_assigned) return 0;
+  if (!template || !template.day_assigned) return 0;
 
   const interval = template.recurrence_interval_days;
+  const pattern = template.recurrence_pattern;
+  if (interval == null && pattern == null) return 0;
+
   const { windowStart, windowEnd } = getWindowBounds(tz);
-
-  // Fast-forward: skip past occurrences before the window
-  const [ty, tm, td] = template.day_assigned.split('-').map(Number);
-  const [wy, wm, wd] = windowStart.split('-').map(Number);
-  const diffMs = Date.UTC(wy, wm - 1, wd) - Date.UTC(ty, tm - 1, td);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  let current;
-  if (diffDays <= 0) {
-    current = addDays(template.day_assigned, interval);
-  } else {
-    const steps = Math.floor(diffDays / interval);
-    current = addDays(template.day_assigned, steps * interval);
-    if (current < windowStart) current = addDays(current, interval);
-  }
 
   const existsStmt = db.prepare(
     'SELECT id FROM todos WHERE recurrence_parent_id = ? AND day_assigned = ?'
@@ -74,20 +70,46 @@ function materializeForTemplate(templateId, userTz) {
   );
 
   let count = 0;
-  while (current <= windowEnd) {
-    if (current !== template.day_assigned && !existsStmt.get(templateId, current)) {
-      insertStmt.run(
-        template.user_id,
-        template.list_id,
-        template.title,
-        template.description,
-        current,
-        template.approx_time,
-        templateId,
-      );
-      count++;
+
+  if (pattern != null) {
+    // Iterate every day in the window and insert matching days
+    let current = windowStart > template.day_assigned ? windowStart : addDays(template.day_assigned, 1);
+    while (current <= windowEnd) {
+      if (isPatternMatch(current, pattern) && !existsStmt.get(templateId, current)) {
+        insertStmt.run(
+          template.user_id, template.list_id, template.title,
+          template.description, current, template.approx_time, templateId,
+        );
+        count++;
+      }
+      current = addDays(current, 1);
     }
-    current = addDays(current, interval);
+  } else {
+    // Interval-based: fast-forward to the window
+    const [ty, tm, td] = template.day_assigned.split('-').map(Number);
+    const [wy, wm, wd] = windowStart.split('-').map(Number);
+    const diffMs = Date.UTC(wy, wm - 1, wd) - Date.UTC(ty, tm - 1, td);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    let current;
+    if (diffDays <= 0) {
+      current = addDays(template.day_assigned, interval);
+    } else {
+      const steps = Math.floor(diffDays / interval);
+      current = addDays(template.day_assigned, steps * interval);
+      if (current < windowStart) current = addDays(current, interval);
+    }
+
+    while (current <= windowEnd) {
+      if (current !== template.day_assigned && !existsStmt.get(templateId, current)) {
+        insertStmt.run(
+          template.user_id, template.list_id, template.title,
+          template.description, current, template.approx_time, templateId,
+        );
+        count++;
+      }
+      current = addDays(current, interval);
+    }
   }
 
   return count;

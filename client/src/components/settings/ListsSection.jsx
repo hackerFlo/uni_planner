@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { useLists } from '../../context/ListsContext';
+import { useRegisterModal } from '../../context/ModalContext';
 import { LIST_PALETTE, PALETTE_KEYS } from '../../constants/listPalette';
 
 function ColorDot({ color, size = 'md' }) {
@@ -24,10 +25,11 @@ function ColorPicker({ value, onChange, onClose }) {
 }
 
 function DeleteDialog({ list, otherLists, onConfirm, onCancel }) {
+  useRegisterModal();
   const [moveTo, setMoveTo] = useState(otherLists[0]?.id ?? '');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm px-4">
+    <div data-modal-root className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm px-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-5">
         <h3 className="text-sm font-semibold text-zinc-800 mb-2">Delete "{list.name}"?</h3>
         <p className="text-xs text-zinc-500 mb-4">

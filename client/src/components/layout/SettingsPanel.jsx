@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useRegisterModal } from '../../context/ModalContext';
 import { useNavigate } from 'react-router-dom';
 import { TimePicker } from '../ui/TimePicker';
 import ListsSection from '../settings/ListsSection';
 
 export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
+  useRegisterModal();
   const { user, updateAccount, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -165,6 +167,7 @@ export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
 
   return (
     <div
+      data-modal-root
       className="fixed inset-0 z-40 flex justify-end"
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >

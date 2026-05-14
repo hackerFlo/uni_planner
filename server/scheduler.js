@@ -3,6 +3,7 @@ const db = require('./db');
 const { decryptEmail } = require('./crypto');
 const { sendDailySummary } = require('./mailer');
 const { materializeForTemplate } = require('./recurrence');
+const { localDayBoundsUtc } = require('./time');
 
 function startScheduler() {
   cron.schedule('* * * * *', async () => {
@@ -76,12 +77,13 @@ function startScheduler() {
         const toEmail = decryptEmail(user.notify_email_enc);
         const tz = user.notify_tz || 'UTC';
 
+        const { startIso, endIso } = localDayBoundsUtc(today, tz);
         const completedTodos = db.prepare(
           `SELECT t.title, t.approx_time, l.name AS list_name, l.color AS list_color
            FROM todos t JOIN lists l ON l.id = t.list_id
            WHERE t.user_id = ? AND t.completed = 1
              AND t.completed_at >= ? AND t.completed_at < ?`
-        ).all(user.id, `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`);
+        ).all(user.id, startIso, endIso);
 
         const uncompletedTodos = db.prepare(
           `SELECT t.title, t.approx_time, l.name AS list_name, l.color AS list_color
@@ -92,7 +94,7 @@ function startScheduler() {
         const tomorrowTodos = db.prepare(
           `SELECT t.title, t.approx_time, l.name AS list_name, l.color AS list_color
            FROM todos t JOIN lists l ON l.id = t.list_id
-           WHERE t.user_id = ? AND t.day_assigned = ? AND t.archived = 0
+           WHERE t.user_id = ? AND t.day_assigned = ? AND t.completed = 0 AND t.archived = 0
            ORDER BY t.planner_order ASC`
         ).all(user.id, tomorrow);
 

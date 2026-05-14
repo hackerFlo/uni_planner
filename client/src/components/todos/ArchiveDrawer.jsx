@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../api/client';
 import { useLists } from '../../context/ListsContext';
+import { useRegisterModal } from '../../context/ModalContext';
 import { LIST_PALETTE } from '../../constants/listPalette';
 
 export default function ArchiveDrawer({ onClose, onRestore, onDelete }) {
+  useRegisterModal();
   const [todos, setTodos] = useState([]);
   const [loading, setLoading] = useState(true);
   const { getList } = useLists();
@@ -26,6 +28,7 @@ export default function ArchiveDrawer({ onClose, onRestore, onDelete }) {
 
   return (
     <div
+      data-modal-root
       className="fixed inset-0 z-40 flex justify-end"
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >

@@ -38,9 +38,16 @@ function validateRecurrenceInterval(v) {
   return Number.isInteger(n) && n >= 1 && n <= 7 ? n : false;
 }
 
+const RECURRENCE_PATTERNS = ['weekdays', 'weekends'];
+
+function validateRecurrencePattern(v) {
+  if (v === null || v === undefined || v === '') return null;
+  return RECURRENCE_PATTERNS.includes(v) ? v : false;
+}
+
 function sanitizeDayNote(str) {
   if (typeof str !== 'string') return '';
   return str.trim().slice(0, 200);
 }
 
-module.exports = { validateEmail, validateIdentifier, sanitizeTitle, sanitizeDescription, validateDayAssigned, validateRecurrenceInterval, sanitizeDayNote };
+module.exports = { validateEmail, validateIdentifier, sanitizeTitle, sanitizeDescription, validateDayAssigned, validateRecurrenceInterval, validateRecurrencePattern, sanitizeDayNote };
