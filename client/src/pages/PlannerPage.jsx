@@ -15,6 +15,8 @@ import WhatsNewModal from '../components/layout/WhatsNewModal';
 import Tooltip from '../components/ui/Tooltip';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const SIDEBAR_MIN_PX = 200;
+const SIDEBAR_MAX_PX = 520;
 
 function localArrayMove(arr, from, to) {
   const result = [...arr];
@@ -28,6 +30,16 @@ function getRealId(draggableId) {
     return Number(draggableId.slice('sidebar-'.length));
   }
   return Number(draggableId);
+}
+
+function sortSidebar(items) {
+  const unassigned = items
+    .filter(t => !t.day_assigned)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const assigned = items
+    .filter(t => t.day_assigned)
+    .sort((a, b) => a.day_assigned.localeCompare(b.day_assigned));
+  return [...unassigned, ...assigned];
 }
 
 export default function PlannerPage() {
@@ -77,7 +89,7 @@ export default function PlannerPage() {
       rafId = requestAnimationFrame(() => {
         rafId = null;
         const delta = x - resizeStartRef.current.x;
-        setSidebarWidth(Math.max(200, Math.min(520, resizeStartRef.current.width + delta)));
+        setSidebarWidth(Math.max(SIDEBAR_MIN_PX, Math.min(SIDEBAR_MAX_PX, resizeStartRef.current.width + delta)));
       });
     }
     function onMouseUp() {
@@ -115,7 +127,7 @@ export default function PlannerPage() {
 
   function handleDragStart({ draggableId }) {
     const realId = getRealId(draggableId);
-    setActiveTodo(todos.find(t => t.id === realId) ?? null);
+    setActiveTodo(todoIdMap.get(realId) ?? null);
   }
 
   function handleDragEnd({ source, destination, draggableId }) {
@@ -131,7 +143,7 @@ export default function PlannerPage() {
     const isDstColumn = DATE_RE.test(dstId);
     if (!isDstColumn) return;
 
-    const activeT = todos.find(t => t.id === realId);
+    const activeT = todoIdMap.get(realId);
 
     if (DATE_RE.test(srcId) && srcId === dstId) {
       const dayTodos = todos
@@ -152,18 +164,11 @@ export default function PlannerPage() {
     assignDay(realId, dstId).then(() => reorderDay(newOrder));
   }
 
+  const todoIdMap = useMemo(() => new Map(todos.map(t => [t.id, t])), [todos]);
+
   const plannerTodos = useMemo(() => todos.filter(t => t.day_assigned), [todos]);
 
   const sidebarByList = useMemo(() => {
-    function sortSidebar(items) {
-      const unassigned = items
-        .filter(t => !t.day_assigned)
-        .sort((a, b) => b.created_at.localeCompare(a.created_at));
-      const assigned = items
-        .filter(t => t.day_assigned)
-        .sort((a, b) => a.day_assigned.localeCompare(b.day_assigned));
-      return [...unassigned, ...assigned];
-    }
     const result = {};
     for (const list of lists) {
       result[list.id] = sortSidebar(todos.filter(t => t.list_id === list.id));

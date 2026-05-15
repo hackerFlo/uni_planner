@@ -1,10 +1,3 @@
-const DAYS = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
-
-function validateEmail(str) {
-  return typeof str === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str) && str.length <= 254;
-}
-
-// Accepts a plain username OR a valid email — no whitespace, 1–100 chars.
 function validateIdentifier(str) {
   if (typeof str !== 'string') return false;
   const s = str.trim();
@@ -50,4 +43,4 @@ function sanitizeDayNote(str) {
   return str.trim().slice(0, 200);
 }
 
-module.exports = { validateEmail, validateIdentifier, sanitizeTitle, sanitizeDescription, validateDayAssigned, validateRecurrenceInterval, validateRecurrencePattern, sanitizeDayNote };
+module.exports = { validateIdentifier, sanitizeTitle, sanitizeDescription, validateDayAssigned, validateRecurrenceInterval, validateRecurrencePattern, sanitizeDayNote };

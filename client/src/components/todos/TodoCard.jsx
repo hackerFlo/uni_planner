@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { Draggable } from '@hello-pangea/dnd';
 import LinkText from '../ui/LinkText';
 import Tooltip, { recurrenceLabel } from '../ui/Tooltip';
@@ -7,6 +7,8 @@ import { useLists } from '../../context/ListsContext';
 import { LIST_PALETTE } from '../../constants/listPalette';
 import useIsMobile from '../../hooks/useIsMobile';
 import { useAnyModalOpen } from '../../context/ModalContext';
+
+const COMPLETION_DELAY_MS = 500;
 
 function isRecurring(todo) {
   return todo.recurrence_parent_id != null || todo.recurrence_interval_days != null || todo.recurrence_pattern != null;
@@ -22,9 +24,10 @@ function dayLabel(iso) {
   return DAY_NAMES[new Date(y, m - 1, d).getDay()];
 }
 
-function TodoCardBody({ provided, snapshot, todo, isAssigned, checked, onComplete, onEdit, onDelete }) {
+const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAssigned, checked, onComplete, onEdit, onDelete }) {
   const isMobile = useIsMobile();
   const anyModalOpen = useAnyModalOpen();
+  const hideOnHover = anyModalOpen ? '' : 'group-hover:hidden';
   const { getList } = useLists();
   const list = getList(todo.list_id);
   const palette = LIST_PALETTE[list?.color] ?? LIST_PALETTE.slate;
@@ -158,23 +161,25 @@ function TodoCardBody({ provided, snapshot, todo, isAssigned, checked, onComplet
           <div className="flex-1 min-w-0">
             <div className="flex items-start gap-1.5 min-w-0">
               <LinkText text={todo.title} className={`text-sm font-medium break-words flex-1 min-w-0 ${isAssigned ? 'text-zinc-400' : 'text-zinc-800'}`} />
-              {todo.approx_time && (
-                <span className="flex-shrink-0 text-[9px] font-medium text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded-full">
-                  {fmtTime(todo.approx_time)}
-                </span>
-              )}
-              {(todo.recurrence_interval_days != null || todo.recurrence_pattern != null) && (
-                <Tooltip text={recurrenceLabel(todo.recurrence_interval_days, todo.recurrence_pattern)}>
-                  <svg className="flex-shrink-0 w-3 h-3 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
-                  </svg>
-                </Tooltip>
-              )}
-              {isAssigned && (
-                <span className="flex-shrink-0 text-[9px] font-medium text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded-full">
-                  {dayLabel(todo.day_assigned)}
-                </span>
-              )}
+              <div className={`flex items-center gap-1.5 flex-shrink-0 ${hideOnHover}`}>
+                {(todo.recurrence_interval_days != null || todo.recurrence_pattern != null) && (
+                  <Tooltip text={recurrenceLabel(todo.recurrence_interval_days, todo.recurrence_pattern)}>
+                    <svg className="w-3 h-3 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+                    </svg>
+                  </Tooltip>
+                )}
+                {todo.approx_time && (
+                  <span className="text-[9px] font-medium text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded-full">
+                    {fmtTime(todo.approx_time)}
+                  </span>
+                )}
+                {isAssigned && (
+                  <span className="text-[9px] font-medium text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded-full">
+                    {dayLabel(todo.day_assigned)}
+                  </span>
+                )}
+              </div>
             </div>
             {todo.description && (
               <LinkText text={todo.description} className="text-xs text-zinc-400 mt-0.5 line-clamp-2 block" />
@@ -232,7 +237,7 @@ function TodoCardBody({ provided, snapshot, todo, isAssigned, checked, onComplet
       )}
     </div>
   );
-}
+});
 
 export default function TodoCard({ todo, isAssigned, index, onComplete, onEdit, onDelete }) {
   const [checked, setChecked] = useState(false);
@@ -241,7 +246,7 @@ export default function TodoCard({ todo, isAssigned, index, onComplete, onEdit, 
     e.stopPropagation();
     if (checked) return;
     setChecked(true);
-    setTimeout(() => onComplete(todo), 500);
+    setTimeout(() => onComplete(todo), COMPLETION_DELAY_MS);
   }
 
   return (

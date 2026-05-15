@@ -7,7 +7,8 @@ async function request(path, options = {}) {
       ...options,
       body: options.body ? JSON.stringify(options.body) : undefined,
     });
-  } catch {
+  } catch (err) {
+    console.warn('[api] fetch failed:', err.message);
     throw new Error('Cannot connect to server. Make sure the backend is running.');
   }
 

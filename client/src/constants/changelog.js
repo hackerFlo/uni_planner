@@ -4,11 +4,42 @@
 // This way every Watchtower deploy maps to exactly one version.
 // Versioning: X.Y — increment Y for regular updates, bump X (reset Y to 0) for big releases.
 // Add a new entry to CHANGELOG (newest first) on first push of a window; append to top entry otherwise.
-export const CURRENT_VERSION = '1.5';
+export const CURRENT_VERSION = '1.6';
 
 // icon: 'purple' | 'green' | 'amber' | 'blue' | 'rose'
 // Each feature needs: icon, name, desc, and a 24×24 SVG path string (stroke icons).
 export const CHANGELOG = [
+  {
+    version: '1.6',
+    date: '2026-05-15',
+    title: 'Tag alignment polish',
+    features: [
+      {
+        icon: 'blue',
+        name: 'Consistent tag order',
+        desc: 'Tags on task rows now always appear in the same order: recurrence icon, then time, then weekday — regardless of which combination is present.',
+        svgPath: 'M3 6h18M3 12h18M3 18h18',
+      },
+      {
+        icon: 'blue',
+        name: 'Tags aligned across task rows',
+        desc: 'The time, recurrence, and day chips on task cards are now vertically centred relative to each other and pinned to the right edge, so they line up consistently across all rows regardless of content.',
+        svgPath: 'M4 6h16M4 12h16M4 18h16',
+      },
+      {
+        icon: 'rose',
+        name: 'Security improvements',
+        desc: 'Several server-side hardening measures were applied to improve input validation, error handling, and request processing.',
+        svgPath: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
+      },
+      {
+        icon: 'green',
+        name: 'Performance & code quality improvements',
+        desc: 'Database queries, server scheduling, and React rendering have all been tuned for lower overhead. Error messages from failed network requests are now surfaced as in-app notifications rather than silently dropped.',
+        svgPath: 'M13 10V3L4 14h7v7l9-11h-7z',
+      },
+    ],
+  },
   {
     version: '1.5',
     date: '2026-05-14',

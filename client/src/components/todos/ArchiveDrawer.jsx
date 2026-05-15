@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../../api/client';
 import { useLists } from '../../context/ListsContext';
 import { useRegisterModal } from '../../context/ModalContext';
+import { useToast } from '../../context/ToastContext';
 import { LIST_PALETTE } from '../../constants/listPalette';
 
 export default function ArchiveDrawer({ onClose, onRestore, onDelete }) {
@@ -9,12 +10,17 @@ export default function ArchiveDrawer({ onClose, onRestore, onDelete }) {
   const [todos, setTodos] = useState([]);
   const [loading, setLoading] = useState(true);
   const { getList } = useLists();
+  const toast = useToast();
 
   useEffect(() => {
     api.get('/api/todos/archived')
       .then(({ todos }) => setTodos(todos))
+      .catch(err => {
+        console.warn('[archive] failed to load:', err.message);
+        toast?.error('Could not load archive. Please try again.');
+      })
       .finally(() => setLoading(false));
-  }, []);
+  }, [toast]);
 
   async function handleRestore(id) {
     await onRestore(id);

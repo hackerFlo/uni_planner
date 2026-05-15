@@ -61,9 +61,11 @@ function materializeForTemplate(templateId, userTz) {
 
   const { windowStart, windowEnd } = getWindowBounds(tz);
 
-  const existsStmt = db.prepare(
-    'SELECT id FROM todos WHERE recurrence_parent_id = ? AND day_assigned = ?'
-  );
+  const existingRows = db.prepare(
+    'SELECT day_assigned FROM todos WHERE recurrence_parent_id = ?'
+  ).all(templateId);
+  const existingDays = new Set(existingRows.map(r => r.day_assigned));
+
   const insertStmt = db.prepare(
     `INSERT INTO todos (user_id, list_id, title, description, day_assigned, approx_time, recurrence_parent_id, completed, archived)
      VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0)`
@@ -72,10 +74,9 @@ function materializeForTemplate(templateId, userTz) {
   let count = 0;
 
   if (pattern != null) {
-    // Iterate every day in the window and insert matching days
     let current = windowStart > template.day_assigned ? windowStart : addDays(template.day_assigned, 1);
     while (current <= windowEnd) {
-      if (isPatternMatch(current, pattern) && !existsStmt.get(templateId, current)) {
+      if (isPatternMatch(current, pattern) && !existingDays.has(current)) {
         insertStmt.run(
           template.user_id, template.list_id, template.title,
           template.description, current, template.approx_time, templateId,
@@ -101,7 +102,7 @@ function materializeForTemplate(templateId, userTz) {
     }
 
     while (current <= windowEnd) {
-      if (current !== template.day_assigned && !existsStmt.get(templateId, current)) {
+      if (current !== template.day_assigned && !existingDays.has(current)) {
         insertStmt.run(
           template.user_id, template.list_id, template.title,
           template.description, current, template.approx_time, templateId,

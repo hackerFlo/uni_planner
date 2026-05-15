@@ -1,22 +1,26 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { useAuth } from './AuthContext';
+import { useToast } from './ToastContext';
 
 const ListsContext = createContext(null);
 
 export function ListsProvider({ children }) {
   const { user } = useAuth();
   const [lists, setLists] = useState([]);
+  const toast = useToast();
 
   const fetchLists = useCallback(async () => {
     if (!user) { setLists([]); return; }
     try {
       const { lists: fetched } = await api.get('/api/lists');
       setLists(fetched);
-    } catch {
+    } catch (err) {
+      console.warn('[lists] failed to load:', err.message);
+      toast?.error('Could not load lists. Refresh to retry.');
       setLists([]);
     }
-  }, [user]);
+  }, [user, toast]);
 
   useEffect(() => { fetchLists(); }, [fetchLists]);
 

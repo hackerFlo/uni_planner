@@ -1,11 +1,13 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { api } from '../api/client';
+import { useToast } from './ToastContext';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const toast = useToast();
 
   useEffect(() => {
     api.get('/api/auth/me')
@@ -21,7 +23,10 @@ export function AuthProvider({ children }) {
   }
 
   async function logout() {
-    await api.post('/api/auth/logout').catch(() => {});
+    await api.post('/api/auth/logout').catch((err) => {
+      console.warn('[auth] logout request failed:', err.message);
+      toast?.error('Logout failed. Please try again.');
+    });
     setUser(null);
   }
 

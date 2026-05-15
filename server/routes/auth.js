@@ -3,7 +3,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const db = require('../db');
 const requireAuth = require('../middleware/auth');
-const { validateEmail, validateIdentifier } = require('../middleware/validate');
+const { validateIdentifier } = require('../middleware/validate');
 const { encryptEmail, decryptEmail } = require('../crypto');
 const { sendDailySummary } = require('../mailer');
 const { localDayBoundsUtc } = require('../time');
@@ -132,7 +132,7 @@ router.get('/notification-settings', requireAuth, (req, res) => {
   ).get(req.user.id);
   let notify_email = '';
   if (user.notify_email_enc) {
-    try { notify_email = decryptEmail(user.notify_email_enc); } catch {}
+    try { notify_email = decryptEmail(user.notify_email_enc); } catch (err) { console.warn('[auth] Failed to decrypt notification email for user', req.user.id, err.message); }
   }
   res.json({
     notify_enabled: !!user.notify_enabled,
@@ -150,7 +150,7 @@ router.patch('/notification-settings', requireAuth, (req, res) => {
     updates.notify_enabled = notify_enabled ? 1 : 0;
   }
   if (notify_time !== undefined) {
-    if (!/^\d{2}:\d{2}$/.test(notify_time)) {
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(notify_time)) {
       return res.status(400).json({ error: 'Invalid time format, expected HH:MM' });
     }
     updates.notify_time = notify_time;
@@ -245,7 +245,7 @@ router.post('/test-email', requireAuth, async (req, res) => {
     res.json({ ok: true, sentTo: toEmail });
   } catch (err) {
     console.error('[test-email] Send failed:', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Failed to send test email. Check server email configuration.' });
   }
 });
 

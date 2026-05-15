@@ -11,6 +11,15 @@ let LOGO_PNG = null;
 try { LOGO_PNG = fs.readFileSync(LOGO_PNG_PATH); }
 catch (err) { console.warn('[mailer] logo not found, emails will be sent without logo:', err.message); }
 
+const transporter = (GMAIL_USER && GMAIL_APP_PASSWORD)
+  ? nodemailer.createTransport({
+      service: 'gmail',
+      pool: true,
+      maxConnections: 3,
+      auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
+    })
+  : null;
+
 const PALETTE = {
   indigo:  { color: '#6366f1', bg: '#eef2ff' },
   emerald: { color: '#059669', bg: '#ecfdf5' },
@@ -376,13 +385,9 @@ function buildHtml({ completedTodos, uncompletedTodos, tomorrowTodos, dateStr, t
 }
 
 async function sendDailySummary(toEmail, { completedTodos, uncompletedTodos, tomorrowTodos, dateStr, tomorrowStr, userName, hour }) {
-  if (!GMAIL_USER || !GMAIL_APP_PASSWORD) {
+  if (!transporter) {
     throw new Error('GMAIL_USER and GMAIL_APP_PASSWORD env vars are required');
   }
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
-  });
   await transporter.sendMail({
     from: `"Uni Planner" <${GMAIL_USER}>`,
     to: toEmail,

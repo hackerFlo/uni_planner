@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import EmojiPicker from '../ui/EmojiPicker';
 import ConfirmPopover from '../ui/ConfirmPopover';
 import { useLists } from '../../context/ListsContext';
@@ -75,11 +75,76 @@ function detectEmojiTrigger(value, cursorPos) {
   return { query, triggerStart: colonIdx };
 }
 
+function MobileActionButtons({ todo, dayAssigned, onComplete, onUpdate, onDelete, onClose }) {
+  const isRecurring =
+    todo?.recurrence_parent_id != null ||
+    todo?.recurrence_interval_days != null ||
+    todo?.recurrence_pattern != null;
+
+  return (
+    <div className="flex gap-2">
+      <button
+        type="button"
+        onClick={() => { onComplete(todo); onClose(); }}
+        className="flex-1 py-3 text-sm font-medium rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition flex items-center justify-center"
+      >
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+        </svg>
+      </button>
+      {dayAssigned && (
+        <button
+          type="button"
+          onClick={() => { onUpdate(todo.id, { day_assigned: null }); onClose(); }}
+          className="flex-1 py-3 text-sm font-medium rounded-lg bg-zinc-100 text-zinc-700 hover:bg-zinc-200 transition flex items-center justify-center"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M10 14l4 4m0-4l-4 4" />
+          </svg>
+        </button>
+      )}
+      {isRecurring ? (
+        <ConfirmPopover
+          options={[
+            { label: 'Delete this item', tone: 'danger' },
+            { label: 'Delete all items', tone: 'danger' },
+          ]}
+          onSelect={label => {
+            onDelete(todo.id, label === 'Delete all items' ? 'all' : 'single');
+            onClose();
+          }}
+        >
+          <button
+            type="button"
+            className="flex-1 py-3 text-sm font-medium rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition flex items-center justify-center"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
+        </ConfirmPopover>
+      ) : (
+        <button
+          type="button"
+          onClick={() => { if (window.confirm('Delete this task?')) { onDelete(todo.id); onClose(); } }}
+          className="flex-1 py-3 text-sm font-medium rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition flex items-center justify-center"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate, onUpdate, onComplete, onDelete }) {
   useRegisterModal();
   const isMobile = useIsMobile();
   const { lists } = useLists();
-  const assignableDates = getAssignableDates(todo?.day_assigned ?? defaults.day_assigned);
+  const extraDate = todo?.day_assigned ?? defaults.day_assigned;
+  const assignableDates = useMemo(() => getAssignableDates(extraDate), [extraDate]);
 
   const defaultListId = todo?.list_id ?? defaults.list_id ?? lists[0]?.id ?? null;
   const [title, setTitle] = useState(todo?.title ?? '');
@@ -296,16 +361,14 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
                 className="w-full px-3.5 py-2.5 text-sm bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition capitalize"
               >
                 <option value="">None</option>
-                {assignableDates.map(({ value, label, isNextWeek }, idx) => {
+                {assignableDates.flatMap(({ value, label, isNextWeek }, idx) => {
                   const prevIsThisWeek = idx > 0 && !assignableDates[idx - 1].isNextWeek;
-                  return (
-                    <>
-                      {isNextWeek && prevIsThisWeek && (
-                        <option key="sep" disabled>── Next Week ──</option>
-                      )}
-                      <option key={value} value={value}>{label}</option>
-                    </>
-                  );
+                  const items = [];
+                  if (isNextWeek && prevIsThisWeek) {
+                    items.push(<option key="sep" disabled>── Next Week ──</option>);
+                  }
+                  items.push(<option key={value} value={value}>{label}</option>);
+                  return items;
                 })}
               </select>
             </div>
@@ -374,64 +437,14 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
           </div>
 
           {mode === 'edit' && isMobile && (
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => { onComplete(todo); onClose(); }}
-                className="flex-1 py-3 text-sm font-medium rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition flex items-center justify-center"
-              >
-                {isMobile ? (
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                ) : 'Mark complete'}
-              </button>
-              {dayAssigned && (
-                <button
-                  type="button"
-                  onClick={() => { onUpdate(todo.id, { day_assigned: null }); onClose(); }}
-                  className="flex-1 py-3 text-sm font-medium rounded-lg bg-zinc-100 text-zinc-700 hover:bg-zinc-200 transition flex items-center justify-center"
-                >
-                  {isMobile ? (
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M10 14l4 4m0-4l-4 4" />
-                    </svg>
-                  ) : 'Unassign'}
-                </button>
-              )}
-              {(todo?.recurrence_parent_id != null || todo?.recurrence_interval_days != null || todo?.recurrence_pattern != null) ? (
-                <ConfirmPopover
-                  options={[
-                    { label: 'Delete this item', tone: 'danger' },
-                    { label: 'Delete all items', tone: 'danger' },
-                  ]}
-                  onSelect={label => {
-                    onDelete(todo.id, label === 'Delete all items' ? 'all' : 'single');
-                    onClose();
-                  }}
-                >
-                  <button
-                    type="button"
-                    className="flex-1 py-3 text-sm font-medium rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition flex items-center justify-center"
-                  >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
-                </ConfirmPopover>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => { if (window.confirm('Delete this task?')) { onDelete(todo.id); onClose(); } }}
-                  className="flex-1 py-3 text-sm font-medium rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition flex items-center justify-center"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </button>
-              )}
-            </div>
+            <MobileActionButtons
+              todo={todo}
+              dayAssigned={dayAssigned}
+              onComplete={onComplete}
+              onUpdate={onUpdate}
+              onDelete={onDelete}
+              onClose={onClose}
+            />
           )}
 
           <div className="flex gap-2 pt-1">

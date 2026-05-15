@@ -29,6 +29,145 @@ function validateUserOwnsList(userId, listId) {
   return db.prepare('SELECT id FROM lists WHERE id = ? AND user_id = ?').get(n, userId) ? n : null;
 }
 
+// Parses and validates PATCH body fields. Returns { error } or update buckets.
+function parseTodoUpdates(body, existing, userId) {
+  const seriesUpdates = {};
+  const instanceUpdates = {};
+
+  if (body.title !== undefined) {
+    const t = sanitizeTitle(body.title);
+    if (!t) return { error: 'Title is required (max 200 chars)' };
+    seriesUpdates.title = t;
+  }
+
+  if (body.description !== undefined) {
+    const d = sanitizeDescription(body.description);
+    if (d === null) return { error: 'Description too long' };
+    seriesUpdates.description = d;
+  }
+
+  if (body.list_id !== undefined) {
+    const lid = validateUserOwnsList(userId, body.list_id);
+    if (!lid) return { error: 'Invalid list_id' };
+    seriesUpdates.list_id = lid;
+  }
+
+  if ('approx_time' in body) {
+    seriesUpdates.approx_time = body.approx_time ? String(body.approx_time).trim().slice(0, 50) || null : null;
+  }
+
+  if (body.completed !== undefined) {
+    instanceUpdates.completed = body.completed ? 1 : 0;
+    if (instanceUpdates.completed === 1) {
+      instanceUpdates.archived = 1;
+      instanceUpdates.completed_at = NOW();
+    }
+  }
+
+  if (body.archived !== undefined) {
+    instanceUpdates.archived = body.archived ? 1 : 0;
+    if (instanceUpdates.archived === 0) instanceUpdates.completed = 0;
+  }
+
+  if (body.planner_order !== undefined) {
+    const po = Number(body.planner_order);
+    if (!Number.isInteger(po)) return { error: 'Invalid planner_order' };
+    instanceUpdates.planner_order = po;
+  }
+
+  if ('day_assigned' in body) {
+    const d = validateDayAssigned(body.day_assigned);
+    if (d === false) return { error: 'Invalid day_assigned value' };
+    instanceUpdates.day_assigned = d;
+  }
+
+  const hasRecurrenceChange = 'recurrence_interval_days' in body || 'recurrence_pattern' in body;
+  let recurrenceInterval = null;
+  let recurrencePattern = null;
+
+  if (hasRecurrenceChange) {
+    recurrenceInterval = validateRecurrenceInterval(body.recurrence_interval_days);
+    if (recurrenceInterval === false) return { error: 'recurrence_interval_days must be 1-7 or null' };
+    recurrencePattern = validateRecurrencePattern(body.recurrence_pattern);
+    if (recurrencePattern === false) return { error: 'recurrence_pattern must be weekdays, weekends, or null' };
+    if (recurrenceInterval != null && recurrencePattern != null) {
+      return { error: 'Cannot set both recurrence_interval_days and recurrence_pattern' };
+    }
+  }
+
+  const totalChanges =
+    Object.keys(instanceUpdates).length + Object.keys(seriesUpdates).length + (hasRecurrenceChange ? 1 : 0);
+  if (totalChanges === 0) return { error: 'No valid fields to update' };
+
+  return { seriesUpdates, instanceUpdates, hasRecurrenceChange, recurrenceInterval, recurrencePattern };
+}
+
+// Applies recurrence changes inside an open transaction. Also returns IDs detached from old series.
+function applyRecurrenceChange(id, existing, templateId, isChildEdit, recurrenceInterval, recurrencePattern, isNewRecurring, now, userId) {
+  const userRow = db.prepare('SELECT notify_tz FROM users WHERE id = ?').get(userId);
+  const userTz = userRow?.notify_tz || 'UTC';
+  const todayIso = new Intl.DateTimeFormat('en-CA', {
+    timeZone: userTz, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+
+  let willDetachIds = [];
+
+  if (isChildEdit) {
+    const childDate = existing.day_assigned;
+    const earlierSiblings = db.prepare(
+      'SELECT id FROM todos WHERE user_id = ? AND recurrence_parent_id = ? AND day_assigned IS NOT NULL AND day_assigned < ?'
+    ).all(userId, templateId, childDate);
+    willDetachIds = earlierSiblings.map(r => r.id);
+    const oldTemplRow = db.prepare('SELECT day_assigned FROM todos WHERE id = ?').get(templateId);
+    if (oldTemplRow && (!oldTemplRow.day_assigned || oldTemplRow.day_assigned < childDate)) {
+      willDetachIds.push(templateId);
+    }
+
+    db.prepare(
+      `UPDATE todos SET recurrence_parent_id = NULL, updated_at = ?
+       WHERE user_id = ? AND recurrence_parent_id = ?
+         AND day_assigned IS NOT NULL AND day_assigned < ?`
+    ).run(now, userId, templateId, childDate);
+
+    if (willDetachIds.includes(templateId)) {
+      db.prepare(
+        `UPDATE todos SET recurrence_interval_days = NULL, recurrence_pattern = NULL, updated_at = ? WHERE id = ? AND user_id = ?`
+      ).run(now, templateId, userId);
+    }
+
+    db.prepare(
+      `DELETE FROM todos WHERE user_id = ? AND recurrence_parent_id = ?
+       AND completed = 0 AND archived = 0 AND day_assigned >= ? AND id != ?`
+    ).run(userId, templateId, childDate, id);
+
+    if (isNewRecurring) {
+      db.prepare(
+        `UPDATE todos SET recurrence_parent_id = NULL, recurrence_interval_days = ?, recurrence_pattern = ?, updated_at = ?
+         WHERE id = ? AND user_id = ?`
+      ).run(recurrenceInterval, recurrencePattern, now, id, userId);
+      materializeForTemplate(id, userTz);
+    } else {
+      db.prepare(
+        `UPDATE todos SET recurrence_parent_id = NULL, recurrence_interval_days = NULL, recurrence_pattern = NULL, updated_at = ?
+         WHERE id = ? AND user_id = ?`
+      ).run(now, id, userId);
+    }
+  } else {
+    db.prepare(
+      `DELETE FROM todos WHERE user_id = ? AND recurrence_parent_id = ? AND completed = 0 AND archived = 0 AND (day_assigned IS NULL OR day_assigned >= ?)`
+    ).run(userId, templateId, todayIso);
+
+    db.prepare(`UPDATE todos SET recurrence_interval_days = ?, recurrence_pattern = ?, updated_at = ? WHERE id = ? AND user_id = ?`)
+      .run(recurrenceInterval, recurrencePattern, now, templateId, userId);
+
+    if (isNewRecurring) {
+      materializeForTemplate(templateId, userTz);
+    }
+  }
+
+  return { willDetachIds };
+}
+
 router.get('/', (req, res) => {
   const todos = db.prepare(
     `${TODO_SELECT} WHERE t.user_id = ? AND t.archived = 0 ORDER BY t.created_at DESC`
@@ -113,92 +252,17 @@ router.patch('/:id', (req, res) => {
   const existing = db.prepare('SELECT * FROM todos WHERE id = ? AND user_id = ?').get(id, req.user.id);
   if (!existing) return res.status(404).json({ error: 'Todo not found' });
 
+  const parsed = parseTodoUpdates(req.body, existing, req.user.id);
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+
+  const { seriesUpdates, instanceUpdates, hasRecurrenceChange, recurrenceInterval, recurrencePattern } = parsed;
+  const isNewRecurring = recurrenceInterval != null || recurrencePattern != null;
   const templateId = existing.recurrence_parent_id ?? existing.id;
   const isRecurring = existing.recurrence_interval_days != null || existing.recurrence_pattern != null || existing.recurrence_parent_id != null;
-
-  // Fields that propagate to the whole series
-  const seriesUpdates = {};
-  // Fields that apply only to this row
-  const instanceUpdates = {};
-
-  if (req.body.title !== undefined) {
-    const t = sanitizeTitle(req.body.title);
-    if (!t) return res.status(400).json({ error: 'Title is required (max 200 chars)' });
-    seriesUpdates.title = t;
-  }
-
-  if (req.body.description !== undefined) {
-    const d = sanitizeDescription(req.body.description);
-    if (d === null) return res.status(400).json({ error: 'Description too long' });
-    seriesUpdates.description = d;
-  }
-
-  if (req.body.list_id !== undefined) {
-    const lid = validateUserOwnsList(req.user.id, req.body.list_id);
-    if (!lid) return res.status(400).json({ error: 'Invalid list_id' });
-    seriesUpdates.list_id = lid;
-  }
-
-  if ('approx_time' in req.body) {
-    seriesUpdates.approx_time = req.body.approx_time ? String(req.body.approx_time).trim().slice(0, 50) || null : null;
-  }
-
-  if (req.body.completed !== undefined) {
-    instanceUpdates.completed = req.body.completed ? 1 : 0;
-    if (instanceUpdates.completed === 1) {
-      instanceUpdates.archived = 1;
-      instanceUpdates.completed_at = NOW();
-    }
-  }
-
-  if (req.body.archived !== undefined) {
-    instanceUpdates.archived = req.body.archived ? 1 : 0;
-    if (instanceUpdates.archived === 0) instanceUpdates.completed = 0;
-  }
-
-  if (req.body.planner_order !== undefined) {
-    const po = Number(req.body.planner_order);
-    if (!Number.isInteger(po)) return res.status(400).json({ error: 'Invalid planner_order' });
-    instanceUpdates.planner_order = po;
-  }
-
-  if ('day_assigned' in req.body) {
-    const d = validateDayAssigned(req.body.day_assigned);
-    if (d === false) return res.status(400).json({ error: 'Invalid day_assigned value' });
-    instanceUpdates.day_assigned = d;
-  }
-
-  const hasRecurrenceChange = 'recurrence_interval_days' in req.body || 'recurrence_pattern' in req.body;
-  let recurrenceInterval = null;
-  let recurrencePattern = null;
-  if (hasRecurrenceChange) {
-    recurrenceInterval = validateRecurrenceInterval(req.body.recurrence_interval_days);
-    if (recurrenceInterval === false) return res.status(400).json({ error: 'recurrence_interval_days must be 1-7 or null' });
-    recurrencePattern = validateRecurrencePattern(req.body.recurrence_pattern);
-    if (recurrencePattern === false) return res.status(400).json({ error: 'recurrence_pattern must be weekdays, weekends, or null' });
-    if (recurrenceInterval != null && recurrencePattern != null) return res.status(400).json({ error: 'Cannot set both recurrence_interval_days and recurrence_pattern' });
-  }
-  const isNewRecurring = recurrenceInterval != null || recurrencePattern != null;
-
-  const totalChanges = Object.keys(instanceUpdates).length + Object.keys(seriesUpdates).length + (hasRecurrenceChange ? 1 : 0);
-  if (totalChanges === 0) return res.status(400).json({ error: 'No valid fields to update' });
-
   const isChildEdit = existing.recurrence_parent_id != null;
 
-  let willDetachIds = [];
-  if (hasRecurrenceChange && isChildEdit) {
-    const childDate = existing.day_assigned;
-    const earlierSiblings = db.prepare(
-      'SELECT id FROM todos WHERE user_id = ? AND recurrence_parent_id = ? AND day_assigned IS NOT NULL AND day_assigned < ?'
-    ).all(req.user.id, templateId, childDate);
-    willDetachIds = earlierSiblings.map(r => r.id);
-    const oldTemplRow = db.prepare('SELECT day_assigned FROM todos WHERE id = ?').get(templateId);
-    if (oldTemplRow && (!oldTemplRow.day_assigned || oldTemplRow.day_assigned < childDate)) {
-      willDetachIds.push(templateId);
-    }
-  }
-
   const now = NOW();
+  let willDetachIds = [];
 
   db.transaction(() => {
     if (Object.keys(seriesUpdates).length > 0) {
@@ -221,63 +285,18 @@ router.patch('/:id', (req, res) => {
     }
 
     if (hasRecurrenceChange) {
-      const userRow = db.prepare('SELECT notify_tz FROM users WHERE id = ?').get(req.user.id);
-      const userTz = userRow?.notify_tz || 'UTC';
-      const todayIso = new Intl.DateTimeFormat('en-CA', {
-        timeZone: userTz, year: 'numeric', month: '2-digit', day: '2-digit',
-      }).format(new Date());
-
-      if (isChildEdit) {
-        const childDate = existing.day_assigned;
-
-        db.prepare(
-          `UPDATE todos SET recurrence_parent_id = NULL, updated_at = ?
-           WHERE user_id = ? AND recurrence_parent_id = ?
-             AND day_assigned IS NOT NULL AND day_assigned < ?`
-        ).run(now, req.user.id, templateId, childDate);
-
-        if (willDetachIds.includes(templateId)) {
-          db.prepare(
-            `UPDATE todos SET recurrence_interval_days = NULL, recurrence_pattern = NULL, updated_at = ? WHERE id = ? AND user_id = ?`
-          ).run(now, templateId, req.user.id);
-        }
-
-        db.prepare(
-          `DELETE FROM todos WHERE user_id = ? AND recurrence_parent_id = ?
-           AND completed = 0 AND archived = 0 AND day_assigned >= ? AND id != ?`
-        ).run(req.user.id, templateId, childDate, id);
-
-        if (isNewRecurring) {
-          db.prepare(
-            `UPDATE todos SET recurrence_parent_id = NULL, recurrence_interval_days = ?, recurrence_pattern = ?, updated_at = ?
-             WHERE id = ? AND user_id = ?`
-          ).run(recurrenceInterval, recurrencePattern, now, id, req.user.id);
-          materializeForTemplate(id, userTz);
-        } else {
-          db.prepare(
-            `UPDATE todos SET recurrence_parent_id = NULL, recurrence_interval_days = NULL, recurrence_pattern = NULL, updated_at = ?
-             WHERE id = ? AND user_id = ?`
-          ).run(now, id, req.user.id);
-        }
-      } else {
-        db.prepare(
-          `DELETE FROM todos WHERE user_id = ? AND recurrence_parent_id = ? AND completed = 0 AND archived = 0 AND (day_assigned IS NULL OR day_assigned >= ?)`
-        ).run(req.user.id, templateId, todayIso);
-
-        db.prepare(`UPDATE todos SET recurrence_interval_days = ?, recurrence_pattern = ?, updated_at = ? WHERE id = ?`)
-          .run(recurrenceInterval, recurrencePattern, now, templateId);
-
-        if (isNewRecurring) {
-          materializeForTemplate(templateId, userTz);
-        }
-      }
+      const result = applyRecurrenceChange(
+        id, existing, templateId, isChildEdit,
+        recurrenceInterval, recurrencePattern, isNewRecurring,
+        now, req.user.id
+      );
+      willDetachIds = result.willDetachIds;
     }
   })();
 
-  const removedIds = [];
   const responseTodo = getTodoById(id);
-
   let materialized = [];
+
   if (hasRecurrenceChange) {
     if (isChildEdit) {
       const newChildren = db.prepare(`${TODO_SELECT} WHERE t.recurrence_parent_id = ?`).all(id);
@@ -290,7 +309,7 @@ router.patch('/:id', (req, res) => {
     }
   }
 
-  res.json({ todo: responseTodo, materialized, removedIds });
+  res.json({ todo: responseTodo, materialized, removedIds: [] });
 });
 
 router.delete('/:id', (req, res) => {

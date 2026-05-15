@@ -1,13 +1,38 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
 import { useRegisterModal } from '../../context/ModalContext';
 import { useNavigate } from 'react-router-dom';
+import { api } from '../../api/client';
 import { TimePicker } from '../ui/TimePicker';
 import ListsSection from '../settings/ListsSection';
+
+function useAsync(fn) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  async function run(...args) {
+    setError('');
+    setSuccess('');
+    setLoading(true);
+    try {
+      const msg = await fn(...args);
+      if (msg) setSuccess(msg);
+    } catch (err) {
+      setError(err.message || 'Something went wrong');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return { loading, error, success, run };
+}
 
 export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
   useRegisterModal();
   const { user, updateAccount, logout } = useAuth();
+  const toast = useToast();
   const navigate = useNavigate();
 
   async function handleLogout() {
@@ -17,113 +42,46 @@ export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
 
   const [emailForm, setEmailForm] = useState({ newEmail: '', currentPassword: '' });
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirm: '' });
-  const [emailError, setEmailError] = useState('');
-  const [passwordError, setPasswordError] = useState('');
-  const [emailSuccess, setEmailSuccess] = useState('');
-  const [passwordSuccess, setPasswordSuccess] = useState('');
-  const [emailLoading, setEmailLoading] = useState(false);
-  const [passwordLoading, setPasswordLoading] = useState(false);
+  const emailOp = useAsync(async () => {
+    await updateAccount({ currentPassword: emailForm.currentPassword, newEmail: emailForm.newEmail });
+    setEmailForm({ newEmail: '', currentPassword: '' });
+    return 'Username / email updated successfully';
+  });
+  const passwordOp = useAsync(async () => {
+    if (passwordForm.newPassword !== passwordForm.confirm) throw new Error('Passwords do not match');
+    await updateAccount({ currentPassword: passwordForm.currentPassword, newPassword: passwordForm.newPassword });
+    setPasswordForm({ currentPassword: '', newPassword: '', confirm: '' });
+    return 'Password updated successfully';
+  });
 
   const [notifForm, setNotifForm] = useState({ notify_enabled: false, notify_time: '22:00', notify_email: '' });
+  const notifOp = useAsync(async () => {
+    await api.patch('/api/auth/notification-settings', {
+      ...notifForm,
+      notify_tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    });
+    return 'Notification settings saved';
+  });
+  const testEmailOp = useAsync(async () => {
+    const data = await api.post('/api/auth/test-email');
+    return `Test email sent to ${data.sentTo}`;
+  });
 
   const [backupLoading, setBackupLoading] = useState(false);
   const [restoreLoading, setRestoreLoading] = useState(false);
   const [restoreResult, setRestoreResult] = useState(null);
   const [restoreError, setRestoreError] = useState('');
-  const [notifLoading, setNotifLoading] = useState(false);
-  const [notifError, setNotifError] = useState('');
-  const [notifSuccess, setNotifSuccess] = useState('');
-  const [testEmailLoading, setTestEmailLoading] = useState(false);
-  const [testEmailError, setTestEmailError] = useState('');
-  const [testEmailSuccess, setTestEmailSuccess] = useState('');
 
   useEffect(() => {
-    fetch('/api/auth/notification-settings', { credentials: 'include' })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => { if (data) setNotifForm({ notify_enabled: data.notify_enabled, notify_time: data.notify_time, notify_email: data.notify_email }); })
-      .catch(() => {});
+    api.get('/api/auth/notification-settings')
+      .then(data => setNotifForm({ notify_enabled: data.notify_enabled, notify_time: data.notify_time, notify_email: data.notify_email }))
+      .catch(err => console.warn('[settings] failed to load notification settings:', err.message));
   }, []);
-
-  async function handleEmailSubmit(e) {
-    e.preventDefault();
-    setEmailError('');
-    setEmailSuccess('');
-    setEmailLoading(true);
-    try {
-      await updateAccount({ currentPassword: emailForm.currentPassword, newEmail: emailForm.newEmail });
-      setEmailSuccess('Username / email updated successfully');
-      setEmailForm({ newEmail: '', currentPassword: '' });
-    } catch (err) {
-      setEmailError(err.message);
-    } finally {
-      setEmailLoading(false);
-    }
-  }
-
-  async function handlePasswordSubmit(e) {
-    e.preventDefault();
-    setPasswordError('');
-    setPasswordSuccess('');
-    if (passwordForm.newPassword !== passwordForm.confirm) {
-      setPasswordError('Passwords do not match');
-      return;
-    }
-    setPasswordLoading(true);
-    try {
-      await updateAccount({ currentPassword: passwordForm.currentPassword, newPassword: passwordForm.newPassword });
-      setPasswordSuccess('Password updated successfully');
-      setPasswordForm({ currentPassword: '', newPassword: '', confirm: '' });
-    } catch (err) {
-      setPasswordError(err.message);
-    } finally {
-      setPasswordLoading(false);
-    }
-  }
-
-  async function handleTestEmail() {
-    setTestEmailError('');
-    setTestEmailSuccess('');
-    setTestEmailLoading(true);
-    try {
-      const res = await fetch('/api/auth/test-email', { method: 'POST', credentials: 'include' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to send');
-      setTestEmailSuccess(`Test email sent to ${data.sentTo}`);
-    } catch (err) {
-      setTestEmailError(err.message);
-    } finally {
-      setTestEmailLoading(false);
-    }
-  }
-
-  async function handleNotifSubmit(e) {
-    e.preventDefault();
-    setNotifError('');
-    setNotifSuccess('');
-    setNotifLoading(true);
-    try {
-      const res = await fetch('/api/auth/notification-settings', {
-        method: 'PATCH',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...notifForm, notify_tz: Intl.DateTimeFormat().resolvedOptions().timeZone }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to save');
-      setNotifSuccess('Notification settings saved');
-    } catch (err) {
-      setNotifError(err.message);
-    } finally {
-      setNotifLoading(false);
-    }
-  }
 
   async function handleDownloadBackup() {
     setBackupLoading(true);
     try {
-      const res = await fetch('/api/backup', { credentials: 'include' });
-      if (!res.ok) throw new Error('Failed');
-      const data = await res.json();
+      const data = await api.get('/api/backup');
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -131,8 +89,9 @@ export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
       a.download = `uni-planner-backup-${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch {
-      // download failure is self-evident to the user
+    } catch (err) {
+      toast.error('Backup download failed. Please try again.');
+      console.warn('[settings] backup download failed:', err.message);
     } finally {
       setBackupLoading(false);
     }
@@ -147,14 +106,7 @@ export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      const res = await fetch('/api/backup/restore', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error || 'Restore failed');
+      const result = await api.post('/api/backup/restore', data);
       setRestoreResult(result);
       fetchTodos?.();
     } catch (err) {
@@ -189,7 +141,7 @@ export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
           </div>
 
           {/* Change password */}
-          <form onSubmit={handlePasswordSubmit} className="space-y-3">
+          <form onSubmit={e => { e.preventDefault(); passwordOp.run(); }} className="space-y-3">
             <h3 className="text-xs font-semibold text-zinc-600 uppercase tracking-widest">Change Password</h3>
             <div>
               <label className="block text-xs text-zinc-500 mb-1">Current password</label>
@@ -228,14 +180,14 @@ export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
                 placeholder="••••••••"
               />
             </div>
-            {passwordError && <p className="text-xs text-red-500">{passwordError}</p>}
-            {passwordSuccess && <p className="text-xs text-emerald-600">{passwordSuccess}</p>}
+            {passwordOp.error && <p className="text-xs text-red-500">{passwordOp.error}</p>}
+            {passwordOp.success && <p className="text-xs text-emerald-600">{passwordOp.success}</p>}
             <button
               type="submit"
-              disabled={passwordLoading}
+              disabled={passwordOp.loading}
               className="w-full text-xs font-medium bg-indigo-500 hover:bg-indigo-600 text-white py-2 rounded-lg transition disabled:opacity-50"
             >
-              {passwordLoading ? 'Saving…' : 'Update Password'}
+              {passwordOp.loading ? 'Saving…' : 'Update Password'}
             </button>
           </form>
 
@@ -247,7 +199,7 @@ export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
           <div className="border-t border-zinc-100" />
 
           {/* Email Notifications */}
-          <form onSubmit={handleNotifSubmit} className="space-y-3">
+          <form onSubmit={e => { e.preventDefault(); notifOp.run(); }} className="space-y-3">
             <h3 className="text-xs font-semibold text-zinc-600 uppercase tracking-widest">Email Notifications</h3>
             <p className="text-[11px] text-zinc-400 leading-relaxed">
               Receive a daily summary of all tasks you completed that day. Messages are sent at central european time.
@@ -290,25 +242,25 @@ export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
               </div>
             </div>
 
-            {notifError && <p className="text-xs text-red-500">{notifError}</p>}
-            {notifSuccess && <p className="text-xs text-emerald-600">{notifSuccess}</p>}
+            {notifOp.error && <p className="text-xs text-red-500">{notifOp.error}</p>}
+            {notifOp.success && <p className="text-xs text-emerald-600">{notifOp.success}</p>}
             <button
               type="submit"
-              disabled={notifLoading}
+              disabled={notifOp.loading}
               className="w-full text-xs font-medium bg-indigo-500 hover:bg-indigo-600 text-white py-2 rounded-lg transition disabled:opacity-50"
             >
-              {notifLoading ? 'Saving…' : 'Save Notification Settings'}
+              {notifOp.loading ? 'Saving…' : 'Save Notification Settings'}
             </button>
             <button
               type="button"
-              disabled={testEmailLoading}
-              onClick={handleTestEmail}
+              disabled={testEmailOp.loading}
+              onClick={testEmailOp.run}
               className="w-full text-xs font-medium border border-indigo-300 text-indigo-600 hover:bg-indigo-50 py-2 rounded-lg transition disabled:opacity-50"
             >
-              {testEmailLoading ? 'Sending…' : 'Send Test Email Now'}
+              {testEmailOp.loading ? 'Sending…' : 'Send Test Email Now'}
             </button>
-            {testEmailError && <p className="text-xs text-red-500">{testEmailError}</p>}
-            {testEmailSuccess && <p className="text-xs text-emerald-600">{testEmailSuccess}</p>}
+            {testEmailOp.error && <p className="text-xs text-red-500">{testEmailOp.error}</p>}
+            {testEmailOp.success && <p className="text-xs text-emerald-600">{testEmailOp.success}</p>}
           </form>
 
           <div className="border-t border-zinc-100" />

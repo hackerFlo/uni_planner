@@ -5,131 +5,140 @@ const { sendDailySummary } = require('./mailer');
 const { materializeForTemplate } = require('./recurrence');
 const { localDayBoundsUtc } = require('./time');
 
-function startScheduler() {
-  cron.schedule('* * * * *', async () => {
-    const now = new Date();
+// Intl.DateTimeFormat instances are expensive to construct; cache by key.
+const dtfCache = new Map();
+function dtf(locale, tz, opts) {
+  const key = `${locale}|${tz}|${JSON.stringify(opts)}`;
+  if (!dtfCache.has(key)) {
+    dtfCache.set(key, new Intl.DateTimeFormat(locale, { timeZone: tz, ...opts }));
+  }
+  return dtfCache.get(key);
+}
 
-    let users;
+function hhmm(tz, now) {
+  return dtf('en-GB', tz, { hour: '2-digit', minute: '2-digit', hour12: false }).format(now);
+}
+
+function isoDate(tz, now) {
+  return dtf('en-CA', tz, { year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+}
+
+async function materializeRecurrencesAtLocalMidnight(now) {
+  let users;
+  try {
+    users = db.prepare(
+      'SELECT DISTINCT u.id, u.notify_tz FROM users u INNER JOIN todos t ON t.user_id = u.id WHERE t.recurrence_interval_days IS NOT NULL AND t.archived = 0 AND t.recurrence_parent_id IS NULL'
+    ).all();
+  } catch (err) {
+    console.error('[scheduler] Failed to query recurrence users:', err.message);
+    return;
+  }
+
+  for (const u of users) {
     try {
-      users = db.prepare(
-        `SELECT id, email, notify_email_enc, notify_time, notify_tz, notify_last_sent FROM users
-         WHERE notify_enabled = 1`
-      ).all();
+      const tz = u.notify_tz || 'UTC';
+      if (hhmm(tz, now) !== '00:00') continue;
+
+      const templates = db.prepare(
+        'SELECT id FROM todos WHERE user_id = ? AND recurrence_interval_days IS NOT NULL AND archived = 0 AND recurrence_parent_id IS NULL'
+      ).all(u.id);
+
+      let total = 0;
+      for (const t of templates) total += materializeForTemplate(t.id, tz);
+      if (total > 0) console.log(`[scheduler] Materialized ${total} recurring instances for user ${u.id}`);
     } catch (err) {
-      console.error('[scheduler] DB query failed:', err.message);
-      return;
+      console.error(`[scheduler] Recurrence materialization failed for user ${u.id}:`, err.message);
     }
+  }
+}
 
-    // Recurrence materialization at user-local midnight for all users with active templates
-    let allUsers;
+async function sendDueSummaries(now) {
+  let users;
+  try {
+    users = db.prepare(
+      `SELECT id, email, notify_email_enc, notify_time, notify_tz, notify_last_sent FROM users
+       WHERE notify_enabled = 1`
+    ).all();
+  } catch (err) {
+    console.error('[scheduler] DB query failed:', err.message);
+    return;
+  }
+
+  for (const user of users) {
+    let todayStr, tomorrowStr;
     try {
-      allUsers = db.prepare(
-        'SELECT DISTINCT u.id, u.notify_tz FROM users u INNER JOIN todos t ON t.user_id = u.id WHERE t.recurrence_interval_days IS NOT NULL AND t.archived = 0 AND t.recurrence_parent_id IS NULL'
-      ).all();
-    } catch { allUsers = []; }
+      const tz = user.notify_tz || 'UTC';
+      const userHhmm = hhmm(tz, now);
+      todayStr = isoDate(tz, now);
+      const tomorrowDate = new Date(todayStr + 'T12:00:00Z');
+      tomorrowDate.setUTCDate(tomorrowDate.getUTCDate() + 1);
+      tomorrowStr = isoDate(tz, tomorrowDate);
 
-    for (const u of allUsers) {
-      try {
-        const tz = u.notify_tz || 'UTC';
-        const uHhmm = new Intl.DateTimeFormat('en-GB', {
-          timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false,
-        }).format(now);
-        if (uHhmm !== '00:00') continue;
+      // Send when user-local time is at or past notify_time and we haven't sent today.
+      if (user.notify_last_sent && user.notify_last_sent >= todayStr) continue;
+      if (userHhmm < user.notify_time) continue;
 
-        const templates = db.prepare(
-          'SELECT id FROM todos WHERE user_id = ? AND recurrence_interval_days IS NOT NULL AND archived = 0 AND recurrence_parent_id IS NULL'
-        ).all(u.id);
-        let total = 0;
-        for (const t of templates) total += materializeForTemplate(t.id, tz);
-        if (total > 0) console.log(`[scheduler] Materialized ${total} recurring instances for user ${u.id}`);
-      } catch (err) {
-        console.error(`[scheduler] Recurrence materialization failed for user ${u.id}:`, err.message);
-      }
-    }
+      if (!user.notify_email_enc) continue;
+      const toEmail = decryptEmail(user.notify_email_enc);
 
-    for (const user of users) {
-      let hhmm, today, tomorrow;
-      try {
-        const tz = user.notify_tz || 'UTC';
-        hhmm = new Intl.DateTimeFormat('en-GB', {
-          timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false,
-        }).format(now);
-        today = new Intl.DateTimeFormat('en-CA', {
-          timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
-        }).format(now);
-        const tomorrowDate = new Date(today + 'T12:00:00Z');
-        tomorrowDate.setUTCDate(tomorrowDate.getUTCDate() + 1);
-        tomorrow = new Intl.DateTimeFormat('en-CA', {
-          timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
-        }).format(tomorrowDate);
-      } catch (err) {
-        console.error(`[scheduler] Bad notify_tz for user ${user.id}:`, err.message);
+      const { startIso, endIso } = localDayBoundsUtc(todayStr, tz);
+      const completedTodos = db.prepare(
+        `SELECT t.title, t.approx_time, l.name AS list_name, l.color AS list_color
+         FROM todos t JOIN lists l ON l.id = t.list_id
+         WHERE t.user_id = ? AND t.completed = 1
+           AND t.completed_at >= ? AND t.completed_at < ?`
+      ).all(user.id, startIso, endIso);
+
+      const uncompletedTodos = db.prepare(
+        `SELECT t.title, t.approx_time, l.name AS list_name, l.color AS list_color
+         FROM todos t JOIN lists l ON l.id = t.list_id
+         WHERE t.user_id = ? AND t.day_assigned = ? AND t.completed = 0 AND t.archived = 0`
+      ).all(user.id, todayStr);
+
+      const tomorrowTodos = db.prepare(
+        `SELECT t.title, t.approx_time, l.name AS list_name, l.color AS list_color
+         FROM todos t JOIN lists l ON l.id = t.list_id
+         WHERE t.user_id = ? AND t.day_assigned = ? AND t.completed = 0 AND t.archived = 0
+         ORDER BY t.planner_order ASC`
+      ).all(user.id, tomorrowStr);
+
+      if (completedTodos.length + uncompletedTodos.length + tomorrowTodos.length === 0) {
+        db.prepare('UPDATE users SET notify_last_sent = ? WHERE id = ?').run(todayStr, user.id);
         continue;
       }
 
-      // Send when user-local time is at or past notify_time and we haven't sent today.
-      // Lexicographic compare is correct for zero-padded "HH:MM".
-      if (user.notify_last_sent && user.notify_last_sent >= today) continue;
-      if (hhmm < user.notify_time) continue;
+      const userName = (user.email || '').split('@')[0] || 'there';
+      const dateStr = now.toLocaleDateString('en-GB', {
+        timeZone: tz, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+      });
+      const tomorrowDateStr = tomorrowDate.toLocaleDateString('en-GB', {
+        timeZone: tz, weekday: 'long', day: 'numeric', month: 'long',
+      });
+      const hour = parseInt(dtf('en-GB', tz, { hour: 'numeric', hour12: false }).format(now), 10);
 
-      try {
-        if (!user.notify_email_enc) continue;
-        const toEmail = decryptEmail(user.notify_email_enc);
-        const tz = user.notify_tz || 'UTC';
+      await sendDailySummary(toEmail, {
+        completedTodos,
+        uncompletedTodos,
+        tomorrowTodos,
+        dateStr,
+        tomorrowStr: tomorrowDateStr,
+        userName,
+        hour,
+      });
 
-        const { startIso, endIso } = localDayBoundsUtc(today, tz);
-        const completedTodos = db.prepare(
-          `SELECT t.title, t.approx_time, l.name AS list_name, l.color AS list_color
-           FROM todos t JOIN lists l ON l.id = t.list_id
-           WHERE t.user_id = ? AND t.completed = 1
-             AND t.completed_at >= ? AND t.completed_at < ?`
-        ).all(user.id, startIso, endIso);
-
-        const uncompletedTodos = db.prepare(
-          `SELECT t.title, t.approx_time, l.name AS list_name, l.color AS list_color
-           FROM todos t JOIN lists l ON l.id = t.list_id
-           WHERE t.user_id = ? AND t.day_assigned = ? AND t.completed = 0 AND t.archived = 0`
-        ).all(user.id, today);
-
-        const tomorrowTodos = db.prepare(
-          `SELECT t.title, t.approx_time, l.name AS list_name, l.color AS list_color
-           FROM todos t JOIN lists l ON l.id = t.list_id
-           WHERE t.user_id = ? AND t.day_assigned = ? AND t.completed = 0 AND t.archived = 0
-           ORDER BY t.planner_order ASC`
-        ).all(user.id, tomorrow);
-
-        if (completedTodos.length + uncompletedTodos.length + tomorrowTodos.length === 0) {
-          db.prepare('UPDATE users SET notify_last_sent = ? WHERE id = ?').run(today, user.id);
-          continue;
-        }
-
-        const userName = (user.email || '').split('@')[0] || 'there';
-        const dateStr = now.toLocaleDateString('en-GB', {
-          timeZone: tz, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-        });
-        const tomorrowDateObj = new Date(today + 'T12:00:00Z');
-        tomorrowDateObj.setUTCDate(tomorrowDateObj.getUTCDate() + 1);
-        const tomorrowStr = tomorrowDateObj.toLocaleDateString('en-GB', {
-          timeZone: tz, weekday: 'long', day: 'numeric', month: 'long',
-        });
-        const hour = parseInt(new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: 'numeric', hour12: false }).format(now), 10);
-
-        await sendDailySummary(toEmail, {
-          completedTodos,
-          uncompletedTodos,
-          tomorrowTodos,
-          dateStr,
-          tomorrowStr,
-          userName,
-          hour,
-        });
-
-        db.prepare('UPDATE users SET notify_last_sent = ? WHERE id = ?').run(today, user.id);
-        console.log(`[scheduler] Sent daily summary to user ${user.id} (${completedTodos.length} completed, ${uncompletedTodos.length} open, ${tomorrowTodos.length} tomorrow)`);
-      } catch (err) {
-        console.error(`[scheduler] Failed for user ${user.id}:`, err.message);
-      }
+      db.prepare('UPDATE users SET notify_last_sent = ? WHERE id = ?').run(todayStr, user.id);
+      console.log(`[scheduler] Sent daily summary to user ${user.id} (${completedTodos.length} completed, ${uncompletedTodos.length} open, ${tomorrowTodos.length} tomorrow)`);
+    } catch (err) {
+      console.error(`[scheduler] Failed for user ${user.id}:`, err.message);
     }
+  }
+}
+
+function startScheduler() {
+  cron.schedule('* * * * *', async () => {
+    const now = new Date();
+    await materializeRecurrencesAtLocalMidnight(now);
+    await sendDueSummaries(now);
   });
 
   console.log('[scheduler] Daily summary scheduler started (with recurrence materialization)');

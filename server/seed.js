@@ -16,7 +16,7 @@ async function seed() {
       .run(r.lastInsertRowid, 'Tasks', 'indigo', 0);
     return r.lastInsertRowid;
   })();
-  console.log(`[seed] Test account created: ${email} (id ${userId})`);
+  console.log(`[seed] Test account created (id ${userId})`);
 }
 
 module.exports = seed;

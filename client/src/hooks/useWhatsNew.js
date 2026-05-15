@@ -14,11 +14,9 @@ export function useWhatsNew() {
 
       let unseen;
       if (!seen) {
-        // First-time visitor: only show the latest entry, not the full history.
         unseen = [CHANGELOG[0]];
       } else {
         const seenIdx = CHANGELOG.findIndex(c => c.version === seen);
-        // If seen version is no longer in the changelog, fall back to latest only.
         unseen = seenIdx > 0 ? CHANGELOG.slice(0, seenIdx) : [CHANGELOG[0]];
       }
 
@@ -26,11 +24,15 @@ export function useWhatsNew() {
         setEntries(unseen);
         setOpen(true);
       }
-    } catch {}
+    } catch (err) {
+      console.warn('[useWhatsNew] localStorage unavailable:', err.message);
+    }
   }, []);
 
   function close() {
-    try { localStorage.setItem(KEY, CURRENT_VERSION); } catch {}
+    try { localStorage.setItem(KEY, CURRENT_VERSION); } catch (err) {
+      console.warn('[useWhatsNew] localStorage unavailable:', err.message);
+    }
     setOpen(false);
     setEntries([]);
   }

@@ -10,13 +10,19 @@ dist/
 client/dist/
 .DS_Store
 
-# Claude Code local settings
+# Claude Code local settings, agents, skills, hooks — never publish
 .claude/
+**/.claude/
+
+# Project-level Claude instructions (kept local, may include sensitive context)
+CLAUDE.md
+**/CLAUDE.md
+CLAUDE.local.md
+**/CLAUDE.local.md
 
 # Local dev / planning files
 IDEAS.txt
 dev-commands.txt
-CLAUDE.md
 start.sh
 
 # Local env overrides (machine-specific, may contain test credentials)
@@ -25,7 +31,26 @@ start.sh
 server/.env.local
 server/.env.*.local
 
-# Claude/AI plan & memory artifacts
+# Claude/AI plan, memory, conversation & transcript artifacts
 *.plan.md
+*.plan
+plan-*.md
 PLAN.md
 plans/
+**/plans/
+memory/
+**/memory/
+MEMORY.md
+**/MEMORY.md
+*.transcript.md
+*.transcript.txt
+*.transcript.json
+transcripts/
+**/transcripts/
+conversation*.md
+conversation*.txt
+conversation*.json
+*.jsonl
+.claude-conversation*
+.anthropic/
+**/.anthropic/

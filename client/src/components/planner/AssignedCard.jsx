@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { Draggable } from '@hello-pangea/dnd';
 import LinkText from '../ui/LinkText';
 import Tooltip, { recurrenceLabel } from '../ui/Tooltip';
@@ -8,13 +8,15 @@ import { LIST_PALETTE } from '../../constants/listPalette';
 import useIsMobile from '../../hooks/useIsMobile';
 import { useAnyModalOpen } from '../../context/ModalContext';
 
+const COMPLETION_DELAY_MS = 500;
+
 function isRecurring(todo) {
   return todo.recurrence_parent_id != null || todo.recurrence_interval_days != null || todo.recurrence_pattern != null;
 }
 
 function fmtTime(t) { return t ? t.replace(' min', 'm') : t; }
 
-function CardBody({ provided, snapshot, todo, checked, onComplete, onUnassign, onEdit, onDelete }) {
+const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, onComplete, onUnassign, onEdit, onDelete }) {
   const isMobile = useIsMobile();
   const anyModalOpen = useAnyModalOpen();
   const { getList } = useLists();
@@ -194,7 +196,7 @@ function CardBody({ provided, snapshot, todo, checked, onComplete, onUnassign, o
       )}
     </div>
   );
-}
+});
 
 export default function AssignedCard({ todo, index, onUnassign, onComplete, onEdit, onDelete }) {
   const [checked, setChecked] = useState(false);
@@ -203,7 +205,7 @@ export default function AssignedCard({ todo, index, onUnassign, onComplete, onEd
     e.stopPropagation();
     if (checked) return;
     setChecked(true);
-    setTimeout(() => onComplete(todo), 500);
+    setTimeout(() => onComplete(todo), COMPLETION_DELAY_MS);
   }
 
   return (
