@@ -26,16 +26,21 @@ router.get('/', requireAuth, (req, res) => {
      WHERE t.user_id = ?`
   ).all(req.user.id);
 
+  const exams = db.prepare(
+    'SELECT title, exam_date, created_at FROM exams WHERE user_id = ?'
+  ).all(req.user.id);
+
   res.json({
-    version: 2,
+    version: 3,
     exported_at: new Date().toISOString(),
     lists: lists.map(l => ({ name: l.name, color: l.color, sort_order: l.sort_order })),
     todos,
+    exams,
   });
 });
 
 router.post('/restore', requireAuth, backupJsonParser, (req, res) => {
-  const { todos, lists: backupLists, version } = req.body;
+  const { todos, lists: backupLists, exams: backupExams, version } = req.body;
   if (!Array.isArray(todos)) return res.status(400).json({ error: 'Invalid backup file' });
 
   // Build a name→id map for existing user lists
@@ -90,13 +95,24 @@ router.post('/restore', requireAuth, backupJsonParser, (req, res) => {
   ).all(req.user.id);
   const existingSet = new Set(existing.map(t => `${t.title}|${t.list_name?.toLowerCase()}|${t.created_at}`));
 
+  const existingExams = db.prepare(
+    'SELECT title, exam_date FROM exams WHERE user_id = ?'
+  ).all(req.user.id);
+  const existingExamSet = new Set(existingExams.map(e => `${e.title}|${e.exam_date}`));
+
   const insert = db.prepare(`
     INSERT INTO todos (user_id, title, description, list_id, completed, archived, day_assigned, approx_time, planner_order, completed_at, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
+  const insertExam = db.prepare(
+    'INSERT INTO exams (user_id, title, exam_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
+  );
+
   let imported = 0;
   let skipped = 0;
+  let examsImported = 0;
+  let examsSkipped = 0;
 
   const run = db.transaction(() => {
     for (const t of todos) {
@@ -125,10 +141,30 @@ router.post('/restore', requireAuth, backupJsonParser, (req, res) => {
       );
       imported++;
     }
+
+    if (Array.isArray(backupExams)) {
+      for (const e of backupExams) {
+        if (!e.title || typeof e.title !== 'string' || e.title.trim().length === 0) { examsSkipped++; continue; }
+        const examDate = validateDayAssigned(e.exam_date);
+        if (examDate === false) { examsSkipped++; continue; }
+        const key = `${e.title.trim().slice(0, 200)}|${examDate}`;
+        if (existingExamSet.has(key)) { examsSkipped++; continue; }
+        const now = new Date().toISOString();
+        insertExam.run(
+          req.user.id,
+          e.title.trim().slice(0, 200),
+          examDate,
+          cleanIsoDatetime(e.created_at) || now,
+          now,
+        );
+        existingExamSet.add(key);
+        examsImported++;
+      }
+    }
   });
 
   run();
-  res.json({ imported, skipped });
+  res.json({ imported, skipped, examsImported, examsSkipped });
 });
 
 module.exports = router;

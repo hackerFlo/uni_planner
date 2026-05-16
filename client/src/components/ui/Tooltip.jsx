@@ -19,7 +19,7 @@ function isInsideModal(el) {
   return !!el?.closest('[data-modal-root]');
 }
 
-export default function Tooltip({ text, children, className = '' }) {
+export default function Tooltip({ text, children, className = '', onlyWhenTruncated = false }) {
   const isMobile = useIsMobile();
   const anyModalOpen = useAnyModalOpen();
   const triggerRef = useRef(null);
@@ -34,6 +34,10 @@ export default function Tooltip({ text, children, className = '' }) {
     clearTimeout(hideTimer.current);
     if (mounted) return;
     if (anyModalOpen && !isInsideModal(triggerRef.current)) return;
+    if (onlyWhenTruncated) {
+      const el = triggerRef.current?.firstElementChild ?? triggerRef.current;
+      if (el && el.scrollWidth <= el.clientWidth + 1) return;
+    }
     showTimer.current = setTimeout(() => setMounted(true), SHOW_DELAY);
   }
 

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { useRegisterModal } from '../../context/ModalContext';
+import { useExams } from '../../context/ExamsContext';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import { TimePicker } from '../ui/TimePicker';
@@ -34,6 +35,7 @@ export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
   const { user, updateAccount, logout } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
+  const { fetchExams } = useExams();
 
   async function handleLogout() {
     await logout();
@@ -109,6 +111,7 @@ export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
       const result = await api.post('/api/backup/restore', data);
       setRestoreResult(result);
       fetchTodos?.();
+      fetchExams?.();
     } catch (err) {
       setRestoreError(err.message.includes('JSON') ? 'Invalid backup file' : err.message);
     } finally {
@@ -284,7 +287,7 @@ export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
           <div className="space-y-3">
             <h3 className="text-xs font-semibold text-zinc-600 uppercase tracking-widest">Backup &amp; Restore</h3>
             <p className="text-[11px] text-zinc-400 leading-relaxed">
-              Download all your todos as a JSON file, or restore from a previous backup. Existing items are never duplicated.
+              Download all your todos and exams as a JSON file, or restore from a previous backup. Existing items are never duplicated.
             </p>
             <button
               type="button"
@@ -304,7 +307,8 @@ export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
             {restoreError && <p className="text-xs text-red-500">{restoreError}</p>}
             {restoreResult && (
               <p className="text-xs text-emerald-600">
-                Restored {restoreResult.imported} item{restoreResult.imported !== 1 ? 's' : ''}{restoreResult.skipped > 0 ? `, ${restoreResult.skipped} already existed` : ''}.
+                Restored {restoreResult.imported} todo{restoreResult.imported !== 1 ? 's' : ''}{restoreResult.skipped > 0 ? `, ${restoreResult.skipped} already existed` : ''}
+                {restoreResult.examsImported != null ? ` · ${restoreResult.examsImported} exam${restoreResult.examsImported !== 1 ? 's' : ''}${restoreResult.examsSkipped > 0 ? `, ${restoreResult.examsSkipped} already existed` : ''}` : ''}.
               </p>
             )}
           </div>

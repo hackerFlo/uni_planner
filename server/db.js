@@ -47,6 +47,17 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_todos_user_id ON todos(user_id);
+
+  CREATE TABLE IF NOT EXISTS exams (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title      TEXT    NOT NULL,
+    exam_date  TEXT    NOT NULL,
+    created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_exams_user_id ON exams(user_id);
 `);
 
 // Migrate: add planner_order column if missing

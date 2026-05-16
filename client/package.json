@@ -1,6 +1,6 @@
 {
   "name": "uni-planner-client",
-  "version": "1.4",
+  "version": "2.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,9 +11,11 @@
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
+    "@internationalized/date": "^3.12.1",
     "@radix-ui/react-select": "^2.2.6",
     "lucide-react": "^1.14.0",
     "react": "^18.2.0",
+    "react-aria-components": "^1.17.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.22.3"
   },

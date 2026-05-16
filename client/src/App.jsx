@@ -2,6 +2,8 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ListsProvider } from './context/ListsContext';
+import { ExamsProvider } from './context/ExamsContext';
+import ExamsModal from './components/exams/ExamsModal';
 import { ModalProvider } from './context/ModalContext';
 import { ToastProvider } from './context/ToastContext';
 import PlannerPage from './pages/PlannerPage';
@@ -33,15 +35,18 @@ export default function App() {
       <ModalProvider>
       <AuthProvider>
         <ListsProvider>
-          <BrowserRouter>
-            <Suspense fallback={null}>
-              <Routes>
-                <Route path="/login" element={<PublicOnlyRoute><LoginPage /></PublicOnlyRoute>} />
-                <Route path="/" element={<ProtectedRoute><PlannerPage /></ProtectedRoute>} />
-                <Route path="*" element={<NotFoundPage />} />
-              </Routes>
-            </Suspense>
-          </BrowserRouter>
+          <ExamsProvider>
+            <BrowserRouter>
+              <Suspense fallback={null}>
+                <Routes>
+                  <Route path="/login" element={<PublicOnlyRoute><LoginPage /></PublicOnlyRoute>} />
+                  <Route path="/" element={<ProtectedRoute><PlannerPage /></ProtectedRoute>} />
+                  <Route path="*" element={<NotFoundPage />} />
+                </Routes>
+              </Suspense>
+            </BrowserRouter>
+            <ExamsModal />
+          </ExamsProvider>
         </ListsProvider>
       </AuthProvider>
       </ModalProvider>

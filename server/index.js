@@ -11,6 +11,7 @@ const todoRoutes = require('./routes/todos');
 const listRoutes = require('./routes/lists');
 const backupRoutes = require('./routes/backup');
 const dayNoteRoutes = require('./routes/dayNotes');
+const examRoutes = require('./routes/exams');
 const seed = process.env.NODE_ENV !== 'production' ? require('./seed') : () => Promise.resolve();
 
 const app = express();
@@ -30,6 +31,7 @@ app.use('/api/todos', todoLimiter, todoRoutes);
 app.use('/api/lists', todoLimiter, listRoutes);
 app.use('/api/backup', backupLimiter, backupRoutes);
 app.use('/api/day-notes', todoLimiter, dayNoteRoutes);
+app.use('/api/exams', todoLimiter, examRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error(err);

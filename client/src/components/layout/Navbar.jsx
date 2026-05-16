@@ -1,9 +1,67 @@
 import { useState } from 'react';
 import SettingsPanel from './SettingsPanel';
 import Tooltip from '../ui/Tooltip';
+import { useExams } from '../../context/ExamsContext';
+
+function CapIcon({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 10L12 5 2 10l10 5 10-5z"/>
+      <path d="M6 12v5c0 1.5 3 3 6 3s6-1.5 6-3v-5"/>
+    </svg>
+  );
+}
+
+function ExamControl({ nextExam, openModal }) {
+  if (!nextExam) {
+    return (
+      <Tooltip text="Exams">
+        <button
+          onClick={openModal}
+          className="flex items-center justify-center w-8 h-8 rounded-lg transition text-zinc-400 hover:text-zinc-700 hover:bg-zinc-50"
+        >
+          <CapIcon className="w-4 h-4" />
+        </button>
+      </Tooltip>
+    );
+  }
+
+  const isUrgent = nextExam.daysRemaining <= 7;
+  const MAX_TITLE_CHARS = 12;
+  const truncated = nextExam.title.length > MAX_TITLE_CHARS;
+  const displayTitle = truncated ? nextExam.title.slice(0, MAX_TITLE_CHARS) + '…' : nextExam.title;
+
+  const subtitle = (
+    <span className="block text-[10px] font-medium text-zinc-400 leading-none mt-0.5">
+      Next exam · {displayTitle}
+    </span>
+  );
+
+  return (
+    <button
+      onClick={openModal}
+      className={`inline-flex items-center gap-2 pl-3.5 pr-1.5 py-1 rounded-full border border-transparent active:scale-[0.98] transition ${
+        isUrgent
+          ? 'bg-rose-50 hover:bg-rose-100 hover:border-rose-200'
+          : 'bg-indigo-50 hover:bg-indigo-100 hover:border-indigo-200'
+      }`}
+    >
+      <span className="flex flex-col items-end leading-none min-w-0">
+        <span className={`text-sm font-bold tracking-tight leading-none ${isUrgent ? 'text-rose-600' : 'text-indigo-600'}`}>
+          {nextExam.daysRemaining} days
+        </span>
+        {truncated ? <Tooltip text={nextExam.title}>{subtitle}</Tooltip> : subtitle}
+      </span>
+      <span className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${isUrgent ? 'bg-rose-500' : 'bg-indigo-500'}`}>
+        <CapIcon className="w-3.5 h-3.5 text-white" />
+      </span>
+    </button>
+  );
+}
 
 export default function Navbar({ onArchiveToggle, archiveOpen, fetchTodos, onOpenWhatsNew }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const { nextExam, openModal } = useExams();
 
   return (
     <>
@@ -16,6 +74,8 @@ export default function Navbar({ onArchiveToggle, archiveOpen, fetchTodos, onOpe
           </div>
           <span className="text-sm font-semibold text-zinc-800 tracking-tight">Uni Planner</span>
         </div>
+
+        <ExamControl nextExam={nextExam} openModal={openModal} />
 
         <Tooltip text="Archive">
           <button

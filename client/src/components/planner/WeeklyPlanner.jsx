@@ -2,6 +2,7 @@ import { useRef, useState, useMemo, useEffect } from 'react';
 import DayColumn from './DayColumn';
 import { useHolidays } from '../../hooks/useHolidays';
 import { useLists } from '../../context/ListsContext';
+import { useExams } from '../../context/ExamsContext';
 
 function getWeekDates(offset = 0) {
   const today = new Date();
@@ -26,6 +27,15 @@ export default function WeeklyPlanner({ todos, isDragging, notes, onNoteChange, 
   const [weekOffset, setWeekOffset] = useState(0);
   const holidays = useHolidays();
   const { lists } = useLists();
+  const { upcomingExams } = useExams();
+
+  const examsByDate = useMemo(() => {
+    const m = new Map();
+    for (const e of upcomingExams) {
+      m.set(e.exam_date, m.has(e.exam_date) ? `${m.get(e.exam_date)}, ${e.title}` : e.title);
+    }
+    return m;
+  }, [upcomingExams]);
 
   const listOrder = useMemo(() => {
     const order = {};
@@ -124,6 +134,7 @@ export default function WeeklyPlanner({ todos, isDragging, notes, onNoteChange, 
               date={date}
               todos={todosByDate[date]}
               holiday={holidays.get(date) ?? null}
+              exam={examsByDate.get(date) ?? null}
               isDragging={isDragging}
               note={notes?.[date]}
               onNoteChange={onNoteChange}

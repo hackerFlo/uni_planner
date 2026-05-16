@@ -4,11 +4,42 @@
 // This way every Watchtower deploy maps to exactly one version.
 // Versioning: X.Y — increment Y for regular updates, bump X (reset Y to 0) for big releases.
 // Add a new entry to CHANGELOG (newest first) on first push of a window; append to top entry otherwise.
-export const CURRENT_VERSION = '1.6';
+export const CURRENT_VERSION = '2.0';
 
 // icon: 'purple' | 'green' | 'amber' | 'blue' | 'rose'
 // Each feature needs: icon, name, desc, and a 24×24 SVG path string (stroke icons).
 export const CHANGELOG = [
+  {
+    version: '2.0',
+    date: '2026-05-16',
+    title: 'Exams',
+    features: [
+      {
+        icon: 'purple',
+        name: 'Track upcoming exams',
+        desc: 'A new Exams module lets you add, edit, and delete upcoming exams with a date. The navbar shows the next exam at a glance with a live "X days" countdown, turning rose-coloured when it\'s within a week.',
+        svgPath: 'M22 10L12 5 2 10l10 5 10-5zM6 12v5c0 1.5 3 3 6 3s6-1.5 6-3v-5',
+      },
+      {
+        icon: 'rose',
+        name: 'Exam days highlighted on the planner',
+        desc: 'Days with an exam scheduled now appear with a soft rose tint in the weekly planner, so you can spot them at a glance alongside today and public holidays.',
+        svgPath: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',
+      },
+      {
+        icon: 'blue',
+        name: 'Backups now include exams',
+        desc: 'Downloading a backup captures all your todos AND exams in a single file. Restoring brings both back — existing items are still never duplicated, and older backup files (without exams) keep working as before.',
+        svgPath: 'M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3',
+      },
+      {
+        icon: 'green',
+        name: 'Smarter tooltips on truncated notes',
+        desc: 'Day-note tooltips now only appear when the text is actually cut off — no more redundant hover popups on short notes that already fit.',
+        svgPath: 'M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z',
+      },
+    ],
+  },
   {
     version: '1.6',
     date: '2026-05-15',
