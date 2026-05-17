@@ -135,8 +135,8 @@ const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, onC
         <RichText text={todo.description} className="text-[11px] text-zinc-400 mt-0.5 line-clamp-2 block" />
       )}
 
-      {!isMobile && !anyModalOpen && (
-        <div className="flex gap-1 mt-2">
+      {!isMobile && (
+        <div className={`flex gap-1 mt-2 transition duration-200 ${anyModalOpen ? 'blur-sm opacity-60 pointer-events-none' : ''}`}>
           <Tooltip text="Edit">
             <button
               onPointerDown={e => e.stopPropagation()}

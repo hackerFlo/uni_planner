@@ -17,7 +17,7 @@ function ExamControl({ nextExam, openModal }) {
     return (
       <Tooltip text="Exams">
         <button
-          onClick={openModal}
+          onClick={e => { e.currentTarget.blur(); openModal(); }}
           className="flex items-center justify-center w-8 h-8 rounded-lg transition text-zinc-400 hover:text-zinc-700 hover:bg-zinc-50"
         >
           <CapIcon className="w-4 h-4" />
@@ -39,7 +39,7 @@ function ExamControl({ nextExam, openModal }) {
 
   return (
     <button
-      onClick={openModal}
+      onClick={e => { e.currentTarget.blur(); openModal(); }}
       className={`inline-flex items-center gap-2 pl-3.5 pr-1 py-1 rounded-full border border-transparent active:scale-[0.98] transition ${
         isUrgent
           ? 'bg-rose-50 hover:bg-rose-100 hover:border-rose-200'
