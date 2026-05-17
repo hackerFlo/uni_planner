@@ -12,7 +12,7 @@ function formatDisplay(isoStr) {
   return `${MONTH_SHORT[m - 1]} ${String(d).padStart(2, '0')}, ${y}`;
 }
 
-export default function DatePickerInput({ value, onChange, className = '' }) {
+export default function DatePickerInput({ value, onChange, className = '', minValue }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState({ top: 0, left: 0 });
   const triggerRef = useRef(null);
@@ -81,7 +81,7 @@ export default function DatePickerInput({ value, onChange, className = '' }) {
           style={{ top: pos.top, left: pos.left }}
           className="fixed z-[9999] bg-white rounded-xl border border-zinc-200 shadow-xl p-3 animate-[fadeIn_0.15s_ease]"
         >
-          <Calendar value={calValue} onChange={handleSelect} />
+          <Calendar value={calValue} onChange={handleSelect} minValue={minValue} />
         </div>,
         document.body,
       )}

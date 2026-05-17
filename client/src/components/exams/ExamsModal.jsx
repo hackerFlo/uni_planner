@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { getLocalTimeZone, today } from '@internationalized/date';
 import { useRegisterModal } from '../../context/ModalContext';
 import { useExams } from '../../context/ExamsContext';
 import Tooltip from '../ui/Tooltip';
@@ -72,6 +73,7 @@ function EditRow({ titleRef, draft, setDraft, saving, onConfirm, onCancel, onDel
       <DatePickerInput
         value={draft.exam_date}
         onChange={date => setDraft(p => ({ ...p, exam_date: date }))}
+        minValue={today(getLocalTimeZone())}
         className="w-[155px]"
       />
       <Tooltip text="Save">
