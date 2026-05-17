@@ -26,6 +26,12 @@ export const CHANGELOG = [
         desc: 'The complete-task checkbox has a chunkier checkmark with a subtle scale on hover and tap. Task titles also no longer shift when you hover a card to reveal the edit/delete actions.',
         svgPath: 'M5 13l4 4L19 7',
       },
+      {
+        icon: 'blue',
+        name: 'No accidental zoom',
+        desc: 'Pinch-to-zoom on mobile and Cmd/Ctrl + scroll / +/- on desktop are now disabled, so the layout stays put while you plan.',
+        svgPath: 'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7',
+      },
     ],
   },
   {

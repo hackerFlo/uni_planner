@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ListsProvider } from './context/ListsContext';
@@ -29,6 +29,23 @@ function PublicOnlyRoute({ children }) {
 }
 
 export default function App() {
+  useEffect(() => {
+    function onWheel(e) {
+      if (e.ctrlKey || e.metaKey) e.preventDefault();
+    }
+    function onKeyDown(e) {
+      if ((e.ctrlKey || e.metaKey) && ['+', '-', '=', '0'].includes(e.key)) {
+        e.preventDefault();
+      }
+    }
+    window.addEventListener('wheel', onWheel, { passive: false });
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('wheel', onWheel);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, []);
+
   return (
     <ErrorBoundary>
       <ToastProvider>
