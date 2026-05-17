@@ -4,11 +4,30 @@
 // This way every Watchtower deploy maps to exactly one version.
 // Versioning: X.Y — increment Y for regular updates, bump X (reset Y to 0) for big releases.
 // Add a new entry to CHANGELOG (newest first) on first push of a window; append to top entry otherwise.
-export const CURRENT_VERSION = '2.0';
+export const CURRENT_VERSION = '2.1';
 
 // icon: 'purple' | 'green' | 'amber' | 'blue' | 'rose'
 // Each feature needs: icon, name, desc, and a 24×24 SVG path string (stroke icons).
 export const CHANGELOG = [
+  {
+    version: '2.1',
+    date: '2026-05-17',
+    title: 'Rich notes & polish',
+    features: [
+      {
+        icon: 'purple',
+        name: 'Rich text in task notes',
+        desc: 'Task descriptions now support bold (Cmd/Ctrl+B), italic (Cmd/Ctrl+I), and bullet lists — just type "- " at the start of a line to start a list. Formatting is preserved on cards and in the archive.',
+        svgPath: 'M4 7h16M4 12h10M4 17h16',
+      },
+      {
+        icon: 'amber',
+        name: 'Checkbox & hover polish',
+        desc: 'The complete-task checkbox has a chunkier checkmark with a subtle scale on hover and tap. Task titles also no longer shift when you hover a card to reveal the edit/delete actions.',
+        svgPath: 'M5 13l4 4L19 7',
+      },
+    ],
+  },
   {
     version: '2.0',
     date: '2026-05-16',

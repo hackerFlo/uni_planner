@@ -4,6 +4,7 @@ import { useLists } from '../../context/ListsContext';
 import { useRegisterModal } from '../../context/ModalContext';
 import { useToast } from '../../context/ToastContext';
 import { LIST_PALETTE } from '../../constants/listPalette';
+import RichText from '../ui/RichText';
 
 export default function ArchiveDrawer({ onClose, onRestore, onDelete }) {
   useRegisterModal();
@@ -73,7 +74,7 @@ export default function ArchiveDrawer({ onClose, onRestore, onDelete }) {
                     </div>
                     <p className="text-sm font-medium text-zinc-600 line-through truncate">{todo.title}</p>
                     {todo.description && (
-                      <p className="text-xs text-zinc-400 mt-0.5 line-clamp-2">{todo.description}</p>
+                      <RichText text={todo.description} className="text-xs text-zinc-400 mt-0.5 line-clamp-2 block" />
                     )}
                   </div>
                 </div>

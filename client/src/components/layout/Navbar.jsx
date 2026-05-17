@@ -40,7 +40,7 @@ function ExamControl({ nextExam, openModal }) {
   return (
     <button
       onClick={openModal}
-      className={`inline-flex items-center gap-2 pl-3.5 pr-1.5 py-1 rounded-full border border-transparent active:scale-[0.98] transition ${
+      className={`inline-flex items-center gap-2 pl-3.5 pr-1 py-1 rounded-full border border-transparent active:scale-[0.98] transition ${
         isUrgent
           ? 'bg-rose-50 hover:bg-rose-100 hover:border-rose-200'
           : 'bg-indigo-50 hover:bg-indigo-100 hover:border-indigo-200'

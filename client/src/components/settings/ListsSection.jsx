@@ -3,6 +3,8 @@ import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { useLists } from '../../context/ListsContext';
 import { useRegisterModal } from '../../context/ModalContext';
 import { LIST_PALETTE, PALETTE_KEYS } from '../../constants/listPalette';
+import EmojiPicker from '../ui/EmojiPicker';
+import useEmojiInput from '../../hooks/useEmojiInput';
 
 function ColorDot({ color, size = 'md' }) {
   const cls = LIST_PALETTE[color]?.dot ?? LIST_PALETTE.slate.dot;
@@ -76,6 +78,8 @@ function ListRow({ list, index, canDelete, onDelete }) {
   const [showPicker, setShowPicker] = useState(false);
   const [saving, setSaving] = useState(false);
   const pickerRef = useRef(null);
+  const nameRef = useRef(null);
+  const { emojiState, handleChange, handleEmojiSelect, closeEmojiPicker } = useEmojiInput(name, setName, nameRef);
 
   useEffect(() => {
     if (!showPicker) return;
@@ -139,16 +143,26 @@ function ListRow({ list, index, canDelete, onDelete }) {
           </div>
 
           {/* Name input */}
-          <input
-            type="text"
-            value={name}
-            onChange={e => setName(e.target.value)}
-            onBlur={saveName}
-            onKeyDown={e => { if (e.key === 'Enter') { e.target.blur(); } if (e.key === 'Escape') { setName(list.name); e.target.blur(); } }}
-            maxLength={40}
-            disabled={saving}
-            className="flex-1 min-w-0 text-xs text-zinc-700 bg-transparent border-none outline-none focus:bg-zinc-50 focus:ring-1 focus:ring-indigo-300 rounded px-1 py-0.5 transition disabled:opacity-50"
-          />
+          <div className="relative flex-1 min-w-0">
+            <input
+              ref={nameRef}
+              type="text"
+              value={name}
+              onChange={handleChange}
+              onBlur={() => setTimeout(saveName, 150)}
+              onKeyDown={e => {
+                if (emojiState) return;
+                if (e.key === 'Enter') { e.target.blur(); }
+                if (e.key === 'Escape') { setName(list.name); e.target.blur(); }
+              }}
+              maxLength={40}
+              disabled={saving}
+              className="w-full text-xs text-zinc-700 bg-transparent border-none outline-none focus:bg-zinc-50 focus:ring-1 focus:ring-indigo-300 rounded px-1 py-0.5 transition disabled:opacity-50"
+            />
+            {emojiState && (
+              <EmojiPicker anchorRef={nameRef} query={emojiState.query} onSelect={handleEmojiSelect} onClose={closeEmojiPicker} />
+            )}
+          </div>
 
           {/* Delete */}
           {canDelete && (
@@ -175,6 +189,8 @@ export default function ListsSection({ fetchTodos }) {
   const [newColor, setNewColor] = useState('indigo');
   const [showNewPicker, setShowNewPicker] = useState(false);
   const newPickerRef = useRef(null);
+  const newNameRef = useRef(null);
+  const { emojiState: newNameEmojiState, handleChange: handleNewNameChange, handleEmojiSelect: handleNewNameEmojiSelect, closeEmojiPicker: closeNewNameEmojiPicker } = useEmojiInput(newName, setNewName, newNameRef);
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
@@ -265,14 +281,20 @@ export default function ListsSection({ fetchTodos }) {
             />
           )}
         </div>
-        <input
-          type="text"
-          value={newName}
-          onChange={e => setNewName(e.target.value)}
-          maxLength={40}
-          placeholder="New list name…"
-          className="flex-1 min-w-0 text-xs border border-zinc-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition bg-zinc-50"
-        />
+        <div className="relative flex-1 min-w-0">
+          <input
+            ref={newNameRef}
+            type="text"
+            value={newName}
+            onChange={handleNewNameChange}
+            maxLength={40}
+            placeholder="New list name…"
+            className="w-full text-xs border border-zinc-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition bg-zinc-50"
+          />
+          {newNameEmojiState && (
+            <EmojiPicker anchorRef={newNameRef} query={newNameEmojiState.query} onSelect={handleNewNameEmojiSelect} onClose={closeNewNameEmojiPicker} />
+          )}
+        </div>
         <button
           type="submit"
           disabled={creating || !newName.trim()}

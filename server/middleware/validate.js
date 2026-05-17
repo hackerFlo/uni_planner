@@ -11,12 +11,47 @@ function sanitizeTitle(str) {
   return s;
 }
 
+function normalizeDescTag(tag) {
+  if (/^<br[\s/]*>$/i.test(tag)) return '<br>';
+  if (/^<(strong|b)(\s[^>]*)?>$/i.test(tag)) return '<strong>';
+  if (/^<\/(strong|b)>$/i.test(tag)) return '</strong>';
+  if (/^<(em|i)(\s[^>]*)?>$/i.test(tag)) return '<em>';
+  if (/^<\/(em|i)>$/i.test(tag)) return '</em>';
+  if (/^<ul(\s[^>]*)?>$/i.test(tag)) return '<ul>';
+  if (/^<\/ul>$/i.test(tag)) return '</ul>';
+  if (/^<li(\s[^>]*)?>$/i.test(tag)) return '<li>';
+  if (/^<\/li>$/i.test(tag)) return '</li>';
+  return '';
+}
+
 function sanitizeDescription(str) {
   if (str === undefined || str === null) return '';
   if (typeof str !== 'string') return null;
-  const s = str.trim();
-  if (s.length > 5000) return null;
-  return s;
+
+  let s = str.trim();
+
+  // Block closing tags become line breaks; block opening tags are stripped
+  s = s.replace(/<\/(div|p)>/gi, '<br>');
+  s = s.replace(/<(div|p|span|a|img|table|ol|header|footer|section|article|nav|h[1-6])[^>]*>/gi, '');
+
+  const result = [];
+  let lastIdx = 0;
+  const tagRe = /<\/?[a-zA-Z][^>]*>/g;
+  let m;
+  while ((m = tagRe.exec(s)) !== null) {
+    if (m.index > lastIdx) result.push(s.slice(lastIdx, m.index));
+    const norm = normalizeDescTag(m[0]);
+    if (norm) result.push(norm);
+    lastIdx = m.index + m[0].length;
+  }
+  if (lastIdx < s.length) result.push(s.slice(lastIdx));
+
+  let html = result.join('');
+  html = html.replace(/(<br>){3,}/g, '<br><br>');
+  html = html.replace(/^(<br>)+/, '').replace(/(<br>)+$/, '');
+
+  if (html.length > 5000) return null;
+  return html;
 }
 
 function validateDayAssigned(val) {

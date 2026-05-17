@@ -2,6 +2,8 @@ import { useRef, useState } from 'react';
 import { Droppable } from '@hello-pangea/dnd';
 import AssignedCard from './AssignedCard';
 import Tooltip from '../ui/Tooltip';
+import EmojiPicker from '../ui/EmojiPicker';
+import useEmojiInput from '../../hooks/useEmojiInput';
 
 const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -14,6 +16,7 @@ function NoteSlot({ note, isToday, exam, holiday, onSave }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const inputRef = useRef(null);
+  const { emojiState, handleChange, handleEmojiSelect, closeEmojiPicker } = useEmojiInput(draft, setDraft, inputRef);
 
   function startEdit() {
     setDraft(note ?? '');
@@ -28,6 +31,7 @@ function NoteSlot({ note, isToday, exam, holiday, onSave }) {
   }
 
   function onKeyDown(e) {
+    if (emojiState) return;
     if (e.key === 'Enter') { e.preventDefault(); commit(); }
     if (e.key === 'Escape') { setEditing(false); setDraft(''); }
   }
@@ -38,18 +42,23 @@ function NoteSlot({ note, isToday, exam, holiday, onSave }) {
 
   if (editing) {
     return (
-      <input
-        ref={inputRef}
-        type="text"
-        value={draft}
-        onChange={e => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={onKeyDown}
-        onPointerDown={e => e.stopPropagation()}
-        maxLength={200}
-        className={`flex-1 min-w-0 text-[10px] bg-transparent border-b outline-none py-0.5 text-zinc-600 placeholder-zinc-300 ${accentBorder}`}
-        placeholder="Add a note…"
-      />
+      <div className="relative flex-1 min-w-0">
+        <input
+          ref={inputRef}
+          type="text"
+          value={draft}
+          onChange={handleChange}
+          onBlur={() => setTimeout(commit, 150)}
+          onKeyDown={onKeyDown}
+          onPointerDown={e => e.stopPropagation()}
+          maxLength={200}
+          className={`w-full text-[10px] bg-transparent border-b outline-none py-0.5 text-zinc-600 placeholder-zinc-300 ${accentBorder}`}
+          placeholder="Add a note…"
+        />
+        {emojiState && (
+          <EmojiPicker anchorRef={inputRef} query={emojiState.query} onSelect={handleEmojiSelect} onClose={closeEmojiPicker} />
+        )}
+      </div>
     );
   }
 

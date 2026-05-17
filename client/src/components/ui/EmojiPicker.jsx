@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { loadEmojis } from '../../data/loadEmojis';
 
 const RECENT_KEY = 'recentEmojis';
@@ -16,9 +17,11 @@ function rank(names, q) {
   return 2;
 }
 
-export default function EmojiPicker({ query, onSelect, onClose }) {
+export default function EmojiPicker({ anchorRef, query, onSelect, onClose }) {
   const [emojis, setEmojis] = useState(null);
   const [idx, setIdx] = useState(0);
+  const [pos, setPos] = useState({ top: -9999, left: -9999 });
+  const pickerRef = useRef(null);
 
   useEffect(() => {
     loadEmojis().then(setEmojis);
@@ -34,6 +37,35 @@ export default function EmojiPicker({ query, onSelect, onClose }) {
 
   useEffect(() => { setIdx(0); }, [query]);
 
+  function reposition() {
+    const anchor = anchorRef?.current;
+    const picker = pickerRef.current;
+    if (!anchor || !picker) return;
+    const rect = anchor.getBoundingClientRect();
+    const ph = picker.offsetHeight;
+    const pw = picker.offsetWidth;
+    let top = rect.bottom + 4;
+    if (top + ph > window.innerHeight - 8) top = rect.top - ph - 4;
+    let left = rect.left;
+    left = Math.min(Math.max(8, left), window.innerWidth - pw - 8);
+    setPos({ top, left });
+  }
+
+  useLayoutEffect(() => {
+    reposition();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [results.length]);
+
+  useEffect(() => {
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
+    return () => {
+      window.removeEventListener('scroll', reposition, true);
+      window.removeEventListener('resize', reposition);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (emojis !== null && results.length === 0) { onClose(); return; }
 
@@ -48,6 +80,8 @@ export default function EmojiPicker({ query, onSelect, onClose }) {
         e.preventDefault();
         if (results[idx]) { addRecent(results[idx].e); onSelect(results[idx].e); }
       } else if (e.key === 'Escape') {
+        e.stopPropagation();
+        e.preventDefault();
         onClose();
       }
     }
@@ -63,8 +97,12 @@ export default function EmojiPicker({ query, onSelect, onClose }) {
     onSelect(emoji);
   }
 
-  return (
-    <div className="flex flex-col bg-white border border-zinc-200 rounded-xl shadow-lg p-1.5 min-w-max">
+  return createPortal(
+    <div
+      ref={pickerRef}
+      style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 9999 }}
+      className="flex flex-col bg-white border border-zinc-200 rounded-xl shadow-lg p-1.5"
+    >
       {q.length === 0 && (
         <p className="text-[9px] text-zinc-400 px-1 mb-1 uppercase tracking-wide font-medium">Recent</p>
       )}
@@ -88,6 +126,7 @@ export default function EmojiPicker({ query, onSelect, onClose }) {
           :{results[idx].n[0]}:
         </p>
       )}
-    </div>
+    </div>,
+    document.body,
   );
 }

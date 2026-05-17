@@ -3,6 +3,8 @@ import { useRegisterModal } from '../../context/ModalContext';
 import { useExams } from '../../context/ExamsContext';
 import Tooltip from '../ui/Tooltip';
 import DatePickerInput from '../ui/DatePickerInput';
+import EmojiPicker from '../ui/EmojiPicker';
+import useEmojiInput from '../../hooks/useEmojiInput';
 
 const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
@@ -40,18 +42,33 @@ function PencilIcon() {
 }
 
 function EditRow({ titleRef, draft, setDraft, saving, onConfirm, onCancel, onDelete }) {
+  const { emojiState, handleChange, handleEmojiSelect, closeEmojiPicker } = useEmojiInput(
+    draft.title,
+    next => setDraft(p => ({ ...p, title: next })),
+    titleRef,
+  );
+
   return (
     <div className="flex items-center gap-2 px-7 py-4 bg-indigo-50 min-h-[84px]">
-      <input
-        ref={titleRef}
-        type="text"
-        value={draft.title}
-        onChange={e => setDraft(p => ({ ...p, title: e.target.value }))}
-        onKeyDown={e => { if (e.key === 'Enter') onConfirm(); if (e.key === 'Escape') onCancel(); }}
-        placeholder="Exam name…"
-        maxLength={200}
-        className="flex-1 min-w-0 text-sm font-medium text-zinc-900 border border-indigo-200 bg-white rounded-lg px-3 py-2 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition"
-      />
+      <div className="relative flex-1 min-w-0">
+        <input
+          ref={titleRef}
+          type="text"
+          value={draft.title}
+          onChange={handleChange}
+          onKeyDown={e => {
+            if (emojiState) return;
+            if (e.key === 'Enter') onConfirm();
+            if (e.key === 'Escape') onCancel();
+          }}
+          placeholder="Exam name…"
+          maxLength={200}
+          className="w-full text-sm font-medium text-zinc-900 border border-indigo-200 bg-white rounded-lg px-3 py-2 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition"
+        />
+        {emojiState && (
+          <EmojiPicker anchorRef={titleRef} query={emojiState.query} onSelect={handleEmojiSelect} onClose={closeEmojiPicker} />
+        )}
+      </div>
       <DatePickerInput
         value={draft.exam_date}
         onChange={date => setDraft(p => ({ ...p, exam_date: date }))}

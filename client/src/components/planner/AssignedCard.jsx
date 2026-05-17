@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { Draggable } from '@hello-pangea/dnd';
 import LinkText from '../ui/LinkText';
+import RichText from '../ui/RichText';
 import Tooltip, { recurrenceLabel } from '../ui/Tooltip';
 import ConfirmPopover from '../ui/ConfirmPopover';
 import { useLists } from '../../context/ListsContext';
@@ -90,7 +91,7 @@ const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, onC
         <button
           onPointerDown={e => e.stopPropagation()}
           onClick={e => { e.stopPropagation(); onComplete(e); }}
-          className={`flex-shrink-0 relative w-3.5 h-3.5 rounded border transition-all duration-150 flex items-center justify-center md:before:absolute md:before:content-[''] md:before:inset-[-8px] ${
+          className={`flex-shrink-0 relative w-3.5 h-3.5 rounded border transition-all duration-150 flex items-center justify-center hover:scale-110 active:scale-95 md:before:absolute md:before:content-[''] md:before:inset-[-8px] ${
             checked
               ? 'bg-indigo-500 border-indigo-500'
               : 'border-zinc-300 hover:border-indigo-400 hover:bg-indigo-50'
@@ -103,12 +104,12 @@ const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, onC
             stroke="white"
             strokeWidth={3.5}
             style={{
-              strokeDasharray: 40,
-              strokeDashoffset: checked ? 0 : 40,
+              strokeDasharray: 48,
+              strokeDashoffset: checked ? 0 : 48,
               transition: 'stroke-dashoffset 280ms ease 60ms',
             }}
           >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
           </svg>
         </button>
         </Tooltip>
@@ -131,7 +132,7 @@ const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, onC
 
       <LinkText text={todo.title} className="text-xs font-medium text-zinc-800 leading-snug break-words min-w-0 w-full block" />
       {todo.description && (
-        <LinkText text={todo.description} className="text-[11px] text-zinc-400 mt-0.5 line-clamp-2 block" />
+        <RichText text={todo.description} className="text-[11px] text-zinc-400 mt-0.5 line-clamp-2 block" />
       )}
 
       {!isMobile && !anyModalOpen && (

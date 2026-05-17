@@ -5,6 +5,7 @@ import { useLists } from '../../context/ListsContext';
 import { loadEmojis, getLoadedEmojis } from '../../data/loadEmojis';
 import useIsMobile from '../../hooks/useIsMobile';
 import { useRegisterModal } from '../../context/ModalContext';
+import { sanitizeRichHtml, richTextToPlain } from '../../utils/richText';
 
 function toIso(d) {
   const y = d.getFullYear();
@@ -163,8 +164,17 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
 
   const titleRef = useRef(null);
   const descRef = useRef(null);
+  const descCaretRef = useRef(0);
 
   useEffect(() => { loadEmojis(); }, []);
+
+  // Seed contentEditable innerHTML once on mount (description is uncontrolled after that)
+  useEffect(() => {
+    if (descRef.current) {
+      descRef.current.innerHTML = todo?.description ?? '';
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Update listId default when lists load (in case they weren't available initially)
   const effectiveListId = listId ?? lists[0]?.id ?? null;
@@ -189,32 +199,169 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
     setEmojiState(trigger ? { field: 'title', ...trigger } : null);
   }
 
-  function handleDescChange(e) {
-    const val = e.target.value;
-    setDescription(val);
-    if (applyAutoConvert(descRef, val, e.target.selectionStart, setDescription)) return;
-    const trigger = detectEmojiTrigger(val, e.target.selectionStart);
-    setEmojiState(trigger ? { field: 'description', ...trigger } : null);
+  function getDescCaretOffset() {
+    const el = descRef.current;
+    if (!el) return 0;
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return 0;
+    const pre = document.createRange();
+    pre.selectNodeContents(el);
+    pre.setEnd(sel.getRangeAt(0).endContainer, sel.getRangeAt(0).endOffset);
+    return pre.toString().length;
+  }
+
+  function setDescSelection(start, end) {
+    const el = descRef.current;
+    if (!el) return;
+    let found = 0;
+    let startNode = null, startOff = 0, endNode = null, endOff = 0;
+    function walk(node) {
+      if (endNode) return;
+      if (node.nodeType === Node.TEXT_NODE) {
+        const len = node.textContent.length;
+        if (!startNode && found + len >= start) {
+          startNode = node;
+          startOff = start - found;
+        }
+        if (!endNode && found + len >= end) {
+          endNode = node;
+          endOff = end - found;
+        }
+        found += len;
+      } else {
+        for (const child of node.childNodes) walk(child);
+      }
+    }
+    walk(el);
+    if (!startNode) { startNode = el; startOff = 0; }
+    if (!endNode) { endNode = startNode; endOff = startOff; }
+    const range = document.createRange();
+    range.setStart(startNode, startOff);
+    range.setEnd(endNode, endOff);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  function handleDescKeyDown(e) {
+    if (!(e.metaKey || e.ctrlKey)) return;
+    const key = e.key.toLowerCase();
+    if (key === 'b') { e.preventDefault(); document.execCommand('bold'); }
+    else if (key === 'i') { e.preventDefault(); document.execCommand('italic'); }
+    // execCommand fires 'input' → handleDescInput syncs state
+  }
+
+  function tryBulletTrigger() {
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return false;
+    const range = sel.getRangeAt(0);
+    if (!range.collapsed) return false;
+
+    // Bail if already inside a list item
+    let n = range.startContainer;
+    while (n && n !== descRef.current) {
+      if (n.nodeName === 'LI') return false;
+      n = n.parentNode;
+    }
+
+    const startNode = range.startContainer;
+    const startOffset = range.startOffset;
+    if (startNode.nodeType !== Node.TEXT_NODE) return false;
+    const textBeforeCaret = startNode.textContent.substring(0, startOffset);
+    if (textBeforeCaret !== '- ') return false;
+
+    // Must be at start of line — previous siblings may only be <br> or empty
+    let prev = startNode.previousSibling;
+    while (prev) {
+      if (prev.nodeName === 'BR') break;
+      if (prev.nodeType === Node.TEXT_NODE && prev.textContent.length > 0) return false;
+      if (prev.nodeType === Node.ELEMENT_NODE) return false;
+      prev = prev.previousSibling;
+    }
+
+    range.setStart(startNode, 0);
+    range.setEnd(startNode, 2);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    document.execCommand('delete');
+    document.execCommand('insertUnorderedList');
+    return true;
+  }
+
+  function handleDescInput() {
+    const el = descRef.current;
+    if (!el) return;
+
+    if (tryBulletTrigger()) {
+      setDescription(sanitizeRichHtml(el.innerHTML));
+      return;
+    }
+
+    const val = el.textContent;
+    const caretPos = getDescCaretOffset();
+    descCaretRef.current = caretPos;
+
+    // Auto-convert :emoji: trigger
+    const before = val.substring(0, caretPos);
+    const autoMatch = before.match(/(^|[^:\w]):([\w-]+):$/);
+    if (autoMatch) {
+      const emojis = getLoadedEmojis();
+      if (emojis) {
+        const q = autoMatch[2].toLowerCase();
+        const hit = emojis.find(({ n }) => n[0] === q) || emojis.find(({ n }) => n.includes(q));
+        if (hit) {
+          const tokenStart = autoMatch.index + autoMatch[1].length;
+          setDescSelection(tokenStart, caretPos);
+          document.execCommand('insertText', false, hit.e + ' ');
+          setEmojiState(null);
+          setDescription(sanitizeRichHtml(el.innerHTML));
+          return;
+        }
+      }
+    }
+
+    // Emoji picker trigger
+    const triggerMatch = before.match(/(^|[^:\w]):([\w-]*)$/);
+    if (triggerMatch) {
+      const query = triggerMatch[2];
+      const triggerStart = triggerMatch.index + triggerMatch[1].length;
+      setEmojiState({ field: 'description', query, triggerStart });
+    } else {
+      setEmojiState(null);
+    }
+
+    setDescription(sanitizeRichHtml(el.innerHTML));
+  }
+
+  function handleDescPaste(e) {
+    e.preventDefault();
+    const text = e.clipboardData.getData('text/plain');
+    document.execCommand('insertText', false, text);
   }
 
   function handleEmojiSelect(emoji) {
     if (!emojiState) return;
-    const isTitle = emojiState.field === 'title';
-    const ref = isTitle ? titleRef : descRef;
-    const value = isTitle ? title : description;
-    const cursorPos = ref.current?.selectionStart ?? value.length;
-    const newVal = value.substring(0, emojiState.triggerStart) + emoji + ' ' + value.substring(cursorPos);
-    if (isTitle) {
+    if (emojiState.field === 'title') {
+      const cursorPos = titleRef.current?.selectionStart ?? title.length;
+      const newVal = title.substring(0, emojiState.triggerStart) + emoji + ' ' + title.substring(cursorPos);
       setTitle(newVal);
+      setEmojiState(null);
+      const newCursor = emojiState.triggerStart + emoji.length + 1;
+      setTimeout(() => {
+        titleRef.current?.focus();
+        titleRef.current?.setSelectionRange(newCursor, newCursor);
+      }, 0);
     } else {
-      setDescription(newVal);
+      // Description is contentEditable — insert via execCommand
+      const el = descRef.current;
+      if (!el) return;
+      el.focus();
+      const cursorPos = descCaretRef.current;
+      setDescSelection(emojiState.triggerStart, cursorPos);
+      document.execCommand('insertText', false, emoji + ' ');
+      setDescription(sanitizeRichHtml(el.innerHTML));
+      setEmojiState(null);
     }
-    setEmojiState(null);
-    const newCursor = emojiState.triggerStart + emoji.length + 1;
-    setTimeout(() => {
-      ref.current?.focus();
-      ref.current?.setSelectionRange(newCursor, newCursor);
-    }, 0);
   }
 
   async function handleSubmit(e) {
@@ -224,9 +371,10 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
     setError('');
     setLoading(true);
     try {
+      const rawDesc = sanitizeRichHtml(descRef.current?.innerHTML ?? '');
       const data = {
         title: title.trim(),
-        description: description.trim(),
+        description: richTextToPlain(rawDesc).trim() ? rawDesc : '',
         list_id: effectiveListId,
         day_assigned: dayAssigned || null,
         approx_time: approxTime === 'custom' ? (customTime.trim() || null) : (approxTime || null),
@@ -285,13 +433,12 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
             </label>
             <div className="relative">
               {emojiState?.field === 'title' && (
-                <div className="absolute bottom-full left-0 mb-1.5 z-50">
-                  <EmojiPicker
-                    query={emojiState.query}
-                    onSelect={handleEmojiSelect}
-                    onClose={() => setEmojiState(null)}
-                  />
-                </div>
+                <EmojiPicker
+                  anchorRef={titleRef}
+                  query={emojiState.query}
+                  onSelect={handleEmojiSelect}
+                  onClose={() => setEmojiState(null)}
+                />
               )}
               <input
                 ref={titleRef}
@@ -314,24 +461,30 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
             </label>
             <div className="relative">
               {emojiState?.field === 'description' && (
-                <div className="absolute bottom-full left-0 mb-1.5 z-50">
-                  <EmojiPicker
-                    query={emojiState.query}
-                    onSelect={handleEmojiSelect}
-                    onClose={() => setEmojiState(null)}
-                  />
-                </div>
+                <EmojiPicker
+                  anchorRef={descRef}
+                  query={emojiState.query}
+                  onSelect={handleEmojiSelect}
+                  onClose={() => setEmojiState(null)}
+                />
               )}
-              <textarea
-                ref={descRef}
-                value={description}
-                onChange={handleDescChange}
-                onBlur={() => setTimeout(() => setEmojiState(null), 150)}
-                rows={3}
-                maxLength={5000}
-                className="w-full px-3.5 py-2.5 text-sm bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition resize-none"
-                placeholder="Optional details…"
-              />
+              <div className="relative">
+                {!description && (
+                  <span className="absolute top-2.5 left-3.5 text-sm text-zinc-400 pointer-events-none select-none">
+                    Optional details…
+                  </span>
+                )}
+                <div
+                  ref={descRef}
+                  contentEditable
+                  suppressContentEditableWarning
+                  onInput={handleDescInput}
+                  onKeyDown={handleDescKeyDown}
+                  onPaste={handleDescPaste}
+                  onBlur={() => setTimeout(() => setEmojiState(null), 150)}
+                  className="w-full px-3.5 py-2.5 text-sm bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition min-h-[80px] whitespace-pre-wrap break-words outline-none [&_ul]:list-['-_'] [&_ul]:pl-5 [&_ul]:my-0"
+                />
+              </div>
             </div>
           </div>
 

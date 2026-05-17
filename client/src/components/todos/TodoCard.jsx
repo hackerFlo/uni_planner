@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { Draggable } from '@hello-pangea/dnd';
 import LinkText from '../ui/LinkText';
+import RichText from '../ui/RichText';
 import Tooltip, { recurrenceLabel } from '../ui/Tooltip';
 import ConfirmPopover from '../ui/ConfirmPopover';
 import { useLists } from '../../context/ListsContext';
@@ -27,7 +28,7 @@ function dayLabel(iso) {
 const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAssigned, checked, onComplete, onEdit, onDelete }) {
   const isMobile = useIsMobile();
   const anyModalOpen = useAnyModalOpen();
-  const hideOnHover = anyModalOpen ? '' : 'group-hover:hidden';
+  const hideOnHover = anyModalOpen ? '' : 'group-hover:invisible';
   const { getList } = useLists();
   const list = getList(todo.list_id);
   const palette = LIST_PALETTE[list?.color] ?? LIST_PALETTE.slate;
@@ -118,7 +119,7 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
           </div>
           <LinkText text={todo.title} className="text-xs font-medium text-zinc-800 leading-snug break-words min-w-0 w-full block" />
           {todo.description && (
-            <LinkText text={todo.description} className="text-[11px] text-zinc-400 mt-0.5 line-clamp-2 block" />
+            <RichText text={todo.description} className="text-[11px] text-zinc-400 mt-0.5 line-clamp-2 block" />
           )}
           <div className="flex gap-1 mt-2">
             {[0, 1, 2].map(i => (
@@ -135,7 +136,7 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
           <button
             onPointerDown={e => e.stopPropagation()}
             onClick={e => { e.stopPropagation(); onComplete(e); }}
-            className={`mt-0.5 flex-shrink-0 w-4 h-4 rounded border transition-all duration-150 flex items-center justify-center ${
+            className={`mt-0.5 flex-shrink-0 w-4 h-4 rounded border transition-all duration-150 flex items-center justify-center hover:scale-110 active:scale-95 ${
               checked
                 ? 'bg-indigo-500 border-indigo-500'
                 : 'border-zinc-300 hover:border-indigo-400 hover:bg-indigo-50'
@@ -146,14 +147,14 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
               fill="none"
               viewBox="0 0 24 24"
               stroke="white"
-              strokeWidth={3}
+              strokeWidth={3.5}
               style={{
-                strokeDasharray: 40,
-                strokeDashoffset: checked ? 0 : 40,
+                strokeDasharray: 48,
+                strokeDashoffset: checked ? 0 : 48,
                 transition: 'stroke-dashoffset 280ms ease 60ms',
               }}
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
             </svg>
           </button>
           </Tooltip>
@@ -182,7 +183,7 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
               </div>
             </div>
             {todo.description && (
-              <LinkText text={todo.description} className="text-xs text-zinc-400 mt-0.5 line-clamp-2 block" />
+              <RichText text={todo.description} className="text-xs text-zinc-400 mt-0.5 line-clamp-2 block" />
             )}
           </div>
 
