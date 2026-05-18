@@ -19,8 +19,8 @@ const TODO_SELECT = `
   FROM todos t
   LEFT JOIN todos p ON p.id = t.recurrence_parent_id`;
 
-function getTodoById(id) {
-  return db.prepare(`${TODO_SELECT} WHERE t.id = ?`).get(id);
+function getTodoById(id, userId) {
+  return db.prepare(`${TODO_SELECT} WHERE t.id = ? AND t.user_id = ?`).get(id, userId);
 }
 
 function validateUserOwnsList(userId, listId) {
@@ -221,7 +221,7 @@ router.post('/', (req, res) => {
     materialized.push(...children);
   }
 
-  const todo = getTodoById(result.lastInsertRowid);
+  const todo = getTodoById(result.lastInsertRowid, req.user.id);
   res.status(201).json({ todo, materialized });
 });
 
@@ -294,7 +294,7 @@ router.patch('/:id', (req, res) => {
     }
   })();
 
-  const responseTodo = getTodoById(id);
+  const responseTodo = getTodoById(id, req.user.id);
   let materialized = [];
 
   if (hasRecurrenceChange) {

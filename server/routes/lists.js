@@ -47,7 +47,7 @@ router.post('/', (req, res) => {
     'INSERT INTO lists (user_id, name, color, sort_order) VALUES (?, ?, ?, ?)'
   ).run(req.user.id, name, color, sort_order);
 
-  const list = db.prepare('SELECT id, name, color, sort_order FROM lists WHERE id = ?').get(result.lastInsertRowid);
+  const list = db.prepare('SELECT id, name, color, sort_order FROM lists WHERE id = ? AND user_id = ?').get(result.lastInsertRowid, req.user.id);
   res.status(201).json({ list });
 });
 
@@ -101,7 +101,7 @@ router.patch('/:id', (req, res) => {
   const set = Object.keys(updates).map(k => `${k} = ?`).join(', ');
   db.prepare(`UPDATE lists SET ${set} WHERE id = ? AND user_id = ?`).run(...Object.values(updates), listId, req.user.id);
 
-  const list = db.prepare('SELECT id, name, color, sort_order FROM lists WHERE id = ?').get(listId);
+  const list = db.prepare('SELECT id, name, color, sort_order FROM lists WHERE id = ? AND user_id = ?').get(listId, req.user.id);
   res.json({ list });
 });
 
