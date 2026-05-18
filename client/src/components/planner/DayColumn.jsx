@@ -109,7 +109,9 @@ export default function DayColumn({ date, todos, holiday, exam, isDragging, note
   const month = dateObj.toLocaleDateString('en-GB', { month: 'short' });
 
   return (
-    <Droppable droppableId={date}>
+    <Droppable
+      droppableId={date}
+    >
       {(provided, snapshot) => (
         <div
           ref={provided.innerRef}
@@ -157,7 +159,7 @@ export default function DayColumn({ date, todos, holiday, exam, isDragging, note
 
           <div
             className={`flex-1 p-2.5 min-h-[120px] transition-colors rounded-b-xl ${
-              snapshot.isDraggingOver ? 'bg-indigo-50/60' : exam ? 'bg-rose-50/20' : holiday ? 'bg-emerald-50/20' : ''
+              snapshot.isDraggingOver ? 'bg-indigo-50/60' : isToday ? '' : exam ? 'bg-rose-50/20' : holiday ? 'bg-emerald-50/20' : ''
             }`}
           >
             <div className="space-y-2">

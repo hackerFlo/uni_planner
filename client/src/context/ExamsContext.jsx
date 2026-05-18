@@ -1,6 +1,7 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { useAuth } from './AuthContext';
+import { useUndo } from './UndoContext';
 
 const ExamsContext = createContext(null);
 
@@ -19,8 +20,11 @@ function daysUntil(dateStr) {
 
 export function ExamsProvider({ children }) {
   const { user } = useAuth();
+  const { recordUndo } = useUndo();
   const [exams, setExams] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const examsRef = useRef(exams);
+  useEffect(() => { examsRef.current = exams; }, [exams]);
 
   const fetchExams = useCallback(async () => {
     if (!user) { setExams([]); return; }
@@ -42,22 +46,40 @@ export function ExamsProvider({ children }) {
     [exams]
   );
 
-  async function addExam(title, examDate) {
+  const addExam = useCallback(async (title, examDate) => {
     const { exam } = await api.post('/api/exams', { title, exam_date: examDate });
     setExams(prev => [...prev, exam]);
+    recordUndo(async () => {
+      await api.delete(`/api/exams/${exam.id}`);
+      setExams(prev => prev.filter(e => e.id !== exam.id));
+    });
     return exam;
-  }
+  }, [recordUndo]);
 
-  async function updateExam(id, updates) {
+  const updateExam = useCallback(async (id, updates) => {
+    const prevExam = examsRef.current.find(e => e.id === id);
     const { exam } = await api.patch(`/api/exams/${id}`, updates);
     setExams(prev => prev.map(e => e.id === id ? exam : e));
+    if (prevExam) {
+      recordUndo(async () => {
+        const { exam: reverted } = await api.patch(`/api/exams/${id}`, { title: prevExam.title, exam_date: prevExam.exam_date });
+        setExams(prev => prev.map(e => e.id === id ? reverted : e));
+      });
+    }
     return exam;
-  }
+  }, [recordUndo]);
 
-  async function deleteExam(id) {
+  const deleteExam = useCallback(async (id) => {
+    const prevExam = examsRef.current.find(e => e.id === id);
     await api.delete(`/api/exams/${id}`);
     setExams(prev => prev.filter(e => e.id !== id));
-  }
+    if (prevExam) {
+      recordUndo(async () => {
+        const { exam: restored } = await api.post('/api/exams', { title: prevExam.title, exam_date: prevExam.exam_date });
+        setExams(prev => [...prev, restored]);
+      });
+    }
+  }, [recordUndo]);
 
   return (
     <ExamsContext.Provider value={{

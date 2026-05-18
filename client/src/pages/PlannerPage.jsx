@@ -6,6 +6,7 @@ import { useDayNotes } from '../hooks/useDayNotes';
 import { useShakeUndo } from '../hooks/useShakeUndo';
 import { useWhatsNew } from '../hooks/useWhatsNew';
 import { useLists } from '../context/ListsContext';
+import { useUndo } from '../context/UndoContext';
 import Navbar from '../components/layout/Navbar';
 import TodoList from '../components/todos/TodoList';
 import TodoForm from '../components/todos/TodoForm';
@@ -43,7 +44,8 @@ function sortSidebar(items) {
 }
 
 export default function PlannerPage() {
-  const { todos, loading, fetchTodos, createTodo, updateTodo, deleteTodo, assignDay, reorderDay, canUndo, undo } = useTodos();
+  const { todos, loading, fetchTodos, createTodo, updateTodo, deleteTodo, assignDay, reorderDay } = useTodos();
+  const { canUndo, undo } = useUndo();
   const { notes, setNote } = useDayNotes();
   const { lists } = useLists();
   const whatsNew = useWhatsNew();

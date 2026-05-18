@@ -52,6 +52,11 @@ function getAssignableDates(extraDate) {
 const TIME_PRESETS = ['5m', '10m', '15m', '30m', '45m', '90m', '1h', '2h', '3h', '4h'];
 function isPreset(v) { return v === '' || TIME_PRESETS.includes(v); }
 
+const ARROW_MAP = [
+  { from: '->', to: '→' },
+  { from: '<-', to: '←' },
+];
+
 function tryAutoConvert(value, cursorPos) {
   const before = value.substring(0, cursorPos);
   const match = before.match(/(^|[^:\w]):([\w-]+):$/);
@@ -165,6 +170,7 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
   const titleRef = useRef(null);
   const descRef = useRef(null);
   const descCaretRef = useRef(0);
+  const backdropMouseDownRef = useRef(false);
 
   useEffect(() => { loadEmojis(); }, []);
 
@@ -179,6 +185,26 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
   // Update listId default when lists load (in case they weren't available initially)
   const effectiveListId = listId ?? lists[0]?.id ?? null;
 
+  function buildPayload() {
+    const rawDesc = sanitizeRichHtml(descRef.current?.innerHTML ?? '');
+    return {
+      title: title.trim(),
+      description: richTextToPlain(rawDesc).trim() ? rawDesc : '',
+      list_id: effectiveListId,
+      day_assigned: dayAssigned || null,
+      approx_time: approxTime === 'custom' ? (customTime.trim() || null) : (approxTime || null),
+      recurrence_interval_days: (recurrence === '' || recurrence === 'weekdays' || recurrence === 'weekends') ? null : Number(recurrence),
+      recurrence_pattern: (recurrence === 'weekdays' || recurrence === 'weekends') ? recurrence : null,
+    };
+  }
+
+  function handleClose() {
+    if (mode === 'edit' && title.trim() && !loading) {
+      onUpdate(todo.id, buildPayload()).catch(() => {});
+    }
+    onClose();
+  }
+
   function applyAutoConvert(ref, val, cursorPos, setter) {
     const converted = tryAutoConvert(val, cursorPos);
     if (!converted) return false;
@@ -192,10 +218,26 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
   }
 
   function handleTitleChange(e) {
-    const val = e.target.value;
+    let val = e.target.value;
+    let cursorPos = e.target.selectionStart;
+
+    for (const { from, to } of ARROW_MAP) {
+      const idx = val.indexOf(from);
+      if (idx !== -1) {
+        val = val.substring(0, idx) + to + val.substring(idx + from.length);
+        setTitle(val);
+        const newCursor = idx + to.length;
+        setTimeout(() => {
+          titleRef.current?.setSelectionRange(newCursor, newCursor);
+        }, 0);
+        setEmojiState(null);
+        return;
+      }
+    }
+
     setTitle(val);
-    if (applyAutoConvert(titleRef, val, e.target.selectionStart, setTitle)) return;
-    const trigger = detectEmojiTrigger(val, e.target.selectionStart);
+    if (applyAutoConvert(titleRef, val, cursorPos, setTitle)) return;
+    const trigger = detectEmojiTrigger(val, cursorPos);
     setEmojiState(trigger ? { field: 'title', ...trigger } : null);
   }
 
@@ -301,6 +343,17 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
     const caretPos = getDescCaretOffset();
     descCaretRef.current = caretPos;
 
+    // Auto-convert -> and <- to arrows
+    for (const { from, to } of ARROW_MAP) {
+      const idx = val.indexOf(from);
+      if (idx !== -1) {
+        setDescSelection(idx, idx + from.length);
+        document.execCommand('insertText', false, to);
+        setDescription(sanitizeRichHtml(el.innerHTML));
+        return;
+      }
+    }
+
     // Auto-convert :emoji: trigger
     const before = val.substring(0, caretPos);
     const autoMatch = before.match(/(^|[^:\w]):([\w-]+):$/);
@@ -371,16 +424,7 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
     setError('');
     setLoading(true);
     try {
-      const rawDesc = sanitizeRichHtml(descRef.current?.innerHTML ?? '');
-      const data = {
-        title: title.trim(),
-        description: richTextToPlain(rawDesc).trim() ? rawDesc : '',
-        list_id: effectiveListId,
-        day_assigned: dayAssigned || null,
-        approx_time: approxTime === 'custom' ? (customTime.trim() || null) : (approxTime || null),
-        recurrence_interval_days: (recurrence === '' || recurrence === 'weekdays' || recurrence === 'weekends') ? null : Number(recurrence),
-        recurrence_pattern: (recurrence === 'weekdays' || recurrence === 'weekends') ? recurrence : null,
-      };
+      const data = buildPayload();
       if (mode === 'edit') {
         await onUpdate(todo.id, data);
       } else {
@@ -398,8 +442,13 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
     <div
       data-modal-root
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm px-4"
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
-      onKeyDown={e => { if (e.key === 'Escape' && !emojiState) onClose(); }}
+      onMouseDown={e => { backdropMouseDownRef.current = e.target === e.currentTarget; }}
+      onClick={e => {
+        const fromBackdrop = backdropMouseDownRef.current;
+        backdropMouseDownRef.current = false;
+        if (fromBackdrop && e.target === e.currentTarget) handleClose();
+      }}
+      onKeyDown={e => { if (e.key === 'Escape' && !emojiState) handleClose(); }}
     >
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
         <div className="flex items-center justify-between mb-5">
@@ -407,7 +456,7 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
             {mode === 'edit' ? 'Edit item' : 'New item'}
           </h2>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="text-zinc-400 hover:text-zinc-600 transition p-1 rounded-lg hover:bg-zinc-50"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

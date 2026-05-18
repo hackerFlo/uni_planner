@@ -120,6 +120,8 @@ function ExamsModalContent() {
   const [draft, setDraft] = useState({ title: '', exam_date: '' });
   const [saving, setSaving] = useState(false);
   const titleRef = useRef(null);
+  const listScrollRef = useRef(null);
+  const scrollTimerRef = useRef(null);
   const n = upcomingExams.length;
 
   useEffect(() => {
@@ -177,7 +179,7 @@ function ExamsModalContent() {
       className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/30 backdrop-blur-[3px] animate-[fadeIn_0.2s_ease]"
       onClick={e => { if (e.target === e.currentTarget) closeModal(); }}
     >
-      <div className="bg-white rounded-2xl shadow-2xl w-[580px] max-w-[calc(100vw-32px)] max-h-[calc(100vh-64px)] flex flex-col overflow-hidden animate-[slideUp_0.28s_cubic-bezier(0.22,1,0.36,1)]">
+      <div className="bg-white rounded-2xl shadow-2xl w-[580px] max-w-[calc(100vw-32px)] max-h-[calc(100vh-32px)] flex flex-col overflow-hidden animate-[slideUp_0.28s_cubic-bezier(0.22,1,0.36,1)]">
 
         <div className="px-7 pt-6 pb-[18px] border-b border-zinc-100 flex items-center justify-between gap-4 flex-shrink-0">
           <h2 className="text-[19px] font-semibold text-zinc-900 tracking-tight">
@@ -196,7 +198,17 @@ function ExamsModalContent() {
           </Tooltip>
         </div>
 
-        <div className="flex-1 overflow-y-auto divide-y divide-zinc-100">
+        <div
+          ref={listScrollRef}
+          className="divide-y divide-zinc-100 flex-1 min-h-0 overflow-y-auto autohide-scroll"
+          onScroll={() => {
+            const el = listScrollRef.current;
+            if (!el) return;
+            el.classList.add('is-scrolling');
+            clearTimeout(scrollTimerRef.current);
+            scrollTimerRef.current = setTimeout(() => el.classList.remove('is-scrolling'), 800);
+          }}
+        >
           {editingId === 'new' && (
             <EditRow
               titleRef={titleRef}
@@ -237,7 +249,8 @@ function ExamsModalContent() {
             return (
               <div
                 key={exam.id}
-                className="group flex items-center gap-3.5 px-7 py-3.5 hover:bg-zinc-50 transition-colors"
+                className="group flex items-center gap-3.5 px-7 py-3.5 hover:bg-zinc-50 transition-colors animate-[fadeIn_0.28s_ease_both]"
+                style={{ animationDelay: `${idx * 50}ms` }}
               >
                 <div className="w-14 h-14 rounded-xl bg-zinc-100 flex flex-col items-center justify-center flex-shrink-0">
                   <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">{month}</span>

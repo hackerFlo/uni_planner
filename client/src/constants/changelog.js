@@ -4,11 +4,48 @@
 // This way every Watchtower deploy maps to exactly one version.
 // Versioning: X.Y — increment Y for regular updates, bump X (reset Y to 0) for big releases.
 // Add a new entry to CHANGELOG (newest first) on first push of a window; append to top entry otherwise.
-export const CURRENT_VERSION = '2.1';
+export const CURRENT_VERSION = '2.2';
 
 // icon: 'purple' | 'green' | 'amber' | 'blue' | 'rose'
 // Each feature needs: icon, name, desc, and a 24×24 SVG path string (stroke icons).
 export const CHANGELOG = [
+  {
+    version: '2.2',
+    date: '2026-05-18',
+    title: 'Undo everywhere & polish',
+    features: [
+      {
+        icon: 'blue',
+        name: 'Drag handle on mobile',
+        desc: 'Cards now have a dedicated grip on the right edge for dragging on phones. Tapping the card body still opens the editor — no more accidental drags while scrolling.',
+        svgPath: 'M8 6h.01M8 12h.01M8 18h.01M16 6h.01M16 12h.01M16 18h.01',
+      },
+      {
+        icon: 'purple',
+        name: 'Undo for exams',
+        desc: 'Adding, editing, or deleting an exam now joins the existing 30-second shake-to-undo window — give your phone a shake (or hit ⌘Z on desktop) to revert.',
+        svgPath: 'M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6',
+      },
+      {
+        icon: 'green',
+        name: 'Edits save when you close',
+        desc: 'Closing the edit modal (Esc, backdrop click, or the ✕) now saves your changes automatically instead of discarding them.',
+        svgPath: 'M5 13l4 4L19 7',
+      },
+      {
+        icon: 'amber',
+        name: 'Click-drag on backdrop keeps modal open',
+        desc: 'If you mousedown inside a modal and release on the backdrop, the modal stays open. Only a clean click on the backdrop closes it.',
+        svgPath: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
+      },
+      {
+        icon: 'rose',
+        name: 'Arrow shortcuts',
+        desc: 'Type -> or <- in a title or description and it auto-converts to → or ←.',
+        svgPath: 'M17 8l4 4m0 0l-4 4m4-4H3',
+      },
+    ],
+  },
   {
     version: '2.1',
     date: '2026-05-17',

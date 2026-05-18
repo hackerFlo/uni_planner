@@ -67,6 +67,7 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
       prevXRef.current = null;
       if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
       window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
     }
     window.addEventListener('pointermove', handleMove);
     window.addEventListener('pointerup', handleUp);
@@ -82,14 +83,14 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
     <div
       ref={provided.innerRef}
       {...provided.draggableProps}
-      {...provided.dragHandleProps}
+      {...(!isMobile ? provided.dragHandleProps : {})}
       style={{
         ...provided.draggableProps.style,
         width: isDraggingOverDay ? 180 : provided.draggableProps.style?.width,
         height: isDraggingOverDay ? 'auto' : provided.draggableProps.style?.height,
         opacity: snapshot.isDragging ? 0.85 : checked ? 0.4 : 1,
         transform: snapshot.isDragging
-          ? `${provided.draggableProps.style?.transform ?? ''} rotate(${rotation}deg) scale(1.03)`
+          ? `${provided.draggableProps.style?.transform ?? ''} ${isMobile ? '' : `rotate(${rotation}deg) `}scale(1.03)`
           : checked
           ? `${provided.draggableProps.style?.transform ?? ''} scale(0.97)`
           : provided.draggableProps.style?.transform,
@@ -97,7 +98,7 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
           ? 'opacity 400ms ease, transform 300ms ease'
           : provided.draggableProps.style?.transition,
       }}
-      className={`group border rounded-lg shadow-sm transition-all select-none cursor-grab active:cursor-grabbing ${
+      className={`group border rounded-lg shadow-sm transition-all select-none ${isMobile ? '' : 'cursor-grab active:cursor-grabbing'} ${
         isDraggingOverDay
           ? 'bg-white border-zinc-100 p-2.5'
           : isAssigned
@@ -187,6 +188,22 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
             )}
           </div>
 
+          {isMobile && (
+            <button
+              {...provided.dragHandleProps}
+              aria-label="Drag to reorder"
+              onPointerDown={e => e.stopPropagation()}
+              onClick={e => e.stopPropagation()}
+              style={{ touchAction: 'none' }}
+              className="flex-shrink-0 -mr-1 p-1.5 text-zinc-300 active:text-zinc-500 cursor-grab active:cursor-grabbing"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <circle cx="7" cy="5" r="1.5"/><circle cx="13" cy="5" r="1.5"/>
+                <circle cx="7" cy="10" r="1.5"/><circle cx="13" cy="10" r="1.5"/>
+                <circle cx="7" cy="15" r="1.5"/><circle cx="13" cy="15" r="1.5"/>
+              </svg>
+            </button>
+          )}
           {!isMobile && (
             <div
               className={`absolute right-0 top-0 items-center gap-1 pl-4 ${anyModalOpen ? 'hidden' : 'hidden group-hover:flex'}`}

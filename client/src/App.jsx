@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { UndoProvider } from './context/UndoContext';
 import { ListsProvider } from './context/ListsContext';
 import { ExamsProvider } from './context/ExamsContext';
 import ExamsModal from './components/exams/ExamsModal';
@@ -51,6 +52,7 @@ export default function App() {
       <ToastProvider>
       <ModalProvider>
       <AuthProvider>
+        <UndoProvider>
         <ListsProvider>
           <ExamsProvider>
             <BrowserRouter>
@@ -65,6 +67,7 @@ export default function App() {
             <ExamsModal />
           </ExamsProvider>
         </ListsProvider>
+        </UndoProvider>
       </AuthProvider>
       </ModalProvider>
       </ToastProvider>

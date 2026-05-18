@@ -27,7 +27,9 @@ export default function TodoList({ list, todos, loading, onAdd, onEdit, onComple
         </Tooltip>
       </div>
 
-      <Droppable droppableId={`${list.id}-list`} isDropDisabled={true}>
+      <Droppable
+        droppableId={`${list.id}-list`}
+      >
         {(provided) => (
           <div
             ref={provided.innerRef}

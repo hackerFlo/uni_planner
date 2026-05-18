@@ -114,7 +114,7 @@ export default function WhatsNewModal({ entries, onClose }) {
                 {entry.features.map((f, fi) => (
                   <div
                     key={fi}
-                    className={`flex items-start gap-4 px-7 py-4 hover:bg-zinc-50 transition-colors ${(isMulti ? fi > 0 : fi > 0 || ei > 0) ? 'border-t border-zinc-100' : ''}`}
+                    className={`flex items-start gap-4 px-7 py-4 hover:bg-zinc-50 transition-colors ${fi > 0 || ei > 0 ? 'border-t border-zinc-100' : ''}`}
                   >
                     <FeatureIcon svgPath={f.svgPath} color={f.icon} />
                     <div className="flex flex-col gap-0.5">

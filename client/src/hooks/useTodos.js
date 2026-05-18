@@ -1,7 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { api } from '../api/client';
-
-const UNDO_WINDOW_MS = 30000;
+import { useUndo } from '../context/UndoContext';
 
 function mergeTodoUpdate(prev, todo, materialized, removedIds) {
   const removed = new Set(removedIds);
@@ -18,32 +17,11 @@ function mergeTodoUpdate(prev, todo, materialized, removedIds) {
 export function useTodos() {
   const [todos, setTodos] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [canUndo, setCanUndo] = useState(false);
+  const { recordUndo } = useUndo();
 
-  const undoFnRef = useRef(null);
-  const undoTimerRef = useRef(null);
   const todosRef = useRef(todos);
 
   useEffect(() => { todosRef.current = todos; }, [todos]);
-
-  const recordUndo = useCallback((revertFn) => {
-    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-    undoFnRef.current = revertFn;
-    setCanUndo(true);
-    undoTimerRef.current = setTimeout(() => {
-      undoFnRef.current = null;
-      setCanUndo(false);
-    }, UNDO_WINDOW_MS);
-  }, []);
-
-  const undo = useCallback(async () => {
-    if (!undoFnRef.current) return;
-    const revert = undoFnRef.current;
-    undoFnRef.current = null;
-    setCanUndo(false);
-    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-    await revert();
-  }, []);
 
   const fetchTodos = useCallback(async () => {
     setLoading(true);
@@ -156,5 +134,5 @@ export function useTodos() {
     });
   }, [recordUndo]);
 
-  return { todos, loading, fetchTodos, createTodo, updateTodo, deleteTodo, assignDay, reorderDay, canUndo, undo };
+  return { todos, loading, fetchTodos, createTodo, updateTodo, deleteTodo, assignDay, reorderDay };
 }
