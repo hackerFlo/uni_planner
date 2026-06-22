@@ -6,7 +6,6 @@ import Tooltip, { recurrenceLabel } from '../ui/Tooltip';
 import ConfirmPopover from '../ui/ConfirmPopover';
 import { useLists } from '../../context/ListsContext';
 import { LIST_PALETTE } from '../../constants/listPalette';
-import useIsMobile from '../../hooks/useIsMobile';
 import { useAnyModalOpen } from '../../context/ModalContext';
 
 const COMPLETION_DELAY_MS = 500;
@@ -18,7 +17,6 @@ function isRecurring(todo) {
 function fmtTime(t) { return t ? t.replace(' min', 'm') : t; }
 
 const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, onComplete, onUnassign, onEdit, onDelete }) {
-  const isMobile = useIsMobile();
   const anyModalOpen = useAnyModalOpen();
   const { getList } = useLists();
   const list = getList(todo.list_id);
@@ -72,11 +70,11 @@ const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, onC
     <div
       ref={provided.innerRef}
       {...provided.draggableProps}
-      {...(!isMobile ? provided.dragHandleProps : {})}
+      {...provided.dragHandleProps}
       style={{
         ...provided.draggableProps.style,
         ...(snapshot.isDragging && {
-          transform: `${provided.draggableProps.style?.transform ?? ''} ${isMobile ? '' : `rotate(${rotation}deg) `}scale(1.03)`,
+          transform: `${provided.draggableProps.style?.transform ?? ''} rotate(${rotation}deg) scale(1.03)`,
           boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
         }),
         transition: checked
@@ -84,25 +82,8 @@ const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, onC
           : provided.draggableProps.style?.transition,
         opacity: checked ? 0.4 : 1,
       }}
-      className={`group bg-white border border-zinc-100 rounded-lg p-2.5 shadow-sm hover:shadow-md transition-shadow select-none min-w-0 w-full relative ${isMobile ? '' : 'cursor-grab active:cursor-grabbing'}`}
-      onClick={isMobile ? () => onEdit(todo) : undefined}
+      className="group bg-white border border-zinc-100 rounded-lg p-2.5 shadow-sm hover:shadow-md transition-shadow select-none min-w-0 w-full relative cursor-grab active:cursor-grabbing"
     >
-      {isMobile && (
-        <button
-          {...provided.dragHandleProps}
-          aria-label="Drag to reorder"
-          onPointerDown={e => e.stopPropagation()}
-          onClick={e => e.stopPropagation()}
-          style={{ touchAction: 'none' }}
-          className="absolute top-1 right-1 p-1.5 text-zinc-300 active:text-zinc-500 cursor-grab active:cursor-grabbing"
-        >
-          <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-            <circle cx="7" cy="5" r="1.5"/><circle cx="13" cy="5" r="1.5"/>
-            <circle cx="7" cy="10" r="1.5"/><circle cx="13" cy="10" r="1.5"/>
-            <circle cx="7" cy="15" r="1.5"/><circle cx="13" cy="15" r="1.5"/>
-          </svg>
-        </button>
-      )}
       <div className="flex items-center gap-2 mb-1.5">
         <Tooltip text="Mark complete">
         <button
@@ -152,8 +133,7 @@ const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, onC
         <RichText text={todo.description} className="text-[11px] text-zinc-400 mt-0.5 line-clamp-2 block" />
       )}
 
-      {!isMobile && (
-        <div className={`flex gap-1 mt-2 transition duration-200 ${anyModalOpen ? 'blur-sm opacity-60 pointer-events-none' : ''}`}>
+      <div className={`flex gap-1 mt-2 transition duration-200 ${anyModalOpen ? 'blur-sm opacity-60 pointer-events-none' : ''}`}>
           <Tooltip text="Edit">
             <button
               onPointerDown={e => e.stopPropagation()}
@@ -211,7 +191,6 @@ const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, onC
             </Tooltip>
           )}
         </div>
-      )}
     </div>
   );
 });

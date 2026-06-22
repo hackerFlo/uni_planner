@@ -6,7 +6,6 @@ import Tooltip, { recurrenceLabel } from '../ui/Tooltip';
 import ConfirmPopover from '../ui/ConfirmPopover';
 import { useLists } from '../../context/ListsContext';
 import { LIST_PALETTE } from '../../constants/listPalette';
-import useIsMobile from '../../hooks/useIsMobile';
 import { useAnyModalOpen } from '../../context/ModalContext';
 
 const COMPLETION_DELAY_MS = 500;
@@ -26,7 +25,6 @@ function dayLabel(iso) {
 }
 
 const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAssigned, checked, onComplete, onEdit, onDelete }) {
-  const isMobile = useIsMobile();
   const anyModalOpen = useAnyModalOpen();
   const hideOnHover = anyModalOpen ? '' : 'group-hover:invisible';
   const { getList } = useLists();
@@ -83,14 +81,14 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
     <div
       ref={provided.innerRef}
       {...provided.draggableProps}
-      {...(!isMobile ? provided.dragHandleProps : {})}
+      {...provided.dragHandleProps}
       style={{
         ...provided.draggableProps.style,
         width: isDraggingOverDay ? 180 : provided.draggableProps.style?.width,
         height: isDraggingOverDay ? 'auto' : provided.draggableProps.style?.height,
         opacity: snapshot.isDragging ? 0.85 : checked ? 0.4 : 1,
         transform: snapshot.isDragging
-          ? `${provided.draggableProps.style?.transform ?? ''} ${isMobile ? '' : `rotate(${rotation}deg) `}scale(1.03)`
+          ? `${provided.draggableProps.style?.transform ?? ''} rotate(${rotation}deg) scale(1.03)`
           : checked
           ? `${provided.draggableProps.style?.transform ?? ''} scale(0.97)`
           : provided.draggableProps.style?.transform,
@@ -98,7 +96,7 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
           ? 'opacity 400ms ease, transform 300ms ease'
           : provided.draggableProps.style?.transition,
       }}
-      className={`group border rounded-lg shadow-sm transition-all select-none ${isMobile ? '' : 'cursor-grab active:cursor-grabbing'} ${
+      className={`group border rounded-lg shadow-sm transition-all select-none cursor-grab active:cursor-grabbing ${
         isDraggingOverDay
           ? 'bg-white border-zinc-100 p-2.5'
           : isAssigned
@@ -129,10 +127,7 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
           </div>
         </>
       ) : (
-        <div
-          className="relative flex items-start gap-2.5"
-          onClick={isMobile ? () => onEdit(todo) : undefined}
-        >
+        <div className="relative flex items-start gap-2.5">
           <Tooltip text="Mark complete">
           <button
             onPointerDown={e => e.stopPropagation()}
@@ -188,24 +183,7 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
             )}
           </div>
 
-          {isMobile && (
-            <button
-              {...provided.dragHandleProps}
-              aria-label="Drag to reorder"
-              onPointerDown={e => e.stopPropagation()}
-              onClick={e => e.stopPropagation()}
-              style={{ touchAction: 'none' }}
-              className="flex-shrink-0 -mr-1 p-1.5 text-zinc-300 active:text-zinc-500 cursor-grab active:cursor-grabbing"
-            >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                <circle cx="7" cy="5" r="1.5"/><circle cx="13" cy="5" r="1.5"/>
-                <circle cx="7" cy="10" r="1.5"/><circle cx="13" cy="10" r="1.5"/>
-                <circle cx="7" cy="15" r="1.5"/><circle cx="13" cy="15" r="1.5"/>
-              </svg>
-            </button>
-          )}
-          {!isMobile && (
-            <div
+          <div
               className={`absolute right-0 top-0 items-center gap-1 pl-4 ${anyModalOpen ? 'hidden' : 'hidden group-hover:flex'}`}
               style={{ background: `linear-gradient(to right, transparent, ${isAssigned ? '#fafafa' : '#ffffff'} 40%)` }}
               onPointerDown={e => e.stopPropagation()}
@@ -250,7 +228,6 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
                 </Tooltip>
               )}
             </div>
-          )}
         </div>
       )}
     </div>

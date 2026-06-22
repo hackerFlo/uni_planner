@@ -4,22 +4,29 @@
 // This way every Watchtower deploy maps to exactly one version.
 // Versioning: X.Y — increment Y for regular updates, bump X (reset Y to 0) for big releases.
 // Add a new entry to CHANGELOG (newest first) on first push of a window; append to top entry otherwise.
-export const CURRENT_VERSION = '2.2';
+export const CURRENT_VERSION = '2.3';
 
 // icon: 'purple' | 'green' | 'amber' | 'blue' | 'rose'
 // Each feature needs: icon, name, desc, and a 24×24 SVG path string (stroke icons).
 export const CHANGELOG = [
   {
+    version: '2.3',
+    date: '2026-06-22',
+    title: 'Mobile drag tweaks',
+    features: [
+      {
+        icon: 'blue',
+        name: 'Drag cards from anywhere on mobile',
+        desc: 'On phones you can now drag a card by touching anywhere on it, just like on desktop. The separate drag grip has been removed.',
+        svgPath: 'M7 11l5-5 5 5M7 13l5 5 5-5',
+      },
+    ],
+  },
+  {
     version: '2.2',
     date: '2026-05-18',
     title: 'Undo everywhere & polish',
     features: [
-      {
-        icon: 'blue',
-        name: 'Drag handle on mobile',
-        desc: 'Cards now have a dedicated grip on the right edge for dragging on phones. Tapping the card body still opens the editor — no more accidental drags while scrolling.',
-        svgPath: 'M8 6h.01M8 12h.01M8 18h.01M16 6h.01M16 12h.01M16 18h.01',
-      },
       {
         icon: 'purple',
         name: 'Undo for exams',
