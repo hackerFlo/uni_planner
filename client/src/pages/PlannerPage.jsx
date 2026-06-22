@@ -18,6 +18,10 @@ import Tooltip from '../components/ui/Tooltip';
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const SIDEBAR_MIN_PX = 200;
 const SIDEBAR_MAX_PX = 520;
+// Matches the day column width (`w-[180px]` in DayColumn). On mobile the Tasks pane is
+// full-width, so a dragged card's centre of gravity can't track the finger — shrink it to
+// the column width before @hello-pangea/dnd measures it (see onBeforeCapture below).
+const COLUMN_WIDTH_PX = 180;
 
 function localArrayMove(arr, from, to) {
   const result = [...arr];
@@ -57,6 +61,7 @@ export default function PlannerPage() {
   const [isResizing, setIsResizing] = useState(false);
   const isMobile = useIsMobile();
   const sidebarScrollRef = useRef(null);
+  const shrunkCardRef = useRef(null);
   const todosRef = useRef(todos);
   useEffect(() => { todosRef.current = todos; }, [todos]);
   const scrollTimerRef = useRef(null);
@@ -132,7 +137,25 @@ export default function PlannerPage() {
     setActiveTodo(todoIdMap.get(realId) ?? null);
   }
 
+  // On mobile only: narrow the dragged sidebar card to the day-column width before dnd
+  // captures dimensions, so its centre of gravity tracks the finger and every column (not
+  // just the edges) can be dropped on. Restored in handleDragEnd. Desktop is untouched.
+  function handleBeforeCapture({ draggableId }) {
+    if (!isMobile) return;
+    const el = document.querySelector(`[data-rfd-draggable-id="${draggableId}"]`);
+    if (!el || !sidebarScrollRef.current?.contains(el)) return;
+    el.style.width = `${COLUMN_WIDTH_PX}px`;
+    shrunkCardRef.current = el;
+  }
+
+  function restoreShrunkCard() {
+    if (!shrunkCardRef.current) return;
+    shrunkCardRef.current.style.width = '';
+    shrunkCardRef.current = null;
+  }
+
   function handleDragEnd({ source, destination, draggableId }) {
+    restoreShrunkCard();
     setActiveTodo(null);
     if (!destination) return;
 
@@ -183,7 +206,7 @@ export default function PlannerPage() {
       <Navbar onArchiveToggle={() => setArchiveOpen(v => !v)} archiveOpen={archiveOpen} fetchTodos={fetchTodos} onOpenWhatsNew={whatsNew.openManually} />
 
       <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
-        <DragDropContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+        <DragDropContext onBeforeCapture={handleBeforeCapture} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
 
           {/* Weekly planner */}
           <main className="h-1/2 md:h-auto md:flex-1 flex-shrink-0 overflow-hidden order-1 md:order-2">

@@ -20,6 +20,12 @@ export const CHANGELOG = [
         desc: 'On phones you can now drag a card by touching anywhere on it, just like on desktop. The separate drag grip has been removed.',
         svgPath: 'M7 11l5-5 5 5M7 13l5 5 5-5',
       },
+      {
+        icon: 'green',
+        name: 'Drop on any day on mobile',
+        desc: 'Dragging a task onto the week now drops it on whichever day is under your finger — previously on phones only the first and last visible days would accept it.',
+        svgPath: 'M12 3v12m0 0l-4-4m4 4l4-4M4 19h16',
+      },
     ],
   },
   {
