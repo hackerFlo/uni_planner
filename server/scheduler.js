@@ -44,7 +44,7 @@ async function materializeRecurrencesAtLocalMidnight(now) {
       ).all(u.id);
 
       let total = 0;
-      for (const t of templates) total += materializeForTemplate(t.id, tz);
+      for (const t of templates) total += materializeForTemplate(t.id, tz, u.id);
       if (total > 0) console.log(`[scheduler] Materialized ${total} recurring instances for user ${u.id}`);
     } catch (err) {
       console.error(`[scheduler] Recurrence materialization failed for user ${u.id}:`, err.message);

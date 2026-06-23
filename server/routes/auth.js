@@ -17,6 +17,8 @@ const COOKIE_OPTS = {
   maxAge: 7 * 24 * 60 * 60 * 1000,
 };
 
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
 
@@ -33,8 +35,8 @@ router.post('/login', async (req, res) => {
   const match = await bcrypt.compare(password, user.password_hash);
   if (!match) return res.status(401).json({ error: 'Invalid email or password' });
 
-  const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN,
+  const token = jwt.sign({ id: user.id, email: user.email, tv: user.token_version }, process.env.JWT_SECRET, {
+    expiresIn: JWT_EXPIRES_IN,
   });
 
   res.cookie('token', token, COOKIE_OPTS);
@@ -68,9 +70,9 @@ router.post('/register', async (req, res) => {
     return newId;
   })();
 
-  const user = db.prepare('SELECT id, email, created_at FROM users WHERE id = ?').get(userId);
-  const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN,
+  const user = db.prepare('SELECT id, email, created_at, token_version FROM users WHERE id = ?').get(userId);
+  const token = jwt.sign({ id: user.id, email: user.email, tv: user.token_version }, process.env.JWT_SECRET, {
+    expiresIn: JWT_EXPIRES_IN,
   });
 
   res.cookie('token', token, COOKIE_OPTS);
@@ -119,9 +121,10 @@ router.patch('/me', requireAuth, async (req, res) => {
     passwordHash = await bcrypt.hash(newPassword, 12);
   }
 
-  db.prepare('UPDATE users SET email = ?, password_hash = ? WHERE id = ?').run(email, passwordHash, req.user.id);
+  const newTokenVersion = newPassword ? user.token_version + 1 : user.token_version;
+  db.prepare('UPDATE users SET email = ?, password_hash = ?, token_version = ? WHERE id = ?').run(email, passwordHash, newTokenVersion, req.user.id);
 
-  const token = jwt.sign({ id: req.user.id, email }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN });
+  const token = jwt.sign({ id: req.user.id, email, tv: newTokenVersion }, process.env.JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
   res.cookie('token', token, COOKIE_OPTS);
   res.json({ user: { id: req.user.id, email, created_at: user.created_at } });
 });

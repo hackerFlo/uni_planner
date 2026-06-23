@@ -29,7 +29,7 @@ router.post('/', (req, res) => {
     'INSERT INTO exams (user_id, title, exam_date) VALUES (?, ?, ?)'
   ).run(req.user.id, title, examDate);
 
-  const exam = db.prepare('SELECT id, title, exam_date FROM exams WHERE id = ?').get(result.lastInsertRowid);
+  const exam = db.prepare('SELECT id, title, exam_date FROM exams WHERE id = ? AND user_id = ?').get(result.lastInsertRowid, req.user.id);
   res.status(201).json({ exam });
 });
 
@@ -58,7 +58,7 @@ router.patch('/:id', (req, res) => {
 
   if (result.changes === 0) return res.status(404).json({ error: 'Exam not found' });
 
-  const exam = db.prepare('SELECT id, title, exam_date FROM exams WHERE id = ?').get(examId);
+  const exam = db.prepare('SELECT id, title, exam_date FROM exams WHERE id = ? AND user_id = ?').get(examId, req.user.id);
   res.json({ exam });
 });
 

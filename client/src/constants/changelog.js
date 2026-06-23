@@ -4,11 +4,24 @@
 // This way every Watchtower deploy maps to exactly one version.
 // Versioning: X.Y — increment Y for regular updates, bump X (reset Y to 0) for big releases.
 // Add a new entry to CHANGELOG (newest first) on first push of a window; append to top entry otherwise.
-export const CURRENT_VERSION = '2.3';
+export const CURRENT_VERSION = '2.4';
 
 // icon: 'purple' | 'green' | 'amber' | 'blue' | 'rose'
 // Each feature needs: icon, name, desc, and a 24×24 SVG path string (stroke icons).
 export const CHANGELOG = [
+  {
+    version: '2.4',
+    date: '2026-06-23',
+    title: 'Security & privacy',
+    features: [
+      {
+        icon: 'purple',
+        name: 'Account security hardening',
+        desc: 'Changing your password now signs you out on your other devices, alongside behind-the-scenes safeguards that keep your tasks and exams private to your account.',
+        svgPath: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
+      },
+    ],
+  },
   {
     version: '2.3',
     date: '2026-06-22',

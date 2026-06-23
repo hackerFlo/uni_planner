@@ -17,7 +17,7 @@ const TODO_SELECT = `
          COALESCE(t.recurrence_interval_days, p.recurrence_interval_days) AS recurrence_interval_days,
          COALESCE(t.recurrence_pattern, p.recurrence_pattern) AS recurrence_pattern
   FROM todos t
-  LEFT JOIN todos p ON p.id = t.recurrence_parent_id`;
+  LEFT JOIN todos p ON p.id = t.recurrence_parent_id AND p.user_id = t.user_id`;
 
 function getTodoById(id, userId) {
   return db.prepare(`${TODO_SELECT} WHERE t.id = ? AND t.user_id = ?`).get(id, userId);
@@ -118,7 +118,7 @@ function applyRecurrenceChange(id, existing, templateId, isChildEdit, recurrence
       'SELECT id FROM todos WHERE user_id = ? AND recurrence_parent_id = ? AND day_assigned IS NOT NULL AND day_assigned < ?'
     ).all(userId, templateId, childDate);
     willDetachIds = earlierSiblings.map(r => r.id);
-    const oldTemplRow = db.prepare('SELECT day_assigned FROM todos WHERE id = ?').get(templateId);
+    const oldTemplRow = db.prepare('SELECT day_assigned FROM todos WHERE id = ? AND user_id = ?').get(templateId, userId);
     if (oldTemplRow && (!oldTemplRow.day_assigned || oldTemplRow.day_assigned < childDate)) {
       willDetachIds.push(templateId);
     }
@@ -145,7 +145,7 @@ function applyRecurrenceChange(id, existing, templateId, isChildEdit, recurrence
         `UPDATE todos SET recurrence_parent_id = NULL, recurrence_interval_days = ?, recurrence_pattern = ?, updated_at = ?
          WHERE id = ? AND user_id = ?`
       ).run(recurrenceInterval, recurrencePattern, now, id, userId);
-      materializeForTemplate(id, userTz);
+      materializeForTemplate(id, userTz, userId);
     } else {
       db.prepare(
         `UPDATE todos SET recurrence_parent_id = NULL, recurrence_interval_days = NULL, recurrence_pattern = NULL, updated_at = ?
@@ -161,7 +161,7 @@ function applyRecurrenceChange(id, existing, templateId, isChildEdit, recurrence
       .run(recurrenceInterval, recurrencePattern, now, templateId, userId);
 
     if (isNewRecurring) {
-      materializeForTemplate(templateId, userTz);
+      materializeForTemplate(templateId, userTz, userId);
     }
   }
 
@@ -216,8 +216,8 @@ router.post('/', (req, res) => {
   const materialized = [];
   if (isRecurringCreate && cleanDay) {
     const userRow = db.prepare('SELECT notify_tz FROM users WHERE id = ?').get(req.user.id);
-    materializeForTemplate(result.lastInsertRowid, userRow?.notify_tz || 'UTC');
-    const children = db.prepare(`${TODO_SELECT} WHERE t.recurrence_parent_id = ?`).all(result.lastInsertRowid);
+    materializeForTemplate(result.lastInsertRowid, userRow?.notify_tz || 'UTC', req.user.id);
+    const children = db.prepare(`${TODO_SELECT} WHERE t.recurrence_parent_id = ? AND t.user_id = ?`).all(result.lastInsertRowid, req.user.id);
     materialized.push(...children);
   }
 
@@ -299,13 +299,13 @@ router.patch('/:id', (req, res) => {
 
   if (hasRecurrenceChange) {
     if (isChildEdit) {
-      const newChildren = db.prepare(`${TODO_SELECT} WHERE t.recurrence_parent_id = ?`).all(id);
+      const newChildren = db.prepare(`${TODO_SELECT} WHERE t.recurrence_parent_id = ? AND t.user_id = ?`).all(id, req.user.id);
       const detachedRows = willDetachIds.length > 0
-        ? db.prepare(`${TODO_SELECT} WHERE t.id IN (${willDetachIds.map(() => '?').join(',')})`).all(...willDetachIds)
+        ? db.prepare(`${TODO_SELECT} WHERE t.id IN (${willDetachIds.map(() => '?').join(',')}) AND t.user_id = ?`).all(...willDetachIds, req.user.id)
         : [];
       materialized = [responseTodo, ...newChildren, ...detachedRows];
     } else {
-      materialized = db.prepare(`${TODO_SELECT} WHERE t.recurrence_parent_id = ?`).all(templateId);
+      materialized = db.prepare(`${TODO_SELECT} WHERE t.recurrence_parent_id = ? AND t.user_id = ?`).all(templateId, req.user.id);
     }
   }
 

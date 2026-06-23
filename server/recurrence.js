@@ -47,11 +47,11 @@ function isPatternMatch(isoDate, pattern) {
   return false;
 }
 
-function materializeForTemplate(templateId, userTz) {
+function materializeForTemplate(templateId, userTz, userId) {
   const tz = userTz || 'UTC';
   const template = db.prepare(
-    'SELECT * FROM todos WHERE id = ? AND recurrence_parent_id IS NULL'
-  ).get(templateId);
+    'SELECT * FROM todos WHERE id = ? AND recurrence_parent_id IS NULL AND user_id = ?'
+  ).get(templateId, userId);
 
   if (!template || !template.day_assigned) return 0;
 
@@ -62,8 +62,8 @@ function materializeForTemplate(templateId, userTz) {
   const { windowStart, windowEnd } = getWindowBounds(tz);
 
   const existingRows = db.prepare(
-    'SELECT day_assigned FROM todos WHERE recurrence_parent_id = ?'
-  ).all(templateId);
+    'SELECT day_assigned FROM todos WHERE recurrence_parent_id = ? AND user_id = ?'
+  ).all(templateId, userId);
   const existingDays = new Set(existingRows.map(r => r.day_assigned));
 
   const insertStmt = db.prepare(

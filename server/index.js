@@ -1,4 +1,9 @@
 require('dotenv').config();
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET || JWT_SECRET.length < 32) {
+  console.error('[fatal] JWT_SECRET is missing or too short (must be >= 32 chars). Refusing to start.');
+  process.exit(1);
+}
 process.on('uncaughtException', (err) => console.error('[fatal] uncaughtException:', err));
 process.on('unhandledRejection', (err) => console.error('[fatal] unhandledRejection:', err));
 const express = require('express');

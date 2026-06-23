@@ -19,6 +19,7 @@ db.exec(`
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     email         TEXT    NOT NULL UNIQUE COLLATE NOCASE,
     password_hash TEXT    NOT NULL,
+    token_version INTEGER NOT NULL DEFAULT 0,
     created_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
   );
 
@@ -140,6 +141,10 @@ if (!userCols.some(c => c.name === 'notify_last_sent')) {
 if (!userCols.some(c => c.name === 'notify_tz')) {
   db.exec(`ALTER TABLE users ADD COLUMN notify_tz TEXT NOT NULL DEFAULT 'UTC'`);
   console.log('[db] Migrated: added notify_tz column');
+}
+if (!userCols.some(c => c.name === 'token_version')) {
+  db.exec(`ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0`);
+  console.log('[db] Migrated: added token_version column to users');
 }
 
 // Migrate: replace list_type TEXT with list_id INTEGER -> lists(id)
