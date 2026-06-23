@@ -116,4 +116,19 @@ function materializeForTemplate(templateId, userTz, userId) {
   return count;
 }
 
-module.exports = { materializeForTemplate, getWindowBounds, addDays };
+function materializeWindowForUser(userId, userTz) {
+  const tz = userTz || 'UTC';
+  const templates = db.prepare(
+    `SELECT id FROM todos
+     WHERE user_id = ? AND archived = 0 AND recurrence_parent_id IS NULL
+       AND (recurrence_interval_days IS NOT NULL OR recurrence_pattern IS NOT NULL)`
+  ).all(userId);
+  let total = 0;
+  const run = db.transaction(() => {
+    for (const t of templates) total += materializeForTemplate(t.id, tz, userId);
+  });
+  run();
+  return total;
+}
+
+module.exports = { materializeForTemplate, materializeWindowForUser, getWindowBounds, addDays };

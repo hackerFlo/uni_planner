@@ -2,7 +2,7 @@ const cron = require('node-cron');
 const db = require('./db');
 const { decryptEmail } = require('./crypto');
 const { sendDailySummary } = require('./mailer');
-const { materializeForTemplate } = require('./recurrence');
+const { materializeWindowForUser } = require('./recurrence');
 const { localDayBoundsUtc } = require('./time');
 
 // Intl.DateTimeFormat instances are expensive to construct; cache by key.
@@ -27,7 +27,7 @@ async function materializeRecurrencesAtLocalMidnight(now) {
   let users;
   try {
     users = db.prepare(
-      'SELECT DISTINCT u.id, u.notify_tz FROM users u INNER JOIN todos t ON t.user_id = u.id WHERE t.recurrence_interval_days IS NOT NULL AND t.archived = 0 AND t.recurrence_parent_id IS NULL'
+      'SELECT DISTINCT u.id, u.notify_tz FROM users u INNER JOIN todos t ON t.user_id = u.id WHERE (t.recurrence_interval_days IS NOT NULL OR t.recurrence_pattern IS NOT NULL) AND t.archived = 0 AND t.recurrence_parent_id IS NULL'
     ).all();
   } catch (err) {
     console.error('[scheduler] Failed to query recurrence users:', err.message);
@@ -39,12 +39,7 @@ async function materializeRecurrencesAtLocalMidnight(now) {
       const tz = u.notify_tz || 'UTC';
       if (hhmm(tz, now) !== '00:00') continue;
 
-      const templates = db.prepare(
-        'SELECT id FROM todos WHERE user_id = ? AND recurrence_interval_days IS NOT NULL AND archived = 0 AND recurrence_parent_id IS NULL'
-      ).all(u.id);
-
-      let total = 0;
-      for (const t of templates) total += materializeForTemplate(t.id, tz, u.id);
+      const total = materializeWindowForUser(u.id, tz);
       if (total > 0) console.log(`[scheduler] Materialized ${total} recurring instances for user ${u.id}`);
     } catch (err) {
       console.error(`[scheduler] Recurrence materialization failed for user ${u.id}:`, err.message);

@@ -2,7 +2,7 @@ const express = require('express');
 const db = require('../db');
 const requireAuth = require('../middleware/auth');
 const { sanitizeTitle, sanitizeDescription, validateDayAssigned, validateRecurrenceInterval, validateRecurrencePattern } = require('../middleware/validate');
-const { materializeForTemplate } = require('../recurrence');
+const { materializeForTemplate, materializeWindowForUser } = require('../recurrence');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -169,6 +169,8 @@ function applyRecurrenceChange(id, existing, templateId, isChildEdit, recurrence
 }
 
 router.get('/', (req, res) => {
+  const userRow = db.prepare('SELECT notify_tz FROM users WHERE id = ?').get(req.user.id);
+  materializeWindowForUser(req.user.id, userRow?.notify_tz || 'UTC');
   const todos = db.prepare(
     `${TODO_SELECT} WHERE t.user_id = ? AND t.archived = 0 ORDER BY t.created_at DESC`
   ).all(req.user.id);

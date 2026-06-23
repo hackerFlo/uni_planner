@@ -12,13 +12,19 @@ export const CHANGELOG = [
   {
     version: '2.4',
     date: '2026-06-23',
-    title: 'Security & privacy',
+    title: 'Fixes & security',
     features: [
       {
         icon: 'purple',
         name: 'Account security hardening',
         desc: 'Changing your password now signs you out on your other devices, alongside behind-the-scenes safeguards that keep your tasks and exams private to your account.',
         svgPath: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
+      },
+      {
+        icon: 'green',
+        name: 'Recurring tasks stay put',
+        desc: 'Repeating tasks — including weekday and weekend repeats — no longer disappear from the planner after a couple of weeks. They now stay filled in across the weeks you can see.',
+        svgPath: 'M17 2l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3',
       },
     ],
   },
