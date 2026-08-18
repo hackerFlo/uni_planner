@@ -84,12 +84,6 @@ if (!todoCols.some(c => c.name === 'recurrence_pattern')) {
   console.log('[db] Migrated: added recurrence_pattern column');
 }
 db.exec(`CREATE INDEX IF NOT EXISTS idx_todos_recurrence_parent ON todos(recurrence_parent_id)`);
-db.exec(`
-  CREATE INDEX IF NOT EXISTS idx_todos_user_day       ON todos(user_id, day_assigned);
-  CREATE INDEX IF NOT EXISTS idx_todos_user_archived  ON todos(user_id, archived);
-  CREATE INDEX IF NOT EXISTS idx_todos_user_completed ON todos(user_id, completed, completed_at);
-  CREATE INDEX IF NOT EXISTS idx_todos_list_id        ON todos(list_id);
-`);
 
 // Migrate: if todos table still has the day-name CHECK constraint, recreate without it
 const schema = db.prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='todos'`).get();
@@ -224,5 +218,14 @@ if (currentTodoCols.includes('list_type')) {
   `);
   console.log('[db] Migrated: list_type -> list_id (lists table created)');
 }
+
+// Indexes last: they reference columns (completed_at, list_id) that the
+// migrations above add, so creating them earlier crashes a fresh database.
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_todos_user_day       ON todos(user_id, day_assigned);
+  CREATE INDEX IF NOT EXISTS idx_todos_user_archived  ON todos(user_id, archived);
+  CREATE INDEX IF NOT EXISTS idx_todos_user_completed ON todos(user_id, completed, completed_at);
+  CREATE INDEX IF NOT EXISTS idx_todos_list_id        ON todos(list_id);
+`);
 
 module.exports = db;

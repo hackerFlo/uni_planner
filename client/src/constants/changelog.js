@@ -4,11 +4,36 @@
 // This way every Watchtower deploy maps to exactly one version.
 // Versioning: X.Y — increment Y for regular updates, bump X (reset Y to 0) for big releases.
 // Add a new entry to CHANGELOG (newest first) on first push of a window; append to top entry otherwise.
-export const CURRENT_VERSION = '2.4';
+export const CURRENT_VERSION = '2.5';
 
 // icon: 'purple' | 'green' | 'amber' | 'blue' | 'rose'
 // Each feature needs: icon, name, desc, and a 24×24 SVG path string (stroke icons).
 export const CHANGELOG = [
+  {
+    version: '2.5',
+    date: '2026-08-18',
+    title: 'Staying signed in',
+    features: [
+      {
+        icon: 'purple',
+        name: 'Signing in sticks',
+        desc: 'Logging in no longer flashes the planner and bounces you straight back to the login screen. Your session is now kept correctly whether you open the app over the internet or on your home network.',
+        svgPath: 'M5 11h14v10H5zM8 11V7a4 4 0 018 0v4',
+      },
+      {
+        icon: 'amber',
+        name: 'Errors say what went wrong',
+        desc: 'If the server is unreachable or busy, you now get a message telling you so instead of being quietly returned to the login screen as though you had been signed out.',
+        svgPath: 'M12 9v4m0 4h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z',
+      },
+      {
+        icon: 'blue',
+        name: 'Simpler summary email',
+        desc: 'The daily summary email no longer carries an "Open Uni Planner" button. Open the app from your bookmark or home-screen icon instead.',
+        svgPath: 'M4 5h16v14H4zM4 7l8 6 8-6',
+      },
+    ],
+  },
   {
     version: '2.4',
     date: '2026-06-23',

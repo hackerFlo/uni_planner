@@ -10,7 +10,18 @@ const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
-const { authLimiter, todoLimiter, backupLimiter } = require('./middleware/rateLimiter');
+const { todoLimiter, backupLimiter } = require('./middleware/rateLimiter');
+// Config validation throws on bad input. The uncaughtException handler above
+// would log it and let the process idle out with exit code 0, which reads as a
+// clean shutdown to Docker; fail loudly instead, like the JWT_SECRET check.
+let config;
+try {
+  config = require('./config');
+} catch (err) {
+  console.error(`[fatal] ${err.message} Refusing to start.`);
+  process.exit(1);
+}
+const { TRUST_PROXY_HOPS, COOKIE_SECURE_OVERRIDE, CORS_ORIGIN } = config;
 const authRoutes = require('./routes/auth');
 const todoRoutes = require('./routes/todos');
 const listRoutes = require('./routes/lists');
@@ -22,16 +33,22 @@ const seed = process.env.NODE_ENV !== 'production' ? require('./seed') : () => P
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.set('trust proxy', 1);
+app.set('trust proxy', TRUST_PROXY_HOPS);
 app.use(helmet());
-app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
-  credentials: true,
-}));
+// nginx serves the SPA and proxies /api on the same origin, so CORS never
+// engages in this deployment. Mount it only when an origin is configured.
+if (CORS_ORIGIN) app.use(cors({ origin: CORS_ORIGIN, credentials: true }));
 app.use(express.json({ limit: '10kb' }));
 app.use(cookieParser());
 
-app.use('/api/auth', authLimiter, authRoutes);
+// Auth responses must never be cached, nor have their Set-Cookie stripped, by
+// an intermediary (Cloudflare, Access, any future CDN).
+app.use('/api', (_req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
+
+app.use('/api/auth', authRoutes); // rate limiters are per-route in routes/auth.js
 app.use('/api/todos', todoLimiter, todoRoutes);
 app.use('/api/lists', todoLimiter, listRoutes);
 app.use('/api/backup', backupLimiter, backupRoutes);
@@ -46,7 +63,11 @@ app.use((err, _req, res, _next) => {
 const { startScheduler } = require('./scheduler');
 
 seed().then(() => {
-  const server = app.listen(PORT, () => console.log(`[server] Listening on http://localhost:${PORT}`));
+  const server = app.listen(PORT, () => {
+    console.log(`[server] Listening on http://localhost:${PORT}`);
+    const cookieSecure = COOKIE_SECURE_OVERRIDE === null ? 'auto (from request scheme)' : COOKIE_SECURE_OVERRIDE;
+    console.log(`[server] trust proxy=${TRUST_PROXY_HOPS} hop(s), cookie secure=${cookieSecure}, cors=${CORS_ORIGIN || 'off (same-origin)'}`);
+  });
   server.timeout = 30000;        // 30 s — kills stalled connections
   server.keepAliveTimeout = 65000; // > 60 s to outlast load balancer idle timeouts
   startScheduler();

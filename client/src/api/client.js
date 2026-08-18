@@ -15,7 +15,8 @@ async function request(path, options = {}) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     if (res.status === 401 && !path.startsWith('/api/auth/')) {
-      window.location.href = '/login';
+      // Already on /login means the redirect would just reload into another 401.
+      if (window.location.pathname !== '/login') window.location.href = '/login';
       return;
     }
     throw Object.assign(new Error(data.error || 'Request failed'), { status: res.status });

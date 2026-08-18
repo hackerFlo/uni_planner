@@ -11,8 +11,20 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     api.get('/api/auth/me')
-      .then(({ user }) => setUser(user))
-      .catch(() => setUser(null))
+      .then((data) => setUser(data?.user ?? null))
+      .catch((err) => {
+        setUser(null);
+        // 401 is the ordinary "not signed in yet" answer. Anything else is a
+        // real fault, and swallowing it renders the login screen with no clue
+        // that the server is rate-limiting or down.
+        if (err.status === 401) return;
+        console.warn('[auth] session check failed:', err.message);
+        toast?.error(
+          err.status === 429
+            ? 'Too many requests. Please wait a minute and reload.'
+            : 'Could not reach the server. Please reload.'
+        );
+      })
       .finally(() => setLoading(false));
   }, []);
 

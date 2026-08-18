@@ -4,7 +4,6 @@ const path = require('path');
 
 const GMAIL_USER = process.env.GMAIL_USER;
 const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
-const APP_URL = process.env.CORS_ORIGIN || 'https://planner.example.com/';
 
 const LOGO_PNG_PATH = path.join(__dirname, 'assets', 'pwa-192.png');
 let LOGO_PNG = null;
@@ -351,19 +350,6 @@ function buildHtml({ completedTodos, uncompletedTodos, tomorrowTodos, dateStr, t
           ${noTasksSection}
           ${noTasksUncompletedSection}
           ${tomorrowSection}
-
-          <!-- CTA -->
-          <tr>
-            <td style="padding:0 36px 28px;">
-              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
-                <tr>
-                  <td style="background:#6366f1;border-radius:8px;">
-                    <a href="${APP_URL}" style="display:inline-block;padding:11px 22px;font-family:'DM Sans',-apple-system,sans-serif;font-size:13px;font-weight:600;color:#ffffff;text-decoration:none;letter-spacing:-0.01em;">Open Uni Planner &#8594;</a>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
 
           <!-- FOOTER -->
           <tr>

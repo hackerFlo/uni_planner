@@ -7,19 +7,14 @@ const { validateIdentifier } = require('../middleware/validate');
 const { encryptEmail, decryptEmail } = require('../crypto');
 const { sendDailySummary } = require('../mailer');
 const { localDayBoundsUtc } = require('../time');
+const { SESSION_COOKIE_NAME, sessionCookieOptions, clearSessionCookieOptions } = require('../config');
+const { authLimiter, sessionLimiter } = require('../middleware/rateLimiter');
 
 const router = express.Router();
 
-const COOKIE_OPTS = {
-  httpOnly: true,
-  sameSite: 'lax',
-  secure: process.env.NODE_ENV === 'production',
-  maxAge: 7 * 24 * 60 * 60 * 1000,
-};
-
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
-router.post('/login', async (req, res) => {
+router.post('/login', authLimiter, async (req, res) => {
   const { email, password } = req.body;
 
   if (!validateIdentifier(email) || typeof password !== 'string' || password.length < 1 || password.length > 128) {
@@ -39,11 +34,11 @@ router.post('/login', async (req, res) => {
     expiresIn: JWT_EXPIRES_IN,
   });
 
-  res.cookie('token', token, COOKIE_OPTS);
+  res.cookie(SESSION_COOKIE_NAME, token, sessionCookieOptions(req));
   res.json({ user: { id: user.id, email: user.email, created_at: user.created_at } });
 });
 
-router.post('/register', async (req, res) => {
+router.post('/register', authLimiter, async (req, res) => {
   if (process.env.ALLOW_REGISTER !== 'true') {
     return res.status(403).json({ error: 'Registration is disabled' });
   }
@@ -75,22 +70,22 @@ router.post('/register', async (req, res) => {
     expiresIn: JWT_EXPIRES_IN,
   });
 
-  res.cookie('token', token, COOKIE_OPTS);
+  res.cookie(SESSION_COOKIE_NAME, token, sessionCookieOptions(req));
   res.status(201).json({ user: { id: user.id, email: user.email, created_at: user.created_at } });
 });
 
-router.post('/logout', (_req, res) => {
-  res.clearCookie('token', { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production' });
+router.post('/logout', sessionLimiter, (req, res) => {
+  res.clearCookie(SESSION_COOKIE_NAME, clearSessionCookieOptions(req));
   res.json({ ok: true });
 });
 
-router.get('/me', requireAuth, (req, res) => {
+router.get('/me', sessionLimiter, requireAuth, (req, res) => {
   const user = db.prepare('SELECT id, email, created_at FROM users WHERE id = ?').get(req.user.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
   res.json({ user });
 });
 
-router.patch('/me', requireAuth, async (req, res) => {
+router.patch('/me', authLimiter, requireAuth, async (req, res) => {
   const { currentPassword, newEmail, newPassword } = req.body;
 
   if (!currentPassword || typeof currentPassword !== 'string') {
@@ -125,11 +120,11 @@ router.patch('/me', requireAuth, async (req, res) => {
   db.prepare('UPDATE users SET email = ?, password_hash = ?, token_version = ? WHERE id = ?').run(email, passwordHash, newTokenVersion, req.user.id);
 
   const token = jwt.sign({ id: req.user.id, email, tv: newTokenVersion }, process.env.JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
-  res.cookie('token', token, COOKIE_OPTS);
+  res.cookie(SESSION_COOKIE_NAME, token, sessionCookieOptions(req));
   res.json({ user: { id: req.user.id, email, created_at: user.created_at } });
 });
 
-router.get('/notification-settings', requireAuth, (req, res) => {
+router.get('/notification-settings', sessionLimiter, requireAuth, (req, res) => {
   const user = db.prepare(
     'SELECT notify_enabled, notify_time, notify_email_enc, notify_tz FROM users WHERE id = ?'
   ).get(req.user.id);
@@ -145,7 +140,7 @@ router.get('/notification-settings', requireAuth, (req, res) => {
   });
 });
 
-router.patch('/notification-settings', requireAuth, (req, res) => {
+router.patch('/notification-settings', sessionLimiter, requireAuth, (req, res) => {
   const { notify_enabled, notify_time, notify_email, notify_tz } = req.body;
   const updates = {};
 
@@ -193,7 +188,7 @@ router.patch('/notification-settings', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-router.post('/test-email', requireAuth, async (req, res) => {
+router.post('/test-email', authLimiter, requireAuth, async (req, res) => {
   const user = db.prepare('SELECT notify_email_enc, email, notify_tz FROM users WHERE id = ?').get(req.user.id);
   if (!user || !user.notify_email_enc) {
     return res.status(400).json({ error: 'No notification email saved. Save your settings first.' });
