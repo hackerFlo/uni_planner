@@ -1,3 +1,6 @@
+import { ApiError, KINDS, classifyStatus } from './errors';
+import { probeReachability } from './probe';
+
 async function request(path, options = {}) {
   let res;
   try {
@@ -8,20 +11,30 @@ async function request(path, options = {}) {
       body: options.body ? JSON.stringify(options.body) : undefined,
     });
   } catch (err) {
-    console.warn('[api] fetch failed:', err.message);
-    throw new Error('Cannot connect to server. Make sure the backend is running.');
+    // fetch only rejects when no HTTP response arrived at all. A stopped backend
+    // is therefore the one cause this cannot be -- nginx would answer 502. Ask
+    // the probe what actually happened instead of guessing.
+    const kind = await probeReachability();
+    console.warn('[api] fetch rejected', { path, kind, cause: err.message });
+    throw new ApiError(kind);
   }
 
-  const data = await res.json().catch(() => ({}));
+  // Set on every response by the server's requestId middleware, so an on-screen
+  // error can be matched to a log line (EL-8).
+  const requestId = res.headers.get('X-Request-Id');
+  const data = await res.json().catch(() => null);
+
   if (!res.ok) {
-    if (res.status === 401 && !path.startsWith('/api/auth/')) {
+    // A null body on a 5xx means an intermediary answered with an HTML error
+    // page -- nginx or the tunnel, not the API.
+    const kind = data === null && res.status >= 500 ? KINDS.GATEWAY : classifyStatus(res.status);
+    if (kind === KINDS.UNAUTHORIZED && !path.startsWith('/api/auth/')) {
       // Already on /login means the redirect would just reload into another 401.
       if (window.location.pathname !== '/login') window.location.href = '/login';
-      return;
     }
-    throw Object.assign(new Error(data.error || 'Request failed'), { status: res.status });
+    throw new ApiError(kind, { status: res.status, requestId, message: data?.error });
   }
-  return data;
+  return data ?? {};
 }
 
 export const api = {

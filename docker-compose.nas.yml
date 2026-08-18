@@ -17,6 +17,8 @@ services:
       GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD}
       NOTIFICATION_ENCRYPT_KEY: ${NOTIFICATION_ENCRYPT_KEY}
       ALLOW_REGISTER: ${ALLOW_REGISTER:-}
+      LOG_LEVEL: ${LOG_LEVEL:-}
+      LOG_FORMAT: ${LOG_FORMAT:-}
     volumes:
       - db_data:/app/data
     deploy:

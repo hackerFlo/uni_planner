@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { api } from '../api/client';
 import { useToast } from './ToastContext';
+import { KINDS, userMessage } from '../api/errors';
 
 const AuthContext = createContext(null);
 
@@ -17,13 +18,10 @@ export function AuthProvider({ children }) {
         // 401 is the ordinary "not signed in yet" answer. Anything else is a
         // real fault, and swallowing it renders the login screen with no clue
         // that the server is rate-limiting or down.
-        if (err.status === 401) return;
-        console.warn('[auth] session check failed:', err.message);
-        toast?.error(
-          err.status === 429
-            ? 'Too many requests. Please wait a minute and reload.'
-            : 'Could not reach the server. Please reload.'
-        );
+        if (err.kind === KINDS.UNAUTHORIZED || err.status === 401) return;
+        console.warn('[auth] session check failed:', err.kind, err.message);
+        // err.message already names the actual cause (see api/errors.js).
+        toast?.error(userMessage(err), { ref: err.requestId ?? null });
       })
       .finally(() => setLoading(false));
   }, []);
@@ -37,7 +35,7 @@ export function AuthProvider({ children }) {
   async function logout() {
     await api.post('/api/auth/logout').catch((err) => {
       console.warn('[auth] logout request failed:', err.message);
-      toast?.error('Logout failed. Please try again.');
+      toast?.error('Logout failed on the server, but you have been signed out here.');
     });
     setUser(null);
   }

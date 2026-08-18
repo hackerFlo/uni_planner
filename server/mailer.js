@@ -1,4 +1,5 @@
 const nodemailer = require('nodemailer');
+const { log } = require('./logger');
 const fs = require('fs');
 const path = require('path');
 
@@ -8,7 +9,7 @@ const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
 const LOGO_PNG_PATH = path.join(__dirname, 'assets', 'pwa-192.png');
 let LOGO_PNG = null;
 try { LOGO_PNG = fs.readFileSync(LOGO_PNG_PATH); }
-catch (err) { console.warn('[mailer] logo not found, emails will be sent without logo:', err.message); }
+catch (err) { log.warn('mailer logo missing, sending without it', { err }); }
 
 const transporter = (GMAIL_USER && GMAIL_APP_PASSWORD)
   ? nodemailer.createTransport({
@@ -18,6 +19,16 @@ const transporter = (GMAIL_USER && GMAIL_APP_PASSWORD)
       auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
     })
   : null;
+
+// Without credentials the daily summary disables itself. Say so once at boot --
+// silently sending no mail for weeks is the worst version of this failure.
+if (!transporter) {
+  log.warn('mailer disabled: GMAIL_USER and GMAIL_APP_PASSWORD are not both set');
+}
+
+function isMailerEnabled() {
+  return transporter !== null;
+}
 
 const PALETTE = {
   indigo:  { color: '#6366f1', bg: '#eef2ff' },
@@ -390,4 +401,5 @@ async function sendDailySummary(toEmail, { completedTodos, uncompletedTodos, tom
   });
 }
 
-module.exports = { sendDailySummary };
+module.exports = {
+  isMailerEnabled, sendDailySummary };

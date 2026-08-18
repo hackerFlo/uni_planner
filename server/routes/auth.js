@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const db = require('../db');
+const { log } = require('../logger');
 const requireAuth = require('../middleware/auth');
 const { validateIdentifier } = require('../middleware/validate');
 const { encryptEmail, decryptEmail } = require('../crypto');
@@ -17,24 +18,34 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 router.post('/login', authLimiter, async (req, res) => {
   const { email, password } = req.body;
 
+  // The identifier itself is never logged -- it is an email address (S-5). The
+  // reason is what makes a failed login diagnosable; userId once it is known.
+  const rlog = req.log || log;
+
   if (!validateIdentifier(email) || typeof password !== 'string' || password.length < 1 || password.length > 128) {
+    rlog.warn('login failed', { reason: 'invalid-input' });
     return res.status(400).json({ error: 'Invalid credentials' });
   }
 
   const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email.trim().toLowerCase());
   if (!user) {
     await bcrypt.hash('dummy', 12); // constant-time defense
+    rlog.warn('login failed', { reason: 'unknown-identifier' });
     return res.status(401).json({ error: 'Invalid email or password' });
   }
 
   const match = await bcrypt.compare(password, user.password_hash);
-  if (!match) return res.status(401).json({ error: 'Invalid email or password' });
+  if (!match) {
+    rlog.warn('login failed', { reason: 'bad-password', userId: user.id });
+    return res.status(401).json({ error: 'Invalid email or password' });
+  }
 
   const token = jwt.sign({ id: user.id, email: user.email, tv: user.token_version }, process.env.JWT_SECRET, {
     expiresIn: JWT_EXPIRES_IN,
   });
 
   res.cookie(SESSION_COOKIE_NAME, token, sessionCookieOptions(req));
+  rlog.info('login ok', { userId: user.id, secure: sessionCookieOptions(req).secure });
   res.json({ user: { id: user.id, email: user.email, created_at: user.created_at } });
 });
 
@@ -130,7 +141,7 @@ router.get('/notification-settings', sessionLimiter, requireAuth, (req, res) => 
   ).get(req.user.id);
   let notify_email = '';
   if (user.notify_email_enc) {
-    try { notify_email = decryptEmail(user.notify_email_enc); } catch (err) { console.warn('[auth] Failed to decrypt notification email for user', req.user.id, err.message); }
+    try { notify_email = decryptEmail(user.notify_email_enc); } catch (err) { (req.log || log).warn('notification email decrypt failed', { userId: req.user.id, err }); }
   }
   res.json({
     notify_enabled: !!user.notify_enabled,
@@ -242,7 +253,7 @@ router.post('/test-email', authLimiter, requireAuth, async (req, res) => {
     await sendDailySummary(toEmail, { completedTodos, uncompletedTodos, tomorrowTodos, dateStr, tomorrowStr, userName, hour });
     res.json({ ok: true, sentTo: toEmail });
   } catch (err) {
-    console.error('[test-email] Send failed:', err.message);
+    (req.log || log).error('test email send failed', { userId: req.user.id, err });
     res.status(500).json({ error: 'Failed to send test email. Check server email configuration.' });
   }
 });

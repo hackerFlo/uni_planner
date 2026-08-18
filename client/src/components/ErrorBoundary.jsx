@@ -10,6 +10,18 @@ export default class ErrorBoundary extends Component {
     return { error };
   }
 
+  // Until now a render crash showed a message on screen and logged nothing, so
+  // there was no record of it anywhere (EL-1). The build stamp matters because a
+  // stale service worker can serve an old bundle against a new API.
+  componentDidCatch(error, info) {
+    console.error('[app] render crashed', {
+      version: __APP_VERSION__,
+      commit: __APP_COMMIT__,
+      message: error?.message,
+      componentStack: info?.componentStack,
+    });
+  }
+
   render() {
     if (!this.state.error) return this.props.children;
 
@@ -39,6 +51,10 @@ export default class ErrorBoundary extends Component {
             </svg>
             Reload app
           </button>
+
+          <p className="mt-8 font-mono text-[11px] text-zinc-300">
+            v{__APP_VERSION__} · {__APP_COMMIT__}
+          </p>
         </div>
       </div>
     );

@@ -1,4 +1,5 @@
 const cron = require('node-cron');
+const { log } = require('./logger');
 const db = require('./db');
 const { decryptEmail } = require('./crypto');
 const { sendDailySummary } = require('./mailer');
@@ -30,7 +31,7 @@ async function materializeRecurrencesAtLocalMidnight(now) {
       'SELECT DISTINCT u.id, u.notify_tz FROM users u INNER JOIN todos t ON t.user_id = u.id WHERE (t.recurrence_interval_days IS NOT NULL OR t.recurrence_pattern IS NOT NULL) AND t.archived = 0 AND t.recurrence_parent_id IS NULL'
     ).all();
   } catch (err) {
-    console.error('[scheduler] Failed to query recurrence users:', err.message);
+    log.error('scheduler recurrence query failed', { err });
     return;
   }
 
@@ -40,9 +41,9 @@ async function materializeRecurrencesAtLocalMidnight(now) {
       if (hhmm(tz, now) !== '00:00') continue;
 
       const total = materializeWindowForUser(u.id, tz);
-      if (total > 0) console.log(`[scheduler] Materialized ${total} recurring instances for user ${u.id}`);
+      if (total > 0) log.info('scheduler materialized recurrences', { count: total, userId: u.id });
     } catch (err) {
-      console.error(`[scheduler] Recurrence materialization failed for user ${u.id}:`, err.message);
+      log.error('scheduler recurrence materialization failed', { userId: u.id, err });
     }
   }
 }
@@ -55,7 +56,7 @@ async function sendDueSummaries(now) {
        WHERE notify_enabled = 1`
     ).all();
   } catch (err) {
-    console.error('[scheduler] DB query failed:', err.message);
+    log.error('scheduler db query failed', { err });
     return;
   }
 
@@ -122,9 +123,9 @@ async function sendDueSummaries(now) {
       });
 
       db.prepare('UPDATE users SET notify_last_sent = ? WHERE id = ?').run(todayStr, user.id);
-      console.log(`[scheduler] Sent daily summary to user ${user.id} (${completedTodos.length} completed, ${uncompletedTodos.length} open, ${tomorrowTodos.length} tomorrow)`);
+      log.info('daily summary sent', { userId: user.id, completed: completedTodos.length, open: uncompletedTodos.length, tomorrow: tomorrowTodos.length });
     } catch (err) {
-      console.error(`[scheduler] Failed for user ${user.id}:`, err.message);
+      log.error('daily summary failed', { userId: user.id, err });
     }
   }
 }
@@ -136,7 +137,7 @@ function startScheduler() {
     await sendDueSummaries(now);
   });
 
-  console.log('[scheduler] Daily summary scheduler started (with recurrence materialization)');
+  log.info('scheduler started', { jobs: 'daily summary, recurrence materialization' });
 }
 
 module.exports = { startScheduler };

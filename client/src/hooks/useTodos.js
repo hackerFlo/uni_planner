@@ -1,6 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { api } from '../api/client';
+import { userMessage } from '../api/errors';
 import { useUndo } from '../context/UndoContext';
+import { useToast } from '../context/ToastContext';
 
 function mergeTodoUpdate(prev, todo, materialized, removedIds) {
   const removed = new Set(removedIds);
@@ -18,6 +20,7 @@ export function useTodos() {
   const [todos, setTodos] = useState([]);
   const [loading, setLoading] = useState(false);
   const { recordUndo } = useUndo();
+  const toast = useToast();
 
   const todosRef = useRef(todos);
 
@@ -28,10 +31,15 @@ export function useTodos() {
     try {
       const { todos } = await api.get('/api/todos');
       setTodos(todos);
+    } catch (err) {
+      // Keep whatever is on screen: this also runs on tab focus and at midnight,
+      // and blanking a populated planner because one refresh failed is worse.
+      console.warn('[useTodos] load failed:', err.kind, err.message);
+      toast?.error(userMessage(err), { ref: err.requestId ?? null });
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     function handleVisibility() {

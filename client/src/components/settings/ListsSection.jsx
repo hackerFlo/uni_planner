@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { useLists } from '../../context/ListsContext';
 import { useRegisterModal } from '../../context/ModalContext';
+import { useToast } from '../../context/ToastContext';
+import { userMessage } from '../../api/errors';
 import { LIST_PALETTE, PALETTE_KEYS } from '../../constants/listPalette';
 import EmojiPicker from '../ui/EmojiPicker';
 import useEmojiInput from '../../hooks/useEmojiInput';
@@ -73,6 +75,7 @@ function DeleteDialog({ list, otherLists, onConfirm, onCancel }) {
 }
 
 function ListRow({ list, index, canDelete, onDelete }) {
+  const toast = useToast();
   const { updateList } = useLists();
   const [name, setName] = useState(list.name);
   const [showPicker, setShowPicker] = useState(false);
@@ -95,7 +98,10 @@ function ListRow({ list, index, canDelete, onDelete }) {
     if (!trimmed || trimmed === list.name) { setName(list.name); return; }
     setSaving(true);
     try { await updateList(list.id, { name: trimmed }); }
-    catch { setName(list.name); }
+    catch (err) {
+      setName(list.name);
+      toast?.error(`Could not rename the list. ${userMessage(err)}`, { ref: err.requestId ?? null });
+    }
     finally { setSaving(false); }
   }
 

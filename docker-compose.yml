@@ -1,6 +1,10 @@
 services:
   server:
-    build: ./server
+    build:
+      context: ./server
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
+        APP_COMMIT: ${APP_COMMIT:-dev}
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -15,11 +19,17 @@ services:
       GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD}
       NOTIFICATION_ENCRYPT_KEY: ${NOTIFICATION_ENCRYPT_KEY}
       ALLOW_REGISTER: ${ALLOW_REGISTER:-}
+      LOG_LEVEL: ${LOG_LEVEL:-}
+      LOG_FORMAT: ${LOG_FORMAT:-}
     volumes:
       - db_data:/app/data
 
   client:
-    build: ./client
+    build:
+      context: ./client
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
+        APP_COMMIT: ${APP_COMMIT:-dev}
     restart: unless-stopped
     ports:
       - "8080:80"

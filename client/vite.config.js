@@ -1,11 +1,26 @@
+import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
+
 export default defineConfig({
+  // Baked in by client/Dockerfile from the CI build args. Shown on the login
+  // page so the deployed build can be identified without signing in.
+  define: {
+    __APP_VERSION__: JSON.stringify(process.env.VITE_APP_VERSION || pkg.version),
+    __APP_COMMIT__: JSON.stringify(process.env.VITE_APP_COMMIT || 'dev'),
+  },
   plugins: [
     react(),
     VitePWA({
+      // Deliberately still 'autoUpdate'. Switching to 'prompt' would leave every
+      // already-installed client on a *waiting* worker until all its tabs close,
+      // because the currently-active worker is the one that decides to hand over.
+      // So the worker keeps self-activating, and components/UpdatePrompt.jsx
+      // watches for the handover to offer a reload -- visibility without the
+      // stuck-worker trap.
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
@@ -24,6 +39,10 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // Without this the navigation fallback answers /api/health with the
+        // precached index.html, so opening the health endpoint in a tab returns
+        // the SPA and looks broken.
+        navigateFallbackDenylist: [/^\/api\//],
       },
     }),
   ],

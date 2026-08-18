@@ -1,24 +1,25 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { KINDS, userMessage } from '../api/errors';
 
 export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setError('');
+    setError(null);
     setLoading(true);
     try {
       await login(email, password);
       navigate('/', { replace: true });
     } catch (err) {
-      setError(err.message || 'Login failed');
+      setError(err);
     } finally {
       setLoading(false);
     }
@@ -40,7 +41,20 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
             <div className="bg-red-50 border border-red-100 text-red-600 text-sm px-4 py-3 rounded-lg">
-              {error}
+              <p>{userMessage(error)}</p>
+              {/* Matches a line in `docker logs` -- see server/middleware/requestId.js */}
+              {error.requestId && (
+                <p className="mt-1 font-mono text-[11px] opacity-60">ref {error.requestId}</p>
+              )}
+              {error.kind === KINDS.ACCESS_EXPIRED && (
+                <button
+                  type="button"
+                  onClick={() => window.location.reload()}
+                  className="mt-2 underline underline-offset-2 hover:no-underline"
+                >
+                  Reload to sign in again
+                </button>
+              )}
             </div>
           )}
 
@@ -85,6 +99,10 @@ export default function LoginPage() {
           </button>
         </form>
 
+        {/* The one build check that needs neither a login nor a shell on the NAS. */}
+        <p className="mt-10 text-center font-mono text-[11px] text-zinc-300">
+          v{__APP_VERSION__} · {__APP_COMMIT__}
+        </p>
       </div>
     </div>
   );

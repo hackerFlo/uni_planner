@@ -32,6 +32,18 @@ export const CHANGELOG = [
         desc: 'The daily summary email no longer carries an "Open Uni Planner" button. Open the app from your bookmark or home-screen icon instead.',
         svgPath: 'M4 5h16v14H4zM4 7l8 6 8-6',
       },
+      {
+        icon: 'rose',
+        name: 'Failures no longer pass unnoticed',
+        desc: 'A refresh that fails no longer empties your planner without a word, and an edit that could not be saved now tells you instead of vanishing. Messages also name the real cause — an expired Cloudflare Access sign-in now says so and offers a reload, rather than claiming the server is down.',
+        svgPath: 'M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0',
+      },
+      {
+        icon: 'green',
+        name: 'You can see which version you are running',
+        desc: 'The sign-in screen now shows the version and build at the bottom, so you can tell at a glance whether an update has arrived. When a new version has been installed in the background, a notice appears with a Reload button instead of updating invisibly.',
+        svgPath: 'M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82zM7 7h.01',
+      },
     ],
   },
   {

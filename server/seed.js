@@ -1,3 +1,4 @@
+const { log } = require('./logger');
 const bcrypt = require('bcrypt');
 const db = require('./db');
 
@@ -16,7 +17,7 @@ async function seed() {
       .run(r.lastInsertRowid, 'Tasks', 'indigo', 0);
     return r.lastInsertRowid;
   })();
-  console.log(`[seed] Test account created (id ${userId})`);
+  log.warn('seed test account created -- never enable this in production', { userId });
 }
 
 module.exports = seed;

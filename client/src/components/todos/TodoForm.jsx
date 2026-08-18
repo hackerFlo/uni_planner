@@ -5,6 +5,8 @@ import { useLists } from '../../context/ListsContext';
 import { loadEmojis, getLoadedEmojis } from '../../data/loadEmojis';
 import useIsMobile from '../../hooks/useIsMobile';
 import { useRegisterModal } from '../../context/ModalContext';
+import { useToast } from '../../context/ToastContext';
+import { userMessage } from '../../api/errors';
 import { sanitizeRichHtml, richTextToPlain } from '../../utils/richText';
 
 function toIso(d) {
@@ -165,6 +167,7 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
   const [customTime, setCustomTime] = useState(!isPreset(initialApproxTime) ? initialApproxTime : '');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const toast = useToast();
   const [emojiState, setEmojiState] = useState(null);
 
   const titleRef = useRef(null);
@@ -200,7 +203,11 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
 
   function handleClose() {
     if (mode === 'edit' && title.trim() && !loading) {
-      onUpdate(todo.id, buildPayload()).catch(() => {});
+      // The modal is already closing, so there is nowhere to show an inline
+      // error -- but losing an edit in silence is the worst option.
+      onUpdate(todo.id, buildPayload()).catch((err) => {
+        toast?.error(`Changes were not saved. ${userMessage(err)}`, { ref: err.requestId ?? null });
+      });
     }
     onClose();
   }

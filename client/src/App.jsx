@@ -9,6 +9,8 @@ import { ModalProvider } from './context/ModalContext';
 import { ToastProvider } from './context/ToastContext';
 import PlannerPage from './pages/PlannerPage';
 import ErrorBoundary from './components/ErrorBoundary';
+import UpdatePrompt from './components/UpdatePrompt';
+import GlobalErrorToast from './components/GlobalErrorToast';
 
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
@@ -50,6 +52,8 @@ export default function App() {
   return (
     <ErrorBoundary>
       <ToastProvider>
+      <GlobalErrorToast />
+      <UpdatePrompt />
       <ModalProvider>
       <AuthProvider>
         <UndoProvider>

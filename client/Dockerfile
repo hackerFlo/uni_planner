@@ -3,6 +3,14 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY . .
+
+# Baked into the bundle by vite.config.js so the login page can show which build
+# is being served -- the one check that needs no login and no shell.
+ARG APP_VERSION=
+ARG APP_COMMIT=
+ENV VITE_APP_VERSION=$APP_VERSION
+ENV VITE_APP_COMMIT=$APP_COMMIT
+
 RUN npm run build
 
 FROM nginx:alpine

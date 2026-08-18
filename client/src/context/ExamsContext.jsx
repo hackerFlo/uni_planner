@@ -1,7 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
+import { userMessage } from '../api/errors';
 import { useAuth } from './AuthContext';
 import { useUndo } from './UndoContext';
+import { useToast } from './ToastContext';
 
 const ExamsContext = createContext(null);
 
@@ -21,6 +23,7 @@ function daysUntil(dateStr) {
 export function ExamsProvider({ children }) {
   const { user } = useAuth();
   const { recordUndo } = useUndo();
+  const toast = useToast();
   const [exams, setExams] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const examsRef = useRef(exams);
@@ -32,9 +35,10 @@ export function ExamsProvider({ children }) {
       const { exams: fetched } = await api.get('/api/exams');
       setExams(fetched);
     } catch (err) {
-      console.warn('[exams] failed to load:', err.message);
+      console.warn('[exams] failed to load:', err.kind, err.message);
+      toast?.error(`Could not load exams. ${userMessage(err)}`, { ref: err.requestId ?? null });
     }
-  }, [user]);
+  }, [user, toast]);
 
   useEffect(() => { fetchExams(); }, [fetchExams]);
 

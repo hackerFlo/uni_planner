@@ -1,7 +1,11 @@
 const Database = require('better-sqlite3');
 const path = require('path');
+const { log } = require('./logger');
 
-const db = new Database(process.env.DATABASE_PATH || path.join(__dirname, 'planner.db'));
+const DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, 'planner.db');
+const db = new Database(DB_PATH);
+
+log.info('db open', { path: DB_PATH });
 
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
@@ -65,23 +69,23 @@ db.exec(`
 const todoCols = db.prepare(`PRAGMA table_info(todos)`).all();
 if (!todoCols.some(c => c.name === 'planner_order')) {
   db.exec(`ALTER TABLE todos ADD COLUMN planner_order INTEGER`);
-  console.log('[db] Migrated: added planner_order column');
+  log.info('db migrated', { change: 'added planner_order column' });
 }
 if (!todoCols.some(c => c.name === 'approx_time')) {
   db.exec(`ALTER TABLE todos ADD COLUMN approx_time TEXT`);
-  console.log('[db] Migrated: added approx_time column');
+  log.info('db migrated', { change: 'added approx_time column' });
 }
 if (!todoCols.some(c => c.name === 'recurrence_interval_days')) {
   db.exec(`ALTER TABLE todos ADD COLUMN recurrence_interval_days INTEGER`);
-  console.log('[db] Migrated: added recurrence_interval_days column');
+  log.info('db migrated', { change: 'added recurrence_interval_days column' });
 }
 if (!todoCols.some(c => c.name === 'recurrence_parent_id')) {
   db.exec(`ALTER TABLE todos ADD COLUMN recurrence_parent_id INTEGER`);
-  console.log('[db] Migrated: added recurrence_parent_id column');
+  log.info('db migrated', { change: 'added recurrence_parent_id column' });
 }
 if (!todoCols.some(c => c.name === 'recurrence_pattern')) {
   db.exec(`ALTER TABLE todos ADD COLUMN recurrence_pattern TEXT`);
-  console.log('[db] Migrated: added recurrence_pattern column');
+  log.info('db migrated', { change: 'added recurrence_pattern column' });
 }
 db.exec(`CREATE INDEX IF NOT EXISTS idx_todos_recurrence_parent ON todos(recurrence_parent_id)`);
 
@@ -111,13 +115,13 @@ if (schema && schema.sql.includes("'monday'")) {
     CREATE INDEX IF NOT EXISTS idx_todos_user_id ON todos(user_id);
     PRAGMA foreign_keys = ON;
   `);
-  console.log('[db] Migrated: day_assigned now stores ISO dates; cleared old day-name values');
+  log.info('db migrated', { change: 'day_assigned now stores ISO dates; cleared old day-name values' });
 }
 
 // Migrate: add completed_at to todos
 if (!todoCols.some(c => c.name === 'completed_at')) {
   db.exec(`ALTER TABLE todos ADD COLUMN completed_at TEXT`);
-  console.log('[db] Migrated: added completed_at column');
+  log.info('db migrated', { change: 'added completed_at column' });
 }
 
 // Migrate: add notification columns to users
@@ -126,19 +130,19 @@ if (!userCols.some(c => c.name === 'notify_enabled')) {
   db.exec(`ALTER TABLE users ADD COLUMN notify_enabled INTEGER NOT NULL DEFAULT 0`);
   db.exec(`ALTER TABLE users ADD COLUMN notify_time TEXT NOT NULL DEFAULT '22:00'`);
   db.exec(`ALTER TABLE users ADD COLUMN notify_email_enc TEXT`);
-  console.log('[db] Migrated: added notification columns to users');
+  log.info('db migrated', { change: 'added notification columns to users' });
 }
 if (!userCols.some(c => c.name === 'notify_last_sent')) {
   db.exec(`ALTER TABLE users ADD COLUMN notify_last_sent TEXT`);
-  console.log('[db] Migrated: added notify_last_sent column');
+  log.info('db migrated', { change: 'added notify_last_sent column' });
 }
 if (!userCols.some(c => c.name === 'notify_tz')) {
   db.exec(`ALTER TABLE users ADD COLUMN notify_tz TEXT NOT NULL DEFAULT 'UTC'`);
-  console.log('[db] Migrated: added notify_tz column');
+  log.info('db migrated', { change: 'added notify_tz column' });
 }
 if (!userCols.some(c => c.name === 'token_version')) {
   db.exec(`ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0`);
-  console.log('[db] Migrated: added token_version column to users');
+  log.info('db migrated', { change: 'added token_version column to users' });
 }
 
 // Migrate: replace list_type TEXT with list_id INTEGER -> lists(id)
@@ -216,7 +220,7 @@ if (currentTodoCols.includes('list_type')) {
     CREATE INDEX IF NOT EXISTS idx_todos_recurrence_parent ON todos(recurrence_parent_id);
     PRAGMA foreign_keys = ON;
   `);
-  console.log('[db] Migrated: list_type -> list_id (lists table created)');
+  log.info('db migrated', { change: 'list_type -> list_id (lists table created)' });
 }
 
 // Indexes last: they reference columns (completed_at, list_id) that the
