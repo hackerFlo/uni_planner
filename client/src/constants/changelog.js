@@ -4,11 +4,30 @@
 // This way every Watchtower deploy maps to exactly one version.
 // Versioning: X.Y — increment Y for regular updates, bump X (reset Y to 0) for big releases.
 // Add a new entry to CHANGELOG (newest first) on first push of a window; append to top entry otherwise.
-export const CURRENT_VERSION = '2.5';
+export const CURRENT_VERSION = '2.6';
 
 // icon: 'purple' | 'green' | 'amber' | 'blue' | 'rose'
 // Each feature needs: icon, name, desc, and a 24×24 SVG path string (stroke icons).
 export const CHANGELOG = [
+  {
+    version: '2.6',
+    date: '2026-08-19',
+    title: 'Updates that actually arrive',
+    features: [
+      {
+        icon: 'purple',
+        name: 'Updates reach you',
+        desc: 'The app could quietly keep running an old version for days, because the file that carries an update was being cached along the way. Browsers are now told never to hold on to it, and if a page is still running an outdated version it says so and offers a Reload.',
+        svgPath: 'M21 2v6h-6M3 12a9 9 0 0115-6.7L21 8M3 22v-6h6M21 12a9 9 0 01-15 6.7L3 16',
+      },
+      {
+        icon: 'amber',
+        name: 'Sign-in problems name themselves',
+        desc: 'When the security gate in front of the app expires mid-session, you now get a message saying exactly that with a Reload button, instead of a generic failure that blamed the server.',
+        svgPath: 'M12 16v-4M12 8h.01M22 12a10 10 0 11-20 0 10 10 0 0120 0z',
+      },
+    ],
+  },
   {
     version: '2.5',
     date: '2026-08-18',

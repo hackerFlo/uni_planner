@@ -11,6 +11,7 @@ import PlannerPage from './pages/PlannerPage';
 import ErrorBoundary from './components/ErrorBoundary';
 import UpdatePrompt from './components/UpdatePrompt';
 import GlobalErrorToast from './components/GlobalErrorToast';
+import StaleBuildNotice from './components/StaleBuildNotice';
 
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
@@ -54,6 +55,7 @@ export default function App() {
       <ToastProvider>
       <GlobalErrorToast />
       <UpdatePrompt />
+      <StaleBuildNotice />
       <ModalProvider>
       <AuthProvider>
         <UndoProvider>
