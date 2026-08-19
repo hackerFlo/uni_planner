@@ -20,7 +20,12 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-}
       LOG_FORMAT: ${LOG_FORMAT:-}
     volumes:
-      - db_data:/app/data
+      # A bind mount, not a named volume. Docker keeps named volumes under
+      # /volume1/@docker on DSM, which is hidden from File Station and excluded
+      # from Hyper Backup -- the database would sit there unbacked-up forever.
+      # Resolved against this file's directory, so on the NAS it is
+      # /volume1/docker/uni_planner/data. Must be owned by uid 1000 (see Dockerfile).
+      - ./data:/app/data
     deploy:
       resources:
         limits:
@@ -60,6 +65,3 @@ services:
           memory: 64M
         reservations:
           memory: 16M
-
-volumes:
-  db_data:

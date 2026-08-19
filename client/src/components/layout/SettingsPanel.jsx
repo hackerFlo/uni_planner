@@ -287,7 +287,7 @@ export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
           <div className="space-y-3">
             <h3 className="text-xs font-semibold text-zinc-600 uppercase tracking-widest">Backup &amp; Restore</h3>
             <p className="text-[11px] text-zinc-400 leading-relaxed">
-              Download all your todos and exams as a JSON file, or restore from a previous backup. Existing items are never duplicated.
+              Download your lists, todos, exams and day notes as a JSON file, or restore from a previous backup. Existing items are never duplicated. Your account and password are not included.
             </p>
             <button
               type="button"

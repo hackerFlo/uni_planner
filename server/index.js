@@ -30,6 +30,19 @@ const requestId = require('./middleware/requestId');
 const requestLog = require('./middleware/requestLog');
 const { VERSION, COMMIT } = require('./version');
 const { TRUST_PROXY_HOPS, COOKIE_SECURE_OVERRIDE, CORS_ORIGIN } = config;
+
+// Before any route pulls in db.js. better-sqlite3 would otherwise fail first
+// with an opaque SQLITE_CANTOPEN, which on a bind mount nearly always means the
+// host folder is owned by the wrong uid -- unguessable from the error alone.
+const nodePath = require('node:path');
+const { DB_PATH, assertDataDirWritable } = require('./storage');
+try {
+  assertDataDirWritable(nodePath.dirname(DB_PATH));
+} catch (err) {
+  log.error('data directory unusable, refusing to start', { err });
+  process.exit(1);
+}
+
 const authRoutes = require('./routes/auth');
 const healthRoutes = require('./routes/health');
 const todoRoutes = require('./routes/todos');

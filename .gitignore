@@ -4,6 +4,9 @@ client/node_modules/
 server/planner.db
 server/planner.db-shm
 server/planner.db-wal
+
+# Bind-mounted database for `docker compose up` (see docker-compose.yml)
+data/
 server/.env
 .env
 dist/

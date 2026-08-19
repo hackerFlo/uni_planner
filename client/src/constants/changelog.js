@@ -26,6 +26,12 @@ export const CHANGELOG = [
         desc: 'When the security gate in front of the app expires mid-session, you now get a message saying exactly that with a Reload button, instead of a generic failure that blamed the server.',
         svgPath: 'M12 16v-4M12 8h.01M22 12a10 10 0 11-20 0 10 10 0 0120 0z',
       },
+      {
+        icon: 'blue',
+        name: 'Backups actually contain everything',
+        desc: 'The backup file you can download in Settings was quietly leaving out your day notes, and repeating tasks came back as ordinary one-off items. Both are now included, so a restore returns the planner you actually had.',
+        svgPath: 'M4 7c0-1.66 3.58-3 8-3s8 1.34 8 3M4 7v10c0 1.66 3.58 3 8 3s8-1.34 8-3V7M4 7c0 1.66 3.58 3 8 3s8-1.34 8-3M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3',
+      },
     ],
   },
   {

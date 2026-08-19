@@ -22,7 +22,9 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-}
       LOG_FORMAT: ${LOG_FORMAT:-}
     volumes:
-      - db_data:/app/data
+      # Bind mount rather than a named volume, matching docker-compose.nas.yml.
+      # Resolved against this file's directory. Gitignored.
+      - ./data:/app/data
 
   client:
     build:
@@ -35,6 +37,3 @@ services:
       - "8080:80"
     depends_on:
       - server
-
-volumes:
-  db_data:

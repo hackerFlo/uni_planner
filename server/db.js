@@ -1,8 +1,7 @@
 const Database = require('better-sqlite3');
-const path = require('path');
 const { log } = require('./logger');
+const { DB_PATH } = require('./storage');
 
-const DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, 'planner.db');
 const db = new Database(DB_PATH);
 
 log.info('db open', { path: DB_PATH });
