@@ -14,6 +14,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Without this the build falls back to the "docker" driver, which builds
+      # into the local image store and then runs a separate `docker push`.
+      # That path mounts layer blobs it assumes the registry already holds and
+      # fails intermittently against GHCR with "ERROR: failed to build: unknown
+      # blob". The docker-container driver pushes from BuildKit's own content
+      # store in one step.
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -28,6 +37,7 @@ jobs:
           echo "SERVER_IMAGE=ghcr.io/${OWNER}/uni-planner-server" >> $GITHUB_ENV
           echo "CLIENT_IMAGE=ghcr.io/${OWNER}/uni-planner-client" >> $GITHUB_ENV
           echo "SHA_TAG=${SHA::7}" >> $GITHUB_ENV
+          echo "APP_VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_ENV
 
       - name: Build and push server
         uses: docker/build-push-action@v6
@@ -35,6 +45,10 @@ jobs:
           context: ./server
           push: true
           no-cache: true
+          provenance: false
+          build-args: |
+            APP_VERSION=${{ env.APP_VERSION }}
+            APP_COMMIT=${{ env.SHA_TAG }}
           tags: |
             ${{ env.SERVER_IMAGE }}:latest
             ${{ env.SERVER_IMAGE }}:${{ env.SHA_TAG }}
@@ -45,6 +59,10 @@ jobs:
           context: ./client
           push: true
           no-cache: true
+          provenance: false
+          build-args: |
+            APP_VERSION=${{ env.APP_VERSION }}
+            APP_COMMIT=${{ env.SHA_TAG }}
           tags: |
             ${{ env.CLIENT_IMAGE }}:latest
             ${{ env.CLIENT_IMAGE }}:${{ env.SHA_TAG }}
