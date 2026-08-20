@@ -77,6 +77,32 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
   CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
+
+  -- Public-holiday responses, cached whole. The browser used to call
+  -- date.nager.at itself, so holidays disappeared whenever that host was down,
+  -- the installed PWA was offline, or the CSP was tightened -- and their absence
+  -- looked exactly like "no holidays this year". One row per country-year now
+  -- serves every account and every region, because payload keeps each holiday's
+  -- counties field verbatim: switching from Bavaria to Berlin is a filter on
+  -- data already here, not a refetch. Public reference data, identical for
+  -- everyone, so it is deliberately not scoped by user_id -- AR-2 does not
+  -- apply. For the same reason it stays out of backup.js: it is a cache, and
+  -- restoring someone else's copy of it would be meaningless.
+  CREATE TABLE IF NOT EXISTS holiday_cache (
+    country    TEXT    NOT NULL,
+    year       INTEGER NOT NULL,
+    payload    TEXT    NOT NULL,
+    fetched_at TEXT    NOT NULL,
+    PRIMARY KEY (country, year)
+  );
+
+  -- The list of countries the upstream API knows about. One row by construction;
+  -- the CHECK is what makes "insert or replace row 1" safe to write blindly.
+  CREATE TABLE IF NOT EXISTS holiday_country_cache (
+    id         INTEGER PRIMARY KEY CHECK (id = 1),
+    payload    TEXT    NOT NULL,
+    fetched_at TEXT    NOT NULL
+  );
 `);
 
 // Migrate: add planner_order column if missing

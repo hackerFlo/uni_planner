@@ -19,6 +19,11 @@ services:
       ALLOW_REGISTER: ${ALLOW_REGISTER:-}
       LOG_LEVEL: ${LOG_LEVEL:-}
       LOG_FORMAT: ${LOG_FORMAT:-}
+      # Settings > App Updates. Unset either one and that section says it is not
+      # configured rather than failing. GITHUB_REPO carries no default here on
+      # purpose: which repository a deployment tracks is environment, not source.
+      GITHUB_REPO: ${GITHUB_REPO:-}
+      WATCHTOWER_TOKEN: ${WATCHTOWER_TOKEN:-}
     volumes:
       # A bind mount, not a named volume. Docker keeps named volumes under
       # /volume1/@docker on DSM, which is hidden from File Station and excluded
@@ -59,6 +64,19 @@ services:
       WATCHTOWER_SCHEDULE: "0 0 4 * * *"
       WATCHTOWER_INCLUDE_STOPPED: "false"
       WATCHTOWER_LABEL_ENABLE: "true"
+      # Lets the server trigger an update on demand (POST /api/version/update).
+      # The API listens on the compose network only -- deliberately no ports:
+      # entry, so nothing is reachable from the host or the LAN.
+      WATCHTOWER_HTTP_API_UPDATE: "true"
+      # Set WATCHTOWER_TOKEN in .env before deploying: with the API enabled an
+      # empty token is not usable. The server service reads the same variable,
+      # so the two ends cannot drift apart.
+      WATCHTOWER_HTTP_API_TOKEN: ${WATCHTOWER_TOKEN}
+      # NOT OPTIONAL. Enabling the HTTP API otherwise puts Watchtower in
+      # API-only mode: WATCHTOWER_SCHEDULE above stops running and the nightly
+      # 04:00 update silently never happens again. Removing this line looks like
+      # a tidy-up and is the easiest way to break this deployment.
+      WATCHTOWER_HTTP_API_PERIODIC_POLLS: "true"
     deploy:
       resources:
         limits:

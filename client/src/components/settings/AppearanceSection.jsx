@@ -1,9 +1,41 @@
+import { useEffect, useState } from 'react';
 import { usePreferences } from '../../context/PreferencesContext';
 import { THEMES, DENSITIES } from '../../utils/preferences';
-import { HOLIDAY_COUNTRIES, HOLIDAY_SUBDIVISIONS } from '../../constants/regions';
+import { api } from '../../api/client';
+import { FALLBACK_HOLIDAY_COUNTRIES, HOLIDAY_SUBDIVISIONS } from '../../constants/regions';
 
 const THEME_LABELS = { system: 'System', light: 'Light', dark: 'Dark' };
 const DENSITY_LABELS = { comfortable: 'Comfortable', compact: 'Compact' };
+
+// A country the live list does not contain would silently drop out of the
+// select while the stored preference still names it, so the dropdown would show
+// the wrong country. Keep it as its own bare-code entry instead.
+function withSelected(countries, code) {
+  return countries.some(c => c.code === code) ? countries : [...countries, { code, name: code }];
+}
+
+// The server proxies and caches the upstream list, so this is a same-origin call
+// (AR-10) that normally answers from SQLite. The built-in shortlist covers the
+// one case it cannot: a brand-new deployment whose cache is still empty and
+// whose upstream is unreachable.
+function useHolidayCountries(selectedCode) {
+  const [countries, setCountries] = useState(FALLBACK_HOLIDAY_COUNTRIES);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.get('/api/holidays/countries')
+      .then(({ countries: list }) => {
+        if (cancelled || !Array.isArray(list) || list.length === 0) return;
+        setCountries(list
+          .map(c => ({ code: c.countryCode, name: c.name }))
+          .sort((a, b) => a.name.localeCompare(b.name)));
+      })
+      .catch(err => console.warn('[holidays] country list failed, using the built-in shortlist:', err.message));
+    return () => { cancelled = true; };
+  }, []);
+
+  return withSelected(countries, selectedCode);
+}
 
 function SegmentedControl({ label, options, value, labels, onChange, name }) {
   return (
@@ -36,6 +68,7 @@ function SegmentedControl({ label, options, value, labels, onChange, name }) {
 
 export default function AppearanceSection() {
   const { preferences, update } = usePreferences();
+  const countries = useHolidayCountries(preferences.holidayCountry);
   const subdivisions = HOLIDAY_SUBDIVISIONS[preferences.holidayCountry] ?? [];
 
   return (
@@ -104,7 +137,7 @@ export default function AppearanceSection() {
               onChange={e => update({ holidayCountry: e.target.value, holidaySubdivision: '' })}
               className="w-full text-sm border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-100 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition"
             >
-              {HOLIDAY_COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
+              {countries.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
             </select>
           </div>
 

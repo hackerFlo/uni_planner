@@ -51,6 +51,8 @@ const listRoutes = require('./routes/lists');
 const backupRoutes = require('./routes/backup');
 const dayNoteRoutes = require('./routes/dayNotes');
 const examRoutes = require('./routes/exams');
+const holidayRoutes = require('./routes/holidays');
+const versionRoutes = require('./routes/version');
 const { isMailerEnabled } = require('./mailer');
 const seed = process.env.NODE_ENV !== 'production' ? require('./seed') : () => Promise.resolve();
 
@@ -87,6 +89,13 @@ app.use('/api/lists', todoLimiter, listRoutes);
 app.use('/api/backup', backupLimiter, backupRoutes);
 app.use('/api/day-notes', todoLimiter, dayNoteRoutes);
 app.use('/api/exams', todoLimiter, examRoutes);
+// A cold cache issues four upstream fetches in a burst (year-1/0/+1 on first
+// planner load, plus the country list when Settings opens), so it shares the
+// generous todo budget rather than a tight one.
+app.use('/api/holidays', todoLimiter, holidayRoutes);
+// Limiters are per-route inside version.js: a check hits GitHub, an install
+// restarts containers, and the two deserve very different budgets.
+app.use('/api/version', versionRoutes);
 
 // Without this an unknown /api path falls through to Express's HTML 404, the
 // client's res.json() fails, and the user gets a message about the wrong thing.

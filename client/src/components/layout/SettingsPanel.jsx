@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { useRegisterModal } from '../../context/ModalContext';
@@ -9,6 +9,42 @@ import { userMessage } from '../../api/errors';
 import { TimePicker } from '../ui/TimePicker';
 import ListsSection from '../settings/ListsSection';
 import AppearanceSection from '../settings/AppearanceSection';
+
+// Mirrors the server's own 15-minute cache, so reopening this panel does not
+// spend a rate-limit slot re-asking a question we already have the answer to.
+const CHECK_MEMO_TTL_MS = 15 * 60 * 1000;
+let checkMemo = null; // { data, at }
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Watchtower pulls the new image and restarts the container, so /api/health is
+// unreachable for a while and then answers with a different commit. That change
+// is the only reliable proof the update actually landed -- the response to the
+// trigger itself usually never arrives.
+async function pollForNewCommit(fromCommit, isCancelled, { intervalMs = 3000, timeoutMs = 300000 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    await sleep(intervalMs);
+    if (isCancelled()) return 'cancelled';
+    try {
+      const res = await fetch('/api/health', { cache: 'no-store' });
+      const { commit } = await res.json();
+      if (commit && commit !== fromCommit) return 'done';
+    } catch (err) {
+      // Expected for as long as the container is down; only the deadline decides.
+      console.debug('[updates] health check failed mid-restart:', err.message);
+    }
+  }
+  return 'timeout';
+}
+
+// A dropped connection (status 0) or a gateway error is the normal outcome: the
+// container being restarted is the one serving this request. Only an answer the
+// API itself produced -- a 4xx, or the 503 it uses for "update service
+// unreachable" -- means the update never started.
+function installReallyFailed(err) {
+  return (err.status >= 400 && err.status < 500) || err.status === 503;
+}
 
 function useAsync(fn) {
   const [loading, setLoading] = useState(false);
@@ -77,6 +113,34 @@ export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
     return `Test email sent to ${data.sentTo}`;
   });
 
+  const [versionInfo, setVersionInfo] = useState(null);
+  const [versionLoad, setVersionLoad] = useState('loading'); // 'loading' | 'ready' | 'failed'
+  const [versionError, setVersionError] = useState('');
+  const [installState, setInstallState] = useState('idle'); // 'idle' | 'started' | 'installed' | 'timeout'
+  const [installError, setInstallError] = useState('');
+  const closed = useRef(false);
+  useEffect(() => () => { closed.current = true; }, []);
+
+  const loadVersion = useCallback(async (force) => {
+    if (!force && checkMemo && Date.now() - checkMemo.at < CHECK_MEMO_TTL_MS) {
+      setVersionInfo(checkMemo.data);
+      setVersionLoad('ready');
+      return checkMemo.data;
+    }
+    const data = await api.get('/api/version');
+    checkMemo = { data, at: Date.now() };
+    setVersionInfo(data);
+    setVersionLoad('ready');
+    return data;
+  }, []);
+
+  const checkOp = useAsync(async () => {
+    const data = await loadVersion(true);
+    if (!data.available) return '';
+    if (data.checkFailed) throw new Error('Could not reach GitHub to check for updates.');
+    return data.updateAvailable ? `Version ${data.latest.version} is available.` : 'You are on the latest version.';
+  });
+
   const [backupLoading, setBackupLoading] = useState(false);
   const [restoreLoading, setRestoreLoading] = useState(false);
   const [restoreResult, setRestoreResult] = useState(null);
@@ -101,6 +165,33 @@ export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
   }, []);
 
   useEffect(() => { loadNotifSettings(); }, [loadNotifSettings]);
+
+  useEffect(() => {
+    loadVersion(false).catch(err => {
+      console.warn('[settings] update check failed:', err.kind, err.message);
+      setVersionError(userMessage(err));
+      setVersionLoad('failed');
+    });
+  }, [loadVersion]);
+
+  async function handleInstallUpdate() {
+    setInstallError('');
+    setInstallState('started');
+    const fromCommit = versionInfo?.running?.commit;
+    try {
+      await api.post('/api/version/update');
+    } catch (err) {
+      if (installReallyFailed(err)) {
+        console.warn('[settings] update refused:', err.status, err.message);
+        setInstallState('idle');
+        setInstallError(userMessage(err));
+        return;
+      }
+      console.info('[settings] update trigger lost its connection, which is the expected case:', err.kind);
+    }
+    const outcome = await pollForNewCommit(fromCommit, () => closed.current);
+    if (outcome !== 'cancelled') setInstallState(outcome === 'done' ? 'installed' : 'timeout');
+  }
 
   async function handleDownloadBackup() {
     setBackupLoading(true);
@@ -314,11 +405,104 @@ export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
           {/* App Updates */}
           <div className="space-y-3">
             <h3 className="text-xs font-semibold text-zinc-600 dark:text-zinc-300 uppercase tracking-widest">App Updates</h3>
-            <p className="text-[11px] text-zinc-400 dark:text-zinc-500 leading-relaxed">See what's changed in the most recent update.</p>
+
+            <div className="rounded-lg border border-zinc-100 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800">
+              <div className="flex items-baseline justify-between px-3 py-2">
+                <span className="text-[11px] text-zinc-400 dark:text-zinc-500">Running</span>
+                <span className="text-xs font-medium text-zinc-700 dark:text-zinc-200">
+                  {versionInfo ? `v${versionInfo.running.version} · ${versionInfo.running.commit}` : '—'}
+                </span>
+              </div>
+              {versionInfo?.available && (
+                <div className="flex items-baseline justify-between px-3 py-2">
+                  <span className="text-[11px] text-zinc-400 dark:text-zinc-500">Latest</span>
+                  <span className="text-xs font-medium text-zinc-700 dark:text-zinc-200">
+                    {versionInfo.latest ? `v${versionInfo.latest.version}` : 'unknown'}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {versionLoad === 'loading' && (
+              <p className="text-[11px] text-zinc-400 dark:text-zinc-500">Checking for updates…</p>
+            )}
+            {versionLoad === 'failed' && <p className="text-xs text-red-500">{versionError}</p>}
+
+            {versionInfo && !versionInfo.available && (
+              <p className="text-[11px] text-zinc-400 dark:text-zinc-500 leading-relaxed">
+                This server is not configured to check for updates, so it cannot tell whether a newer version exists.
+                Set <span className="font-mono text-zinc-500 dark:text-zinc-400">GITHUB_REPO</span> in the server environment to switch it on.
+              </p>
+            )}
+
+            {versionInfo?.available && versionInfo.checkFailed && (
+              <p className="text-[11px] text-amber-600 dark:text-amber-500 leading-relaxed">
+                GitHub could not be reached, so the latest version is unknown. Nothing is wrong with this app.
+              </p>
+            )}
+            {versionInfo?.available && versionInfo.stale && (
+              <p className="text-[11px] text-amber-600 dark:text-amber-500 leading-relaxed">
+                GitHub could not be reached just now — showing the last result instead.
+              </p>
+            )}
+            {versionInfo?.updateAvailable && installState === 'idle' && (
+              <p className="text-xs text-emerald-600 dark:text-emerald-500">
+                Version {versionInfo.latest.version} is available.
+                {!versionInfo.canInstall && ' It will install automatically at 04:00.'}
+              </p>
+            )}
+            {versionInfo?.available && !versionInfo.updateAvailable && !versionInfo.checkFailed && installState === 'idle' && !checkOp.error && (
+              <p className="text-[11px] text-zinc-400 dark:text-zinc-500">You are on the latest version.</p>
+            )}
+
+            {installState === 'started' && (
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                Update started. The server is restarting, so this may take a minute — leave the page open.
+              </p>
+            )}
+            {installState === 'installed' && (
+              <p className="text-xs text-emerald-600 dark:text-emerald-500">Update installed. Reload to use the new version.</p>
+            )}
+            {installState === 'timeout' && (
+              <p className="text-[11px] text-amber-600 dark:text-amber-500 leading-relaxed">
+                The new version has not come up yet. Give it another minute, then reload the page.
+              </p>
+            )}
+            {installError && <p className="text-xs text-red-500">{installError}</p>}
+            {checkOp.error && <p className="text-xs text-red-500">{checkOp.error}</p>}
+
+            {installState === 'installed' || installState === 'timeout' ? (
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="w-full text-xs font-medium bg-indigo-500 hover:bg-indigo-600 text-white py-2 rounded-lg transition"
+              >
+                Reload now
+              </button>
+            ) : versionInfo?.updateAvailable && versionInfo.canInstall ? (
+              <button
+                type="button"
+                disabled={installState === 'started'}
+                onClick={handleInstallUpdate}
+                className="w-full text-xs font-medium bg-indigo-500 hover:bg-indigo-600 text-white py-2 rounded-lg transition disabled:opacity-50"
+              >
+                {installState === 'started' ? 'Installing…' : 'Install now'}
+              </button>
+            ) : null}
+
+            <button
+              type="button"
+              disabled={checkOp.loading || installState === 'started' || (versionInfo && !versionInfo.available)}
+              onClick={() => checkOp.run()}
+              className="w-full text-xs font-medium border border-indigo-300 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950 py-2 rounded-lg transition disabled:opacity-50"
+            >
+              {checkOp.loading ? 'Checking…' : 'Check for updates'}
+            </button>
+
             <button
               type="button"
               onClick={() => { onClose(); onOpenWhatsNew?.(); }}
-              className="w-full text-xs font-medium border border-indigo-300 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950 py-2 rounded-lg transition"
+              className="w-full text-xs font-medium border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 py-2 rounded-lg transition"
             >
               See what's changed
             </button>

@@ -69,4 +69,38 @@ const backupLimiter = rateLimit({
   message: { error: 'Too many requests, please try again later.' },
 });
 
-module.exports = { authLimiter, sessionLimiter, todoLimiter, backupLimiter, rateLimitDisabled };
+// Every check that misses the 15-minute cache spends one of GitHub's 60
+// unauthenticated requests per hour, and that budget is shared by the whole
+// deployment's egress IP. A button people can press is exactly how it runs out.
+const versionCheckLimiter = rateLimit({
+  handler: limitHandler('version-check'),
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 20,
+  skip: skipWhenDisabled,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+});
+
+// An install restarts the containers serving the request, so a retry loop here
+// would keep the app permanently mid-restart. Five is generous for something a
+// human decides to do.
+const updateLimiter = rateLimit({
+  handler: limitHandler('update'),
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5,
+  skip: skipWhenDisabled,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+});
+
+module.exports = {
+  authLimiter,
+  sessionLimiter,
+  todoLimiter,
+  backupLimiter,
+  versionCheckLimiter,
+  updateLimiter,
+  rateLimitDisabled,
+};

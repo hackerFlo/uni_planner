@@ -69,6 +69,18 @@ export const CHANGELOG = [
         svgPath: 'M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1',
       },
       {
+        icon: 'green',
+        name: 'Holidays that stay put',
+        desc: 'Public holidays were fetched straight from an outside service every time, so they silently disappeared whenever it was unreachable or you were offline. The app now keeps its own copy, so once a year has been loaded it stays available — including holidays that fall on a weekend.',
+        svgPath: 'M8 7V3m8 4V3M3 11h18M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',
+      },
+      {
+        icon: 'amber',
+        name: 'Check for updates yourself',
+        desc: 'Settings now shows which version you are running and whether a newer one exists, with a button to install it right away instead of waiting for the nightly update.',
+        svgPath: 'M12 4v12m0 0l-4-4m4 4l4-4M4 20h16',
+      },
+      {
         icon: 'blue',
         name: 'Smoother on a phone',
         desc: 'Pull down to refresh in the installed app, and a slim progress bar across the top shows when something is still loading.',

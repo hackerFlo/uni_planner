@@ -43,9 +43,63 @@ function parseCorsOrigin(raw) {
   return url.origin;
 }
 
+// "owner/repo", used to read the latest GitHub Release. Deliberately has no
+// default: which repository this deployment tracks is configuration, not source
+// (AR-12). Unset simply turns the update check off, so a local run and the
+// build-from-source compose keep working.
+const GITHUB_REPO_PATTERN = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
+
+function parseGithubRepo(raw) {
+  if (raw === undefined || raw.trim() === '') return null;
+  const value = raw.trim();
+  if (!GITHUB_REPO_PATTERN.test(value)) {
+    throw new Error(`GITHUB_REPO must look like "owner/repo", got "${raw}"`);
+  }
+  return value;
+}
+
+// Watchtower's HTTP API, reached over the compose network -- nothing is
+// published to the host, so this is not an origin a browser can use.
+const WATCHTOWER_URL_DEFAULT = 'http://watchtower:8080';
+
+function parseWatchtowerUrl(raw) {
+  if (raw === undefined || raw.trim() === '') return WATCHTOWER_URL_DEFAULT;
+  const value = raw.trim().replace(/\/+$/, '');
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(`WATCHTOWER_URL must be an absolute URL like ${WATCHTOWER_URL_DEFAULT}, got "${raw}"`);
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error(`WATCHTOWER_URL must use http or https, got "${raw}"`);
+  }
+  if (url.pathname !== '/' || url.search || url.hash) {
+    throw new Error(`WATCHTOWER_URL must be a bare origin with no path, got "${raw}"`);
+  }
+  return url.origin;
+}
+
+// Opaque shared secret for that API. Unset means on-demand installs stay off
+// and the nightly Watchtower schedule remains the only update path. The value
+// is never echoed in an error message, not even when it is rejected (AR-6).
+const WATCHTOWER_TOKEN_MAX_LENGTH = 512;
+
+function parseWatchtowerToken(raw) {
+  if (raw === undefined || raw.trim() === '') return null;
+  const value = raw.trim();
+  if (value.length > WATCHTOWER_TOKEN_MAX_LENGTH) {
+    throw new Error(`WATCHTOWER_TOKEN must be at most ${WATCHTOWER_TOKEN_MAX_LENGTH} characters`);
+  }
+  return value;
+}
+
 const TRUST_PROXY_HOPS = parseTrustProxyHops(process.env.TRUST_PROXY_HOPS);
 const COOKIE_SECURE_OVERRIDE = parseCookieSecureOverride(process.env.COOKIE_SECURE);
 const CORS_ORIGIN = parseCorsOrigin(process.env.CORS_ORIGIN);
+const GITHUB_REPO = parseGithubRepo(process.env.GITHUB_REPO);
+const WATCHTOWER_URL = parseWatchtowerUrl(process.env.WATCHTOWER_URL);
+const WATCHTOWER_TOKEN = parseWatchtowerToken(process.env.WATCHTOWER_TOKEN);
 
 // Marking the cookie Secure on a plain-HTTP page makes the browser discard it
 // silently: login returns 200 and every request after it is a 401. So Secure
@@ -72,9 +126,16 @@ module.exports = {
   TRUST_PROXY_HOPS,
   COOKIE_SECURE_OVERRIDE,
   CORS_ORIGIN,
+  GITHUB_REPO,
+  WATCHTOWER_URL,
+  WATCHTOWER_URL_DEFAULT,
+  WATCHTOWER_TOKEN,
   parseTrustProxyHops,
   parseCookieSecureOverride,
   parseCorsOrigin,
+  parseGithubRepo,
+  parseWatchtowerUrl,
+  parseWatchtowerToken,
   sessionCookieOptions,
   clearSessionCookieOptions,
 };

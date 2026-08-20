@@ -1,7 +1,8 @@
-// Countries offered for the public-holiday lookup. date.nager.at covers far more;
-// this is the shortlist worth putting in a dropdown, and the subdivision lists
-// exist only where the holidays actually differ by region.
-export const HOLIDAY_COUNTRIES = [
+// Fallback only. The country dropdown is filled from /api/holidays/countries,
+// which serves all 204 countries the upstream knows about; this shortlist is
+// what it shows when that call fails, so a first-run user with no cached list
+// still gets a usable picker instead of an empty select.
+export const FALLBACK_HOLIDAY_COUNTRIES = [
   { code: 'DE', name: 'Germany' },
   { code: 'AT', name: 'Austria' },
   { code: 'CH', name: 'Switzerland' },
@@ -17,6 +18,9 @@ export const HOLIDAY_COUNTRIES = [
   { code: 'AU', name: 'Australia' },
 ];
 
+// Stays hardcoded: the upstream API exposes subdivision *codes* on each holiday
+// but never their names, and these three countries are the only ones where the
+// holidays actually differ by region enough to be worth picking.
 export const HOLIDAY_SUBDIVISIONS = {
   DE: [
     ['DE-BW', 'Baden-Württemberg'], ['DE-BY', 'Bavaria'], ['DE-BE', 'Berlin'],
