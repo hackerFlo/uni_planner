@@ -4,6 +4,22 @@ const jwt = require('jsonwebtoken');
 const db = require('../db');
 const { log } = require('../logger');
 const requireAuth = require('../middleware/auth');
+const { asyncHandler } = require('../middleware/asyncHandler');
+
+// notify_email is handed to nodemailer as a recipient, so it needs to be a real
+// address and nothing more. The control character check is the load-bearing
+// half: a CR or LF would end the To: header and let the rest of the value
+// become headers of the caller's choosing. Deliberately stricter than RFC 5322
+// -- quoted local parts and address literals are valid there and are not worth
+// accepting for a self-notification field.
+const NOTIFY_EMAIL_RE = /^[^\s@]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/;
+
+function isNotifiableEmail(value) {
+  if (typeof value !== 'string' || value.length > 254) return false;
+  // eslint-disable-next-line no-control-regex -- matching them is the point
+  if (/[\x00-\x1f\x7f]/.test(value)) return false; // CR, LF, NUL, tab -- header injection
+  return NOTIFY_EMAIL_RE.test(value);
+}
 const { validateIdentifier } = require('../middleware/validate');
 const { encryptEmail, decryptEmail } = require('../crypto');
 const { sendDailySummary } = require('../mailer');
@@ -18,7 +34,7 @@ const router = express.Router();
 
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
-router.post('/login', authLimiter, async (req, res) => {
+router.post('/login', authLimiter, asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
   // The identifier itself is never logged -- it is an email address (S-5). The
@@ -54,9 +70,9 @@ router.post('/login', authLimiter, async (req, res) => {
   res.cookie(SESSION_COOKIE_NAME, token, sessionCookieOptions(req));
   rlog.info('login ok', { userId: user.id, secure: sessionCookieOptions(req).secure });
   res.json({ user: { id: user.id, email: user.email, created_at: user.created_at } });
-});
+}));
 
-router.post('/register', authLimiter, async (req, res) => {
+router.post('/register', authLimiter, asyncHandler(async (req, res) => {
   if (process.env.ALLOW_REGISTER !== 'true') {
     return res.status(403).json({ error: 'Registration is disabled' });
   }
@@ -91,7 +107,7 @@ router.post('/register', authLimiter, async (req, res) => {
 
   res.cookie(SESSION_COOKIE_NAME, token, sessionCookieOptions(req));
   res.status(201).json({ user: { id: user.id, email: user.email, created_at: user.created_at } });
-});
+}));
 
 // Clearing the cookie alone left the JWT valid for its remaining 7 days, so a
 // copied token outlived the sign-out. Deleting the session row named by `sid`
@@ -123,7 +139,7 @@ router.get('/me', sessionLimiter, requireAuth, (req, res) => {
   res.json({ user });
 });
 
-router.patch('/me', authLimiter, requireAuth, async (req, res) => {
+router.patch('/me', authLimiter, requireAuth, asyncHandler(async (req, res) => {
   const { currentPassword, newEmail, newPassword } = req.body;
 
   if (!currentPassword || typeof currentPassword !== 'string') {
@@ -168,7 +184,7 @@ router.patch('/me', authLimiter, requireAuth, async (req, res) => {
   const token = jwt.sign({ id: req.user.id, email, tv: newTokenVersion, sid }, process.env.JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
   res.cookie(SESSION_COOKIE_NAME, token, sessionCookieOptions(req));
   res.json({ user: { id: req.user.id, email, created_at: user.created_at } });
-});
+}));
 
 router.get('/notification-settings', sessionLimiter, requireAuth, (req, res) => {
   const user = db.prepare(
@@ -214,8 +230,8 @@ router.patch('/notification-settings', sessionLimiter, requireAuth, (req, res) =
     if (notify_email === '') {
       updates.notify_email_enc = null;
     } else {
-      if (typeof notify_email !== 'string' || notify_email.length > 254) {
-        return res.status(400).json({ error: 'Email too long' });
+      if (!isNotifiableEmail(notify_email)) {
+        return res.status(400).json({ error: 'Enter a valid email address' });
       }
       try {
         updates.notify_email_enc = encryptEmail(notify_email);
@@ -238,7 +254,7 @@ router.patch('/notification-settings', sessionLimiter, requireAuth, (req, res) =
   res.json({ ok: true });
 });
 
-router.post('/test-email', authLimiter, requireAuth, async (req, res) => {
+router.post('/test-email', authLimiter, requireAuth, asyncHandler(async (req, res) => {
   const user = db.prepare('SELECT notify_email_enc, email, notify_tz FROM users WHERE id = ?').get(req.user.id);
   if (!user || !user.notify_email_enc) {
     return res.status(400).json({ error: 'No notification email saved. Save your settings first.' });
@@ -296,6 +312,6 @@ router.post('/test-email', authLimiter, requireAuth, async (req, res) => {
     (req.log || log).error('test email send failed', { userId: req.user.id, err });
     res.status(500).json({ error: 'Failed to send test email. Check server email configuration.' });
   }
-});
+}));
 
 module.exports = router;

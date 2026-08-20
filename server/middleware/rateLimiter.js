@@ -69,6 +69,19 @@ const backupLimiter = rateLimit({
   message: { error: 'Too many requests, please try again later.' },
 });
 
+// A CSV import parses and inserts up to 5000 rows from a body far larger than
+// any other endpoint accepts, so it gets backup's tight hourly budget rather
+// than the generous todo one the rest of /api/quotes is mounted under.
+const quoteImportLimiter = rateLimit({
+  handler: limitHandler('quote-import'),
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10,
+  skip: skipWhenDisabled,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+});
+
 // Every check that misses the 15-minute cache spends one of GitHub's 60
 // unauthenticated requests per hour, and that budget is shared by the whole
 // deployment's egress IP. A button people can press is exactly how it runs out.
@@ -100,6 +113,7 @@ module.exports = {
   sessionLimiter,
   todoLimiter,
   backupLimiter,
+  quoteImportLimiter,
   versionCheckLimiter,
   updateLimiter,
   rateLimitDisabled,

@@ -18,9 +18,10 @@ export default function TodoList({ list, todos, loading, onAdd, onEdit, onComple
         <Tooltip text="Add item">
           <button
             onClick={onAdd}
+            aria-label={`Add item to ${list.name}`}
             className="text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200 transition p-0.5 rounded"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg aria-hidden="true" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
             </svg>
           </button>
@@ -40,12 +41,14 @@ export default function TodoList({ list, todos, loading, onAdd, onEdit, onComple
               <div className="text-xs text-zinc-300 dark:text-zinc-600 py-4 text-center">Loading…</div>
             )}
             {!loading && todos.length === 0 && (
-              <div
+              <button
+                type="button"
                 onClick={onAdd}
-                className="text-xs text-zinc-300 dark:text-zinc-600 py-6 text-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-lg cursor-pointer hover:border-zinc-300 dark:hover:border-zinc-600 hover:text-zinc-400 transition"
+                aria-label={`${list.name} is empty — add an item`}
+                className="w-full text-xs text-zinc-300 dark:text-zinc-600 py-6 text-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-lg cursor-pointer hover:border-zinc-300 dark:hover:border-zinc-600 hover:text-zinc-400 transition"
               >
                 No items — click + to add
-              </div>
+              </button>
             )}
             {todos.map((todo, index) => (
               <TodoCard

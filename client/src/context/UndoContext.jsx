@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 const UndoContext = createContext(null);
 
@@ -9,8 +9,15 @@ export function UndoProvider({ children }) {
   const undoFnRef = useRef(null);
   const undoTimerRef = useRef(null);
 
+  // The pending action lives in a ref, so both callbacks can stay identity-stable
+  // for the life of the provider and neither can close over a stale one.
   const recordUndo = useCallback((revertFn) => {
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    if (typeof revertFn !== 'function') {
+      undoFnRef.current = null;
+      setCanUndo(false);
+      return;
+    }
     undoFnRef.current = revertFn;
     setCanUndo(true);
     undoTimerRef.current = setTimeout(() => {
@@ -28,8 +35,15 @@ export function UndoProvider({ children }) {
     await revert();
   }, []);
 
+  useEffect(() => () => clearTimeout(undoTimerRef.current), []);
+
+  // Memoised on the only value that can actually change: an object literal here
+  // re-rendered every consumer twice per action -- once on the mutation, again
+  // when the expiry timer fired.
+  const value = useMemo(() => ({ canUndo, undo, recordUndo }), [canUndo, undo, recordUndo]);
+
   return (
-    <UndoContext.Provider value={{ canUndo, undo, recordUndo }}>
+    <UndoContext.Provider value={value}>
       {children}
     </UndoContext.Provider>
   );

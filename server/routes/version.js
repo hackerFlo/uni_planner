@@ -1,5 +1,6 @@
 const express = require('express');
 const requireAuth = require('../middleware/auth');
+const { asyncHandler } = require('../middleware/asyncHandler');
 const { log } = require('../logger');
 const { VERSION, COMMIT } = require('../version');
 const { GITHUB_REPO, WATCHTOWER_URL, WATCHTOWER_TOKEN } = require('../config');
@@ -88,7 +89,7 @@ async function loadLatestRelease(rlog) {
   }
 }
 
-router.get('/', versionCheckLimiter, requireAuth, async (req, res) => {
+router.get('/', versionCheckLimiter, requireAuth, asyncHandler(async (req, res) => {
   const running = { version: VERSION, commit: COMMIT };
   const base = { running, canInstall: Boolean(WATCHTOWER_TOKEN), updateAvailable: false };
   if (!GITHUB_REPO) {
@@ -104,7 +105,7 @@ router.get('/', versionCheckLimiter, requireAuth, async (req, res) => {
     stale,
     checkFailed: latest === null,
   });
-});
+}));
 
 // No request parameters at all, deliberately: it can only trigger the update
 // Watchtower is already configured to perform, which is what makes exposing it
@@ -123,7 +124,7 @@ async function postWatchtowerUpdate() {
 // live three-second timer would keep the event loop busy for no reason.
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms).unref());
 
-router.post('/update', updateLimiter, requireAuth, async (req, res) => {
+router.post('/update', updateLimiter, requireAuth, asyncHandler(async (req, res) => {
   const rlog = req.log || log;
   if (!WATCHTOWER_TOKEN) {
     rlog.warn('update refused', { reason: 'not-configured' });
@@ -145,7 +146,7 @@ router.post('/update', updateLimiter, requireAuth, async (req, res) => {
   }
   rlog.info('update triggered', { userId: req.user.id, outcome });
   res.status(202).json({ status: 'started' });
-});
+}));
 
 module.exports = router;
 

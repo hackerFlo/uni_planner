@@ -120,3 +120,46 @@ test.describe('resolveTheme', () => {
     assert.equal(resolveTheme('system', false), 'light');
   });
 });
+
+test.describe('quote preferences', () => {
+  test('defaults to showing quotes', () => {
+    assert.equal(normalizePreferences({}).showQuotes, true);
+  });
+
+  test('keeps an explicit false', () => {
+    assert.equal(normalizePreferences({ showQuotes: false }).showQuotes, false);
+  });
+
+  test('falls back when showQuotes is not a boolean', () => {
+    assert.equal(normalizePreferences({ showQuotes: 'no' }).showQuotes, true);
+  });
+
+  test('defaults to not snoozed', () => {
+    assert.equal(normalizePreferences({}).quotesSnoozedOn, null);
+  });
+
+  test('keeps a valid ISO date', () => {
+    assert.equal(normalizePreferences({ quotesSnoozedOn: '2026-08-20' }).quotesSnoozedOn, '2026-08-20');
+  });
+
+  // A junk value must not be able to hide the bar for ever.
+  for (const bad of ['tomorrow', '20-08-2026', 42, true, {}, '2026-8-2']) {
+    test(`rejects ${JSON.stringify(bad)} as a snooze date`, () => {
+      assert.equal(normalizePreferences({ quotesSnoozedOn: bad }).quotesSnoozedOn, null);
+    });
+  }
+
+  test('survives a save/load round trip', () => {
+    const store = new Map();
+    const storage = {
+      getItem: (k) => store.get(k) ?? null,
+      setItem: (k, v) => store.set(k, v),
+    };
+    savePreferences({ ...DEFAULT_PREFERENCES, showQuotes: false, quotesSnoozedOn: '2026-08-20' }, storage);
+    const back = loadPreferences(storage);
+    assert.deepEqual(
+      { q: back.showQuotes, s: back.quotesSnoozedOn },
+      { q: false, s: '2026-08-20' },
+    );
+  });
+});

@@ -7,7 +7,7 @@ import { toIso } from '../../utils/dates';
 
 const WEEK_LABEL = { '-1': 'Last Week', '0': 'This Week', '1': 'Next Week' };
 
-export default function WeeklyPlanner({ todos, weekOffset, weekDates, onWeekOffsetChange, completedByDate, revealedDays, onToggleCompleted, isDragging, notes, onNoteChange, onUnassign, onComplete, onEdit, onDelete, onReorder, onAdd }) {
+export default function WeeklyPlanner({ todos, loading = false, weekOffset, weekDates, onWeekOffsetChange, completedByDate, revealedDays, onToggleCompleted, isDragging, notes, onNoteChange, onUnassign, onComplete, onEdit, onDelete, onAdd }) {
   const holidays = useHolidays();
   const { lists } = useLists();
   const { upcomingExams } = useExams();
@@ -103,12 +103,13 @@ export default function WeeklyPlanner({ todos, weekOffset, weekDates, onWeekOffs
         className="flex-1 min-h-0 overflow-x-auto overflow-y-auto [&::-webkit-scrollbar]:hidden snap-x snap-mandatory md:snap-none"
         style={{ scrollbarWidth: 'none' }}
       >
-        <div className="flex gap-3 min-h-full">
+        <div className="flex gap-3 min-h-full min-w-full">
           {weekDates.map(date => (
             <DayColumn
               key={date}
               date={date}
               todos={todosByDate[date]}
+              loading={loading}
               completedTodos={completedByDate[date] ?? []}
               showCompleted={revealedDays.has(date)}
               onToggleCompleted={onToggleCompleted}
@@ -121,7 +122,6 @@ export default function WeeklyPlanner({ todos, weekOffset, weekDates, onWeekOffs
               onComplete={onComplete}
               onEdit={onEdit}
               onDelete={onDelete}
-              onReorder={onReorder}
               onAdd={onAdd}
             />
           ))}

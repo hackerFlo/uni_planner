@@ -55,7 +55,7 @@ export function ListsProvider({ children }) {
   }
 
   return (
-    <ListsContext.Provider value={{ lists, fetchLists, getList, createList, updateList, reorderLists, deleteList }}>
+    <ListsContext.Provider value={{ lists, getList, createList, updateList, reorderLists, deleteList }}>
       {children}
     </ListsContext.Provider>
   );

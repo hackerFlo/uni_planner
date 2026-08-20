@@ -10,16 +10,23 @@ import useEmojiInput from '../../hooks/useEmojiInput';
 
 function ColorDot({ color, size = 'md' }) {
   const cls = LIST_PALETTE[color]?.dot ?? LIST_PALETTE.slate.dot;
-  return <span className={`rounded-full flex-shrink-0 ${cls} ${size === 'sm' ? 'w-2.5 h-2.5' : 'w-3.5 h-3.5'}`} />;
+  return <span aria-hidden="true" className={`rounded-full flex-shrink-0 ${cls} ${size === 'sm' ? 'w-2.5 h-2.5' : 'w-3.5 h-3.5'}`} />;
 }
 
 function ColorPicker({ value, onChange, onClose }) {
   return (
-    <div className="absolute left-0 top-full mt-1 z-50 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg p-2 flex flex-wrap gap-1.5 w-[116px]">
+    <div
+      role="listbox"
+      aria-label="List color"
+      className="absolute left-0 top-full mt-1 z-50 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg p-2 flex flex-wrap gap-1.5 w-[116px]"
+    >
       {PALETTE_KEYS.map(key => (
         <button
           key={key}
           type="button"
+          role="option"
+          aria-selected={value === key}
+          aria-label={`${key} color`}
           onClick={() => { onChange(key); onClose(); }}
           className={`w-7 h-7 rounded-full transition-transform hover:scale-110 ${LIST_PALETTE[key].dot} ${value === key ? 'ring-2 ring-offset-1 ring-zinc-400' : ''}`}
         />
@@ -175,6 +182,7 @@ function ListRow({ list, index, canDelete, onDelete }) {
             <button
               type="button"
               onClick={onDelete}
+              aria-label={`Delete list "${list.name}"`}
               className="flex-shrink-0 text-zinc-300 dark:text-zinc-600 hover:text-red-500 transition p-0.5 rounded"
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

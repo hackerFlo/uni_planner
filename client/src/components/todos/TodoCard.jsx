@@ -26,7 +26,7 @@ function dayLabel(iso) {
 
 const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAssigned, checked, onComplete, onEdit, onDelete }) {
   const anyModalOpen = useAnyModalOpen();
-  const hideOnHover = anyModalOpen ? '' : 'group-hover:invisible';
+  const hideOnHover = anyModalOpen ? '' : 'group-hover:invisible group-focus-within:invisible';
   const { getList } = useLists();
   const list = getList(todo.list_id);
   const palette = LIST_PALETTE[list?.color] ?? LIST_PALETTE.slate;
@@ -132,6 +132,7 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
           <button
             onPointerDown={e => e.stopPropagation()}
             onClick={e => { e.stopPropagation(); onComplete(e); }}
+            aria-label={`Mark ${todo.title} complete`}
             className={`mt-0.5 flex-shrink-0 w-4 h-4 rounded border transition-all duration-150 flex items-center justify-center hover:scale-110 active:scale-95 ${
               checked
                 ? 'bg-indigo-500 border-indigo-500'
@@ -139,6 +140,7 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
             }`}
           >
             <svg
+              aria-hidden="true"
               className="w-2.5 h-2.5"
               fill="none"
               viewBox="0 0 24 24"
@@ -161,7 +163,8 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
               <div className={`flex items-center gap-1.5 flex-shrink-0 ${hideOnHover}`}>
                 {(todo.recurrence_interval_days != null || todo.recurrence_pattern != null) && (
                   <Tooltip text={recurrenceLabel(todo.recurrence_interval_days, todo.recurrence_pattern)}>
-                    <svg className="w-3 h-3 text-zinc-400 dark:text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                    {/* The tooltip is pointer-only, so the icon carries its own name. */}
+                    <svg role="img" aria-label={recurrenceLabel(todo.recurrence_interval_days, todo.recurrence_pattern)} className="w-3 h-3 text-zinc-400 dark:text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                       <path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
                     </svg>
                   </Tooltip>
@@ -183,17 +186,26 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
             )}
           </div>
 
+          {/* Faded rather than `hidden`: display:none takes the buttons out of the
+              tab order entirely, so no amount of labelling makes them reachable by
+              keyboard. Opacity keeps them focusable and group-focus-within reveals
+              them. The bar is absolutely positioned, so nothing shifts. */}
           <div
-              className={`absolute right-0 top-0 items-center gap-1 pl-4 ${anyModalOpen ? 'hidden' : 'hidden group-hover:flex'}`}
+              className={`absolute right-0 top-0 items-center gap-1 pl-4 transition-opacity ${
+                anyModalOpen
+                  ? 'hidden'
+                  : 'flex opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto'
+              }`}
               style={{ background: `linear-gradient(to right, transparent, ${isAssigned ? 'var(--card-bg-assigned, #fafafa)' : 'var(--card-bg, #ffffff)'} 40%)` }}
               onPointerDown={e => e.stopPropagation()}
             >
               <Tooltip text="Edit">
                 <button
                   onClick={e => { e.stopPropagation(); onEdit(todo); }}
+                  aria-label={`Edit ${todo.title}`}
                   className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition"
                 >
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <svg aria-hidden="true" className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                   </svg>
                 </button>
@@ -209,8 +221,12 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
                   }}
                   tooltipText="Delete"
                 >
-                  <button className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950 text-zinc-400 dark:text-zinc-500 hover:text-red-500 transition">
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <button
+                    aria-label={`Delete ${todo.title}`}
+                    aria-haspopup="true"
+                    className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950 text-zinc-400 dark:text-zinc-500 hover:text-red-500 transition"
+                  >
+                    <svg aria-hidden="true" className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
                   </button>
@@ -219,9 +235,10 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
                 <Tooltip text="Delete">
                   <button
                     onClick={e => { e.stopPropagation(); onDelete(todo.id); }}
+                    aria-label={`Delete ${todo.title}`}
                     className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950 text-zinc-400 dark:text-zinc-500 hover:text-red-500 transition"
                   >
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <svg aria-hidden="true" className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
                   </button>

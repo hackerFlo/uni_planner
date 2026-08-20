@@ -65,10 +65,29 @@ function sanitizeDescription(str) {
   return html;
 }
 
+const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+function daysInMonth(year, month) {
+  const isLeapYear = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  return month === 2 && isLeapYear ? 29 : DAYS_IN_MONTH[month - 1];
+}
+
+// The ISO shape alone is not a date: it admits 2026-13-45, 0000-00-00 and
+// 30 February. Those store happily, sort into every range query, and only turn
+// up later as a row nobody can explain -- so the calendar is checked here.
+// Day notes, exam dates and restored backups all validate through this function.
 function validateDayAssigned(val) {
   if (val === null || val === undefined || val === '') return null;
   if (typeof val !== 'string') return false;
-  return /^\d{4}-\d{2}-\d{2}$/.test(val) ? val : false;
+  const match = ISO_DATE_RE.exec(val);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (year < 1 || month < 1 || month > 12) return false;
+  if (day < 1 || day > daysInMonth(year, month)) return false;
+  return val;
 }
 
 function validateRecurrenceInterval(v) {

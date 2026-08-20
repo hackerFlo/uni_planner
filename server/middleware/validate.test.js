@@ -133,6 +133,69 @@ test.describe('validateDayAssigned', () => {
   test('rejects a date that is not in ISO form', () => {
     assert.equal(validateDayAssigned('19/08/2026'), false);
   });
+
+  // The shape /^\d{4}-\d{2}-\d{2}$/ is not a date: it admits month 13, day 45 and
+  // 30 February, all of which then sort into range queries and render as garbage.
+  const VALID_DATES = [
+    ['first day of the year', '2026-01-01'],
+    ['last day of the year', '2026-12-31'],
+    ['last day of a 30-day month', '2026-04-30'],
+    ['last day of a 31-day month', '2026-07-31'],
+    ['last day of February in a common year', '2026-02-28'],
+    ['29 February in a leap year', '2024-02-29'],
+    ['29 February in a 400-year leap year', '2000-02-29'],
+    ['the far past', '1970-01-01'],
+    ['the far future', '9999-12-31'],
+  ];
+
+  for (const [why, value] of VALID_DATES) {
+    test(`accepts ${why}: ${value}`, () => {
+      assert.equal(validateDayAssigned(value), value);
+    });
+  }
+
+  const INVALID_DATES = [
+    ['month zero', '2026-00-15'],
+    ['month thirteen', '2026-13-01'],
+    ['month past thirteen', '2026-99-01'],
+    ['day zero', '2026-01-00'],
+    ['day thirty-two', '2026-01-32'],
+    ['a 31st in a 30-day month', '2026-04-31'],
+    ['30 February', '2026-02-30'],
+    ['29 February in a common year', '2026-02-29'],
+    ['29 February in a century that is not a leap year', '1900-02-29'],
+    ['month and day both zero', '0000-00-00'],
+    ['year zero', '0000-01-01'],
+    ['every field out of range', '2026-13-45'],
+    ['a two-digit year', '26-08-19'],
+    ['a missing leading zero', '2026-8-19'],
+    ['a trailing time component', '2026-08-19T00:00:00Z'],
+    ['leading whitespace', ' 2026-08-19'],
+    ['a negative day', '2026-08--1'],
+  ];
+
+  for (const [why, value] of INVALID_DATES) {
+    test(`rejects ${why}: ${JSON.stringify(value)}`, () => {
+      assert.equal(validateDayAssigned(value), false);
+    });
+  }
+
+  test('rejects a non-string day', () => {
+    assert.equal(validateDayAssigned(20260819), false);
+  });
+
+  test('agrees with the calendar on every day of a leap year and the year after', () => {
+    for (const year of [2024, 2025]) {
+      for (let month = 1; month <= 13; month++) {
+        for (let day = 1; day <= 32; day++) {
+          const iso = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          const probe = new Date(`${iso}T00:00:00Z`);
+          const real = !Number.isNaN(probe.getTime()) && probe.toISOString().slice(0, 10) === iso;
+          assert.equal(validateDayAssigned(iso), real ? iso : false, iso);
+        }
+      }
+    }
+  });
 });
 
 test.describe('validateRecurrenceInterval', () => {

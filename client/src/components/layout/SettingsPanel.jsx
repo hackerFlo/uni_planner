@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { useRegisterModal } from '../../context/ModalContext';
+import useAsync from '../../hooks/useAsync';
 import { useExams } from '../../context/ExamsContext';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
@@ -9,6 +10,7 @@ import { userMessage } from '../../api/errors';
 import { TimePicker } from '../ui/TimePicker';
 import ListsSection from '../settings/ListsSection';
 import AppearanceSection from '../settings/AppearanceSection';
+import QuotesSection from '../settings/QuotesSection';
 
 // Mirrors the server's own 15-minute cache, so reopening this panel does not
 // spend a rate-limit slot re-asking a question we already have the answer to.
@@ -46,28 +48,6 @@ function installReallyFailed(err) {
   return (err.status >= 400 && err.status < 500) || err.status === 503;
 }
 
-function useAsync(fn) {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-
-  async function run(...args) {
-    setError('');
-    setSuccess('');
-    setLoading(true);
-    try {
-      const msg = await fn(...args);
-      if (msg) setSuccess(msg);
-    } catch (err) {
-      setError(err.message || 'Something went wrong');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return { loading, error, success, run };
-}
-
 export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
   useRegisterModal();
   const { user, updateAccount, logout } = useAuth();
@@ -75,18 +55,42 @@ export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
   const navigate = useNavigate();
   const { fetchExams } = useExams();
 
+  const panelRef = useRef(null);
+  // Navbar hands us a fresh arrow on every render, so this effect must not depend
+  // on it -- it would re-run constantly and pull focus out of whatever field the
+  // user is typing in.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    const returnFocusTo = document.activeElement;
+    panelRef.current?.focus({ preventScroll: true });
+    function onKey(e) {
+      if (e.key !== 'Escape') return;
+      // A nested dialog (deleting a list) mounts its own [data-modal-root] after
+      // ours, and Escape belongs to whichever one is on top.
+      const roots = document.querySelectorAll('[data-modal-root]');
+      if (roots[roots.length - 1] !== panelRef.current?.closest('[data-modal-root]')) return;
+      onCloseRef.current();
+    }
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      if (returnFocusTo instanceof HTMLElement) returnFocusTo.focus({ preventScroll: true });
+    };
+  }, []);
+
   async function handleLogout() {
     await logout();
     navigate('/login');
   }
 
-  const [emailForm, setEmailForm] = useState({ newEmail: '', currentPassword: '' });
+  // NOTE: the email-change form was never rendered -- `emailForm`/`emailOp` sat
+  // here fully written with nothing calling them, so changing an email has
+  // always been impossible from the UI even though PATCH /api/auth/me supports
+  // it and is tested. Removed rather than left as unreachable code; re-adding
+  // the form is small, but AR-8 wants a verification flow with it.
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirm: '' });
-  const emailOp = useAsync(async () => {
-    await updateAccount({ currentPassword: emailForm.currentPassword, newEmail: emailForm.newEmail });
-    setEmailForm({ newEmail: '', currentPassword: '' });
-    return 'Username / email updated successfully';
-  });
   const passwordOp = useAsync(async () => {
     if (passwordForm.newPassword !== passwordForm.confirm) throw new Error('Passwords do not match');
     await updateAccount({ currentPassword: passwordForm.currentPassword, newPassword: passwordForm.newPassword });
@@ -240,11 +244,18 @@ export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div className="absolute inset-0 bg-black/10 backdrop-blur-[1px]" onClick={onClose} />
-      <aside className="relative z-10 w-80 bg-white dark:bg-zinc-900 border-l border-zinc-100 dark:border-zinc-800 flex flex-col h-full shadow-xl">
+      <aside
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-panel-title"
+        tabIndex={-1}
+        className="relative z-10 w-80 max-w-[calc(100vw-2.5rem)] bg-white dark:bg-zinc-900 border-l border-zinc-100 dark:border-zinc-800 flex flex-col h-full shadow-xl outline-none"
+      >
         <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-100 dark:border-zinc-800">
-          <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Account Settings</h2>
-          <button onClick={onClose} className="text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition p-1 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <h2 id="settings-panel-title" className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Account Settings</h2>
+          <button onClick={onClose} aria-label="Close account settings" className="text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition p-1 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800">
+            <svg aria-hidden="true" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
@@ -315,6 +326,10 @@ export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
           <div className="border-t border-zinc-100 dark:border-zinc-800" />
 
           <AppearanceSection />
+
+          <div className="border-t border-zinc-100 dark:border-zinc-800" />
+
+          <QuotesSection />
 
           <div className="border-t border-zinc-100 dark:border-zinc-800" />
 

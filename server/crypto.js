@@ -18,9 +18,17 @@ function encryptEmail(plaintext) {
 function decryptEmail(stored) {
   const key = getKey();
   const [ivHex, tagHex, encHex] = stored.split(':');
+  if (!ivHex || !tagHex || !encHex) throw new Error('stored ciphertext is malformed');
   const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(ivHex, 'hex'));
   decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
-  return decipher.update(Buffer.from(encHex, 'hex')) + decipher.final('utf8');
+  // Concat the buffers and decode once, rather than `update(buf) + final('utf8')`.
+  // GCM is CTR-based, so today a single update() returns the whole plaintext and
+  // final() returns '' -- the old form was correct, and a multi-byte character
+  // could not straddle the boundary (verified against Latin-1, CJK and emoji
+  // addresses). It only *looked* wrong because it relied on Buffer-to-string
+  // coercion. Decoding explicitly says what it means and stays correct if the
+  // input is ever chunked.
+  return Buffer.concat([decipher.update(Buffer.from(encHex, 'hex')), decipher.final()]).toString('utf8');
 }
 
 module.exports = { encryptEmail, decryptEmail };

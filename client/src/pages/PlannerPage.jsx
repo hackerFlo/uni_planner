@@ -12,7 +12,6 @@ import TodoList from '../components/todos/TodoList';
 import TodoForm from '../components/todos/TodoForm';
 import ArchiveDrawer from '../components/todos/ArchiveDrawer';
 import WeeklyPlanner from '../components/planner/WeeklyPlanner';
-import StrandedTasks from '../components/todos/StrandedTasks';
 import WhatsNewModal from '../components/layout/WhatsNewModal';
 import Tooltip from '../components/ui/Tooltip';
 import { getWeekDates, parseDateLocal } from '../utils/dates';
@@ -21,11 +20,13 @@ import { useCompletedTodos } from '../hooks/useCompletedTodos';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 import { buildSidebar } from '../utils/sidebar';
+import { planCrossDayDrop, planSameDayReorder } from '../utils/plannerMutations';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const SIDEBAR_MIN_PX = 200;
 const SIDEBAR_MAX_PX = 520;
-// Matches the day column width (`w-[180px]` in DayColumn). On mobile the Tasks pane is
+// Matches the day column's mobile width (`w-[180px]` in DayColumn; on desktop the
+// columns flex to share the row). On mobile the Tasks pane is
 // full-width, so a dragged card's centre of gravity can't track the finger — shrink it to
 // the column width before @hello-pangea/dnd measures it (see onBeforeCapture below).
 const COLUMN_WIDTH_PX = 180;
@@ -42,13 +43,6 @@ function loadRevealedDays() {
   }
 }
 
-function localArrayMove(arr, from, to) {
-  const result = [...arr];
-  const [removed] = result.splice(from, 1);
-  result.splice(to, 0, removed);
-  return result;
-}
-
 function getRealId(draggableId) {
   if (typeof draggableId === 'string' && draggableId.startsWith('sidebar-')) {
     return Number(draggableId.slice('sidebar-'.length));
@@ -57,7 +51,7 @@ function getRealId(draggableId) {
 }
 
 export default function PlannerPage() {
-  const { todos, loading, fetchTodos, createTodo, updateTodo, deleteTodo, assignDay, reorderDay } = useTodos();
+  const { todos, loading, initialLoading, fetchTodos, createTodo, updateTodo, deleteTodo, assignDay, reorderDay, moveTodoToDay } = useTodos();
   const { canUndo, undo } = useUndo();
   const { notes, setNote } = useDayNotes();
   const { lists } = useLists();
@@ -176,29 +170,19 @@ export default function PlannerPage() {
     const dstId = destination.droppableId;
 
     if (srcId === dstId && source.index === destination.index) return;
-
-    const isDstColumn = DATE_RE.test(dstId);
-    if (!isDstColumn) return;
-
-    const activeT = todoIdMap.get(realId);
+    if (!DATE_RE.test(dstId)) return;
 
     if (DATE_RE.test(srcId) && srcId === dstId) {
-      const dayTodos = todos
-        .filter(t => t.day_assigned === srcId)
-        .sort((a, b) => (a.planner_order ?? Infinity) - (b.planner_order ?? Infinity));
-      reorderDay(localArrayMove(dayTodos, source.index, destination.index));
+      const next = planSameDayReorder(todos, { day: srcId, from: source.index, to: destination.index });
+      if (next) reorderDay(next);
       return;
     }
 
-    const dstTodos = todos
-      .filter(t => t.day_assigned === dstId && t.id !== realId)
-      .sort((a, b) => (a.planner_order ?? Infinity) - (b.planner_order ?? Infinity));
-    const newOrder = [
-      ...dstTodos.slice(0, destination.index),
-      activeT,
-      ...dstTodos.slice(destination.index),
-    ];
-    assignDay(realId, dstId).then(() => reorderDay(newOrder));
+    // One call, not assignDay().then(reorderDay): the two writes have to land in
+    // the undo store as a single entry or Ctrl+Z restores the order and leaves
+    // the card on the day it was dragged to.
+    const next = planCrossDayDrop(todos, { todoId: realId, toDay: dstId, index: destination.index });
+    if (next) moveTodoToDay(realId, dstId, next);
   }
 
   const todoIdMap = useMemo(() => new Map(todos.map(t => [t.id, t])), [todos]);
@@ -215,17 +199,13 @@ export default function PlannerPage() {
   const sidebarByList = useMemo(() => {
     const result = {};
     for (const list of lists) {
-      result[list.id] = buildSidebar(todos.filter(t => t.list_id === list.id), weekDates);
+      result[list.id] = buildSidebar(todos.filter(t => t.list_id === list.id));
     }
     return result;
-  }, [todos, lists, weekDates]);
-
-  // Assigned to a week the arrows cannot reach: shown in neither the planner nor
-  // the lists above, so it gets its own escape hatch rather than vanishing.
-  const strandedTodos = useMemo(
-    () => buildSidebar(todos, weekDates, { stranded: true }),
-    [todos, weekDates]
-  );
+    // Not keyed on weekDates any more: the sidebar shows every assignment
+    // regardless of which week is on screen, so paging the planner no longer
+    // changes what belongs here.
+  }, [todos, lists]);
 
   const { byDate: completedByDate, refresh: refreshCompleted } =
     useCompletedTodos(weekDates, revealedDays.size > 0);
@@ -269,6 +249,7 @@ export default function PlannerPage() {
           <main className="h-1/2 md:h-auto md:flex-1 flex-shrink-0 overflow-hidden order-1 md:order-2">
             <WeeklyPlanner
               todos={plannerTodos}
+              loading={initialLoading}
               weekOffset={weekOffset}
               weekDates={weekDates}
               onWeekOffsetChange={setWeekOffset}
@@ -282,7 +263,6 @@ export default function PlannerPage() {
               onComplete={completeTodo}
               onEdit={todo => setFormState({ mode: 'edit', todo })}
               onDelete={deleteTodo}
-              onReorder={reorderDay}
               onAdd={date => setFormState({ mode: 'create', defaults: { day_assigned: date } })}
             />
           </main>
@@ -320,12 +300,6 @@ export default function PlannerPage() {
                     onDelete={id => deleteTodo(id)}
                   />
                 ))}
-
-                <StrandedTasks
-                  todos={strandedTodos}
-                  onUnassign={id => assignDay(id, null)}
-                  onEdit={todo => setFormState({ mode: 'edit', todo })}
-                />
               </div>
             </aside>
 
@@ -340,6 +314,7 @@ export default function PlannerPage() {
                   <button
                     onMouseDown={e => e.stopPropagation()}
                     onClick={() => setSidebarCollapsed(true)}
+                    aria-label="Collapse the tasks sidebar"
                     className="opacity-0 group-hover/resize:opacity-100 transition-opacity absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-5 h-12 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-full shadow-md flex items-center justify-center text-zinc-400 dark:text-zinc-500 hover:text-indigo-500 hover:border-indigo-200 cursor-pointer"
                   >
                     <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -355,6 +330,7 @@ export default function PlannerPage() {
               <Tooltip text="Expand sidebar">
                 <button
                   onClick={() => setSidebarCollapsed(false)}
+                  aria-label="Expand the tasks sidebar"
                   className="absolute top-1/2 -translate-y-1/2 left-full w-5 h-10 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-r-lg shadow-sm flex items-center justify-center text-zinc-400 dark:text-zinc-500 hover:text-indigo-500 hover:border-indigo-200 transition-colors z-10"
                 >
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>

@@ -10,6 +10,9 @@ process.env.DATABASE_PATH = path.join(
 );
 process.env.JWT_SECRET = 'test-secret-long-enough-for-the-check';
 process.env.LOG_LEVEL = 'error';
+// crypto.js reads this at call time; the value only has to be 64 hex chars.
+process.env.NOTIFICATION_ENCRYPT_KEY = 'a'.repeat(64);
+process.env.DISABLE_RATE_LIMIT = 'true';
 // The limiters live in index.js, not in these routers, so this app never mounts one.
 delete process.env.NODE_ENV;
 
@@ -18,6 +21,7 @@ const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken');
 const db = require('../db');
 const { createSession } = require('../sessions');
+const { encryptEmail, decryptEmail } = require('../crypto');
 const backupRoutes = require('./backup');
 
 function makeUser(email) {
@@ -28,6 +32,16 @@ function makeUser(email) {
 
 const alice = makeUser('alice@example.com');
 const bob = makeUser('bob@example.com');
+const carol = makeUser('carol@example.com');
+
+// Every colour client/src/constants/listPalette.js offers. backup.js keeps its
+// own allowlist, and the day it fell behind, exported lists came back grey.
+const CLIENT_PALETTE = ['indigo', 'emerald', 'teal', 'amber', 'rose', 'sky', 'violet', 'pink', 'slate'];
+
+const NOTIFY = { time: '07:30', email: 'alerts@example.com', tz: 'Europe/Berlin' };
+db.prepare(
+  'UPDATE users SET notify_enabled = 1, notify_time = ?, notify_email_enc = ?, notify_tz = ? WHERE id = ?'
+).run(NOTIFY.time, encryptEmail(NOTIFY.email), NOTIFY.tz, alice.id);
 
 const TEMPLATE_CREATED_AT = '2026-08-01T10:00:00.000Z';
 const listId = db.prepare('INSERT INTO lists (user_id, name, color, sort_order) VALUES (?, ?, ?, ?)')
@@ -81,6 +95,22 @@ test.describe('backup export', () => {
     );
   });
 
+  // AR-15: settings are user data, and a restore that drops them stops the
+  // daily mail without a single error to show for it.
+  test('carries the notification settings, which earlier versions left out', () => {
+    assert.deepEqual(backup.settings, {
+      notify_enabled: true,
+      notify_time: NOTIFY.time,
+      notify_email: NOTIFY.email,
+      notify_tz: NOTIFY.tz,
+    });
+  });
+
+  test('never hands one account another\'s notification address (AR-2)', async () => {
+    const { settings } = await exportAs(bob);
+    assert.equal(settings.notify_email, '');
+  });
+
   test('exports only the requesting user (AR-2)', async () => {
     const { lists, todos, exams, day_notes: dayNotes } = await exportAs(bob);
     assert.deepEqual({ lists, todos, exams, dayNotes }, { lists: [], todos: [], exams: [], dayNotes: [] });
@@ -132,5 +162,143 @@ test.describe('backup restore', () => {
   test('leaves the exporting account untouched', () => {
     const count = db.prepare('SELECT COUNT(*) AS n FROM todos WHERE user_id = ?').get(alice.id).n;
     assert.equal(count, 2);
+  });
+
+  test('brings the notification schedule into the new account', () => {
+    const row = db.prepare(
+      'SELECT notify_enabled, notify_time, notify_tz FROM users WHERE id = ?'
+    ).get(bob.id);
+    assert.deepEqual(row, { notify_enabled: 1, notify_time: NOTIFY.time, notify_tz: NOTIFY.tz });
+  });
+
+  // The ciphertext is bound to NOTIFICATION_ENCRYPT_KEY, so copying it verbatim
+  // would restore an address this machine could never read back.
+  test('re-encrypts the notification address with the local key', () => {
+    const { notify_email_enc: enc } = db.prepare(
+      'SELECT notify_email_enc FROM users WHERE id = ?'
+    ).get(bob.id);
+    assert.equal(decryptEmail(enc), NOTIFY.email);
+  });
+});
+
+// AR-15 for the quote library: an uploaded quote and a hidden quote are both
+// user data, and both used to have no way of surviving a rebuild.
+test.describe('quotes in the backup', () => {
+  const db2 = require('../db');
+  const quotes = require('../quotes');
+
+  test('carries quotes the user uploaded, but not the built-ins', async () => {
+    const dave = makeUser('dave-quotes@example.com');
+    quotes.importCsv(dave.id, 'ID,Quote,Author,Characters,Wikipedia,Source\nQ1,Dave uploaded this one.,Dave,24,,');
+    const out = await exportAs(dave);
+    assert.deepEqual(out.quotes.map(q => q.text), ['Dave uploaded this one.']);
+  });
+
+  test('carries hidden quotes by text, since row ids do not survive', async () => {
+    const erin = makeUser('erin-quotes@example.com');
+    const target = db2.prepare('SELECT id, text FROM quotes WHERE user_id IS NULL LIMIT 1').get();
+    quotes.setDisliked(erin.id, target.id, true);
+    const out = await exportAs(erin);
+    assert.deepEqual(out.quote_dislikes, [target.text]);
+  });
+
+  test('a dislike survives export and restore onto another account', async () => {
+    const frank = makeUser('frank-quotes@example.com');
+    const grace = makeUser('grace-quotes@example.com');
+    const target = db2.prepare('SELECT id, text FROM quotes WHERE user_id IS NULL LIMIT 1').get();
+    quotes.setDisliked(frank.id, target.id, true);
+    const out = await exportAs(frank);
+
+    const result = await restoreAs(grace, out);
+    assert.equal(result.dislikesImported, 1);
+    assert.equal(quotes.stats(grace.id).disliked, 1);
+  });
+
+  test('an uploaded quote survives a restore and belongs to the restorer', async () => {
+    const heidi = makeUser('heidi-quotes@example.com');
+    const ivan = makeUser('ivan-quotes@example.com');
+    quotes.importCsv(heidi.id, 'ID,Quote,Author,Characters,Wikipedia,Source\nQ1,Heidi wrote this down.,Heidi,23,,');
+    const out = await exportAs(heidi);
+
+    const result = await restoreAs(ivan, out);
+    assert.equal(result.quotesImported, 1);
+    assert.equal(quotes.stats(ivan.id).uploaded, 1);
+  });
+
+  test('restoring the same file twice does not duplicate quotes', async () => {
+    const judy = makeUser('judy-quotes@example.com');
+    const ken = makeUser('ken-quotes@example.com');
+    quotes.importCsv(judy.id, 'ID,Quote,Author,Characters,Wikipedia,Source\nQ1,Judy said something.,Judy,21,,');
+    const out = await exportAs(judy);
+    await restoreAs(ken, out);
+    const second = await restoreAs(ken, out);
+    assert.equal(second.quotesImported, 0);
+    assert.equal(quotes.stats(ken.id).uploaded, 1);
+  });
+
+  // The URL becomes an href in the quote bar, so a hand-edited backup must not
+  // be able to smuggle a javascript: scheme past the restore.
+  test('drops a javascript: URL from a restored quote', async () => {
+    const mallory = makeUser('mallory-quotes@example.com');
+    await restoreAs(mallory, {
+      todos: [],
+      quotes: [{ text: 'Looks innocent.', author: 'Mallory', wikipedia: 'javascript:alert(1)' }],
+    });
+    const row = db2.prepare('SELECT wikipedia FROM quotes WHERE user_id = ?').get(mallory.id);
+    assert.equal(row.wikipedia, null);
+  });
+
+  test('bumped the export version so an older reader can tell', async () => {
+    const out = await exportAs(alice);
+    assert.equal(out.version, 6);
+  });
+});
+
+test.describe('restoring untrusted fields', () => {
+  test('keeps every colour the client palette offers', async () => {
+    await restoreAs(carol, {
+      todos: [],
+      lists: CLIENT_PALETTE.map(color => ({ name: 'list-' + color, color })),
+    });
+    const rows = db.prepare('SELECT name, color FROM lists WHERE user_id = ?').all(carol.id);
+    const lost = CLIENT_PALETTE.filter(c => !rows.some(r => r.name === 'list-' + c && r.color === c));
+    assert.deepEqual(lost, []);
+  });
+
+  test('falls back to slate for a colour no palette knows', async () => {
+    await restoreAs(carol, { todos: [], lists: [{ name: 'list-chartreuse', color: 'chartreuse' }] });
+    const row = db.prepare('SELECT color FROM lists WHERE user_id = ? AND name = ?').get(carol.id, 'list-chartreuse');
+    assert.equal(row.color, 'slate');
+  });
+
+  test('ignores a malformed notification time rather than storing it', async () => {
+    await restoreAs(carol, { todos: [], settings: { notify_time: '25:61', notify_tz: NOTIFY.tz } });
+    assert.equal(db.prepare('SELECT notify_time FROM users WHERE id = ?').get(carol.id).notify_time, '22:00');
+  });
+
+  test('still applies the valid fields alongside the rejected one', () => {
+    assert.equal(db.prepare('SELECT notify_tz FROM users WHERE id = ?').get(carol.id).notify_tz, NOTIFY.tz);
+  });
+
+  test('refuses a timezone no runtime knows', async () => {
+    await restoreAs(carol, { todos: [], settings: { notify_tz: 'Mars/Olympus_Mons' } });
+    assert.equal(db.prepare('SELECT notify_tz FROM users WHERE id = ?').get(carol.id).notify_tz, NOTIFY.tz);
+  });
+
+  // A CR or LF in a recipient ends the To: header and lets the rest become
+  // headers of the file author's choosing.
+  test('refuses an address that could inject a mail header', async () => {
+    await restoreAs(carol, { todos: [], settings: { notify_email: 'a@b.com\nBcc: victim@example.com' } });
+    const row = db.prepare('SELECT notify_email_enc FROM users WHERE id = ?').get(carol.id);
+    assert.equal(row.notify_email_enc, null);
+  });
+
+  test('reports that a file predating settings restored none', async () => {
+    const result = await restoreAs(carol, { todos: [] });
+    assert.equal(result.settingsRestored, false);
+  });
+
+  test('leaves the account\'s own settings alone when the file carries none', () => {
+    assert.equal(db.prepare('SELECT notify_tz FROM users WHERE id = ?').get(carol.id).notify_tz, NOTIFY.tz);
   });
 });

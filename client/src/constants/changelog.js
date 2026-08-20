@@ -4,11 +4,48 @@
 // This way every Watchtower deploy maps to exactly one version.
 // Versioning: X.Y — increment Y for regular updates, bump X (reset Y to 0) for big releases.
 // Add a new entry to CHANGELOG (newest first) on first push of a window; append to top entry otherwise.
-export const CURRENT_VERSION = '2.6';
+export const CURRENT_VERSION = '3.0';
 
 // icon: 'purple' | 'green' | 'amber' | 'blue' | 'rose'
 // Each feature needs: icon, name, desc, and a 24×24 SVG path string (stroke icons).
 export const CHANGELOG = [
+  {
+    version: '3.0',
+    date: '2026-08-21',
+    title: 'A quote a day, and a calmer board',
+    features: [
+      {
+        icon: 'purple',
+        name: 'A motivational quote each day',
+        desc: 'A new quote sits at the top of the planner every day, drawn at random from 191 to start with. Every quote is shown once before any of them comes round again. Click an author to read about them on Wikipedia.',
+        svgPath: 'M7 8h10M7 12h6M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+      },
+      {
+        icon: 'blue',
+        name: 'Quotes on your terms',
+        desc: 'Hover a quote to hide it for good or to put quotes away until tomorrow. Hidden by mistake? The message that appears has an Undo, and Settings can bring every hidden quote back at once. You can also switch quotes off entirely.',
+        svgPath: 'M10 14L21 3m0 0v7m0-7h-7M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6',
+      },
+      {
+        icon: 'green',
+        name: 'Bring your own quotes',
+        desc: 'Settings takes a CSV of your own quotes and adds them to the rotation. Upload the same file twice and nothing is duplicated -- anything already in your library is simply skipped.',
+        svgPath: 'M12 4v12m0-12l-4 4m4-4l4 4M4 20h16',
+      },
+      {
+        icon: 'amber',
+        name: 'A quieter week view',
+        desc: 'Empty days no longer say "Nothing planned" -- an empty column speaks for itself. The eye that reveals completed items now appears when you hover a day, the way the note button already did, so the headers stay clean.',
+        svgPath: 'M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.5 12C3.7 7.9 7.5 5 12 5s8.3 2.9 9.5 7c-1.2 4.1-5 7-9.5 7s-8.3-2.9-9.5-7z',
+      },
+      {
+        icon: 'rose',
+        name: 'One task list again',
+        desc: 'Tasks planned for another week no longer sit in a section of their own. The sidebar is a single list: everything unassigned first, then everything you have scheduled, whichever week it falls in.',
+        svgPath: 'M4 6h16M4 12h16M4 18h16',
+      },
+    ],
+  },
   {
     version: '2.6',
     date: '2026-08-19',

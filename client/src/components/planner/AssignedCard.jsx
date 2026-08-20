@@ -89,6 +89,8 @@ const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, onC
         <button
           onPointerDown={e => e.stopPropagation()}
           onClick={e => { e.stopPropagation(); onComplete(e); }}
+          aria-pressed={checked}
+          aria-label={checked ? `Mark "${todo.title}" as not done` : `Mark "${todo.title}" as done`}
           className={`flex-shrink-0 relative w-3.5 h-3.5 rounded border transition-all duration-150 flex items-center justify-center hover:scale-110 active:scale-95 md:before:absolute md:before:content-[''] md:before:inset-[-8px] ${
             checked
               ? 'bg-indigo-500 border-indigo-500'
@@ -138,6 +140,7 @@ const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, onC
             <button
               onPointerDown={e => e.stopPropagation()}
               onClick={e => { e.stopPropagation(); onEdit(todo); }}
+              aria-label={`Edit "${todo.title}"`}
               className="text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 p-1 rounded hover:bg-zinc-50 dark:hover:bg-zinc-800 transition"
             >
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -149,6 +152,7 @@ const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, onC
             <button
               onPointerDown={e => e.stopPropagation()}
               onClick={e => { e.stopPropagation(); onUnassign(todo.id); }}
+              aria-label={`Remove "${todo.title}" from this day`}
               className="text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 p-1 rounded hover:bg-zinc-50 dark:hover:bg-zinc-800 transition"
             >
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -170,6 +174,7 @@ const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, onC
             >
               <button
                 onPointerDown={e => e.stopPropagation()}
+                aria-label={`Delete "${todo.title}"`}
                 className="text-zinc-400 dark:text-zinc-500 hover:text-red-500 p-1 rounded hover:bg-red-50 dark:hover:bg-red-950 transition"
               >
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -182,6 +187,7 @@ const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, onC
               <button
                 onPointerDown={e => e.stopPropagation()}
                 onClick={e => { e.stopPropagation(); onDelete(todo.id); }}
+                aria-label={`Delete "${todo.title}"`}
                 className="text-zinc-400 dark:text-zinc-500 hover:text-red-500 p-1 rounded hover:bg-red-50 dark:hover:bg-red-950 transition"
               >
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

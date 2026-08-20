@@ -173,6 +173,63 @@ test.describe('PATCH /me', () => {
 });
 
 test.describe('PATCH /notification-settings', () => {
+  // notify_email is handed to nodemailer as a recipient, so a bare length check
+  // is not enough: a CRLF lets a caller append their own mail headers, and a
+  // non-address is only discovered later, inside the scheduler, where the
+  // failure is invisible to the person who typed it.
+  const rejected = [
+    ['not-an-address', 'no @ at all'],
+    ['no-domain@', 'empty domain'],
+    ['@no-local.example', 'empty local part'],
+    ['two@@example.com', 'double @'],
+    ['spaces in@example.com', 'space in local part'],
+    ['crlf@example.com\r\nBcc: attacker@evil.example', 'CRLF header injection'],
+    ['crlf@example.com\nBcc: attacker@evil.example', 'bare LF header injection'],
+    ['tab\t@example.com', 'tab'],
+    ['trailing.dot@example.', 'domain ends in a dot'],
+  ];
+
+  rejected.forEach(([value, why], i) => {
+    test(`rejects ${why}`, async () => {
+      const user = makeUser(`reject-${i}@example.com`);
+      const res = await patch('/api/auth/notification-settings', {
+        token: tokenFor(user),
+        body: { notify_email: value },
+      });
+      const row = db.prepare('SELECT notify_email_enc FROM users WHERE id = ?').get(user.id);
+      assert.deepEqual(
+        { status: res.status, stored: row.notify_email_enc },
+        { status: 400, stored: null },
+      );
+    });
+  });
+
+  test('accepts a normal address', async () => {
+    const saved = process.env.NOTIFICATION_ENCRYPT_KEY;
+    process.env.NOTIFICATION_ENCRYPT_KEY = 'a'.repeat(64);
+    const user = makeUser('accepts@example.com');
+    const res = await patch('/api/auth/notification-settings', {
+      token: tokenFor(user),
+      body: { notify_email: 'someone+tag@sub.example.co.uk' },
+    });
+    if (saved === undefined) delete process.env.NOTIFICATION_ENCRYPT_KEY;
+    else process.env.NOTIFICATION_ENCRYPT_KEY = saved;
+    const row = db.prepare('SELECT notify_email_enc FROM users WHERE id = ?').get(user.id);
+    assert.deepEqual(
+      { status: res.status, stored: typeof row.notify_email_enc },
+      { status: 200, stored: 'string' },
+    );
+  });
+
+  test('clearing with an empty string still works', async () => {
+    const user = makeUser('clears@example.com');
+    const res = await patch('/api/auth/notification-settings', {
+      token: tokenFor(user),
+      body: { notify_email: '' },
+    });
+    assert.equal(res.status, 200);
+  });
+
   // The catch used to bind `err` and drop it, leaving "Encryption not
   // configured" to cover a missing key, a rotated key and a corrupt ciphertext.
   test('reports a 500 rather than storing an unencrypted address', async () => {

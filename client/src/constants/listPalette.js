@@ -10,15 +10,3 @@ export const LIST_PALETTE = {
   slate:   { dot: 'bg-slate-400',   badge: 'bg-slate-100 text-slate-600',    accent: 'text-slate-600' },
 };
 export const PALETTE_KEYS = Object.keys(LIST_PALETTE);
-
-export const PALETTE_DOT_COLORS = {
-  indigo:  'bg-indigo-400',
-  emerald: 'bg-emerald-400',
-  teal:    'bg-teal-400',
-  amber:   'bg-amber-400',
-  rose:    'bg-rose-400',
-  sky:     'bg-sky-400',
-  violet:  'bg-violet-400',
-  pink:    'bg-pink-400',
-  slate:   'bg-slate-400',
-};

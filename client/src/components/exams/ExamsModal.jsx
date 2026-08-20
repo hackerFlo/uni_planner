@@ -27,7 +27,7 @@ function tierForRank(index, total) {
 
 function PencilIcon() {
   return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
       <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
     </svg>
@@ -55,6 +55,7 @@ function EditRow({ titleRef, draft, setDraft, saving, onConfirm, onCancel, onDel
             if (e.key === 'Escape') onCancel();
           }}
           placeholder="Exam name…"
+          aria-label="Exam name"
           maxLength={200}
           className="w-full text-sm font-medium text-zinc-900 dark:text-zinc-50 border border-indigo-200 dark:border-indigo-900 bg-white dark:bg-zinc-900 rounded-lg px-3 py-2 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition"
         />
@@ -72,9 +73,10 @@ function EditRow({ titleRef, draft, setDraft, saving, onConfirm, onCancel, onDel
         <button
           onClick={onConfirm}
           disabled={saving || !draft.title.trim() || !draft.exam_date}
+          aria-label="Save exam"
           className="w-[30px] h-[30px] flex items-center justify-center rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white disabled:opacity-40 flex-shrink-0 transition"
         >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M20 6L9 17l-5-5" />
           </svg>
         </button>
@@ -82,9 +84,10 @@ function EditRow({ titleRef, draft, setDraft, saving, onConfirm, onCancel, onDel
       <Tooltip text="Cancel">
         <button
           onClick={onCancel}
+          aria-label="Cancel editing exam"
           className="w-[30px] h-[30px] flex items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 flex-shrink-0 transition"
         >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+          <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
             <path d="M18 6L6 18M6 6l12 12" />
           </svg>
         </button>
@@ -93,9 +96,10 @@ function EditRow({ titleRef, draft, setDraft, saving, onConfirm, onCancel, onDel
         <Tooltip text="Delete">
           <button
             onClick={onDelete}
+            aria-label="Delete exam"
             className="w-[30px] h-[30px] flex items-center justify-center rounded-lg bg-rose-50 dark:bg-rose-950 hover:bg-rose-100 dark:hover:bg-rose-900 text-rose-500 flex-shrink-0 transition"
           >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z" />
             </svg>
           </button>
@@ -114,6 +118,7 @@ function ExamsModalContent() {
   const titleRef = useRef(null);
   const listScrollRef = useRef(null);
   const scrollTimerRef = useRef(null);
+  const dialogRef = useRef(null);
   const n = upcomingExams.length;
 
   useEffect(() => {
@@ -121,6 +126,14 @@ function ExamsModalContent() {
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [closeModal]);
+
+  useEffect(() => {
+    const returnFocusTo = document.activeElement;
+    dialogRef.current?.focus({ preventScroll: true });
+    return () => {
+      if (returnFocusTo instanceof HTMLElement) returnFocusTo.focus({ preventScroll: true });
+    };
+  }, []);
 
   useEffect(() => {
     if (editingId !== null) setTimeout(() => titleRef.current?.focus(), 0);
@@ -171,19 +184,26 @@ function ExamsModalContent() {
       className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/30 backdrop-blur-[3px] animate-[fadeIn_0.2s_ease]"
       onClick={e => { if (e.target === e.currentTarget) closeModal(); }}
     >
-      <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-[580px] max-w-[calc(100vw-32px)] max-h-[calc(100vh-32px)] flex flex-col overflow-hidden animate-[slideUp_0.28s_cubic-bezier(0.22,1,0.36,1)]">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="exams-modal-title"
+        tabIndex={-1}
+        className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-[580px] max-w-[calc(100vw-32px)] max-h-[calc(100vh-32px)] flex flex-col overflow-hidden outline-none animate-[slideUp_0.28s_cubic-bezier(0.22,1,0.36,1)]"
+      >
 
         <div className="px-7 pt-6 pb-[18px] border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-4 flex-shrink-0">
-          <h2 className="text-[19px] font-semibold text-zinc-900 dark:text-zinc-50 tracking-tight">
+          <h2 id="exams-modal-title" className="text-[19px] font-semibold text-zinc-900 dark:text-zinc-50 tracking-tight">
             {n} exam{n !== 1 ? 's' : ''} on the horizon
           </h2>
           <Tooltip text="Close">
             <button
               onClick={closeModal}
-              aria-label="Close"
+              aria-label="Close exams"
               className="w-8 h-8 rounded-lg border border-zinc-200 dark:border-zinc-800 flex items-center justify-center flex-shrink-0 text-zinc-400 dark:text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-800 hover:text-zinc-600 dark:hover:text-zinc-300 transition"
             >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <svg aria-hidden="true" width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M1 1L13 13M13 1L1 13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
               </svg>
             </button>
@@ -249,11 +269,14 @@ function ExamsModalContent() {
                   <span className="text-[20px] font-bold text-zinc-900 dark:text-zinc-50 leading-tight tracking-tight">{day}</span>
                 </div>
                 <span className="flex-1 text-sm font-semibold text-zinc-900 dark:text-zinc-50 truncate min-w-0">{exam.title}</span>
+                {/* Revealed on hover on a pointer device, but always visible on
+                    touch and whenever it takes keyboard focus -- neither has a
+                    hover state to reveal it with. */}
                 <Tooltip text="Edit exam">
                   <button
                     onClick={() => startEdit(exam)}
-                    aria-label="Edit exam"
-                    className="w-7 h-7 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-400 dark:text-zinc-500 opacity-0 group-hover:opacity-100 hover:bg-indigo-50 dark:hover:bg-indigo-950 hover:border-indigo-200 hover:text-indigo-600 flex items-center justify-center flex-shrink-0 transition"
+                    aria-label={`Edit ${exam.title}`}
+                    className="w-7 h-7 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-400 dark:text-zinc-500 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 hover:bg-indigo-50 dark:hover:bg-indigo-950 hover:border-indigo-200 hover:text-indigo-600 flex items-center justify-center flex-shrink-0 transition"
                   >
                     <PencilIcon />
                   </button>
@@ -284,7 +307,7 @@ function ExamsModalContent() {
             onClick={startAdd}
             className="inline-flex items-center gap-1.5 bg-indigo-500 hover:bg-indigo-600 active:scale-[0.97] text-white rounded-lg px-4 py-2 text-xs font-semibold transition"
           >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 5v14M5 12h14" />
             </svg>
             Add exam

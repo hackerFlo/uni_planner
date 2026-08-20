@@ -7,7 +7,7 @@ import { loadEmojis, getLoadedEmojis } from '../../data/loadEmojis';
 import useIsMobile from '../../hooks/useIsMobile';
 import { useRegisterModal } from '../../context/ModalContext';
 import { useToast } from '../../context/ToastContext';
-import { userMessage } from '../../api/errors';
+import { hasUnsavedChanges } from '../../utils/todoForm';
 import { sanitizeRichHtml, richTextToPlain } from '../../utils/richText';
 import { renderRichTextInto } from '../../utils/richTextDom';
 import { toIso } from '../../utils/dates';
@@ -90,6 +90,7 @@ function MobileActionButtons({ todo, dayAssigned, onComplete, onUpdate, onDelete
       <button
         type="button"
         onClick={() => { onComplete(todo); onClose(); }}
+        aria-label="Mark done and close"
         className="flex-1 py-3 text-sm font-medium rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-600 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition flex items-center justify-center"
       >
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -100,6 +101,7 @@ function MobileActionButtons({ todo, dayAssigned, onComplete, onUpdate, onDelete
         <button
           type="button"
           onClick={() => { onUpdate(todo.id, { day_assigned: null }); onClose(); }}
+          aria-label="Move back to the task list"
           className="flex-1 py-3 text-sm font-medium rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition flex items-center justify-center"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -121,6 +123,8 @@ function MobileActionButtons({ todo, dayAssigned, onComplete, onUpdate, onDelete
         >
           <button
             type="button"
+            aria-label="Delete this recurring item"
+            aria-haspopup="menu"
             className="flex-1 py-3 text-sm font-medium rounded-lg bg-red-50 dark:bg-red-950 text-red-600 hover:bg-red-100 dark:hover:bg-red-900 transition flex items-center justify-center"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -132,6 +136,7 @@ function MobileActionButtons({ todo, dayAssigned, onComplete, onUpdate, onDelete
         <button
           type="button"
           onClick={() => { if (window.confirm('Delete this task?')) { onDelete(todo.id); onClose(); } }}
+          aria-label="Delete this item"
           className="flex-1 py-3 text-sm font-medium rounded-lg bg-red-50 dark:bg-red-950 text-red-600 hover:bg-red-100 dark:hover:bg-red-900 transition flex items-center justify-center"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -169,11 +174,13 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
   // a modifier nobody can see is a modifier nobody uses.
   const [altHeld, setAltHeld] = useState(false);
   const [emojiState, setEmojiState] = useState(null);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
 
   const titleRef = useRef(null);
   const descRef = useRef(null);
   const descCaretRef = useRef(0);
   const backdropMouseDownRef = useRef(false);
+  const initialPayloadRef = useRef(null);
 
   useEffect(() => { loadEmojis(); }, []);
 
@@ -184,6 +191,10 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
     if (descRef.current) {
       renderRichTextInto(descRef.current, todo?.description ?? '');
     }
+    // Taken here, not from `todo`: the description round-trips through the
+    // sanitiser on the way in, so the only honest baseline for "has the user
+    // changed anything" is the payload an untouched form would send.
+    initialPayloadRef.current = buildPayload();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -203,13 +214,16 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
     };
   }
 
-  function handleClose() {
-    if (mode === 'edit' && title.trim() && !loading) {
-      // The modal is already closing, so there is nowhere to show an inline
-      // error -- but losing an edit in silence is the worst option.
-      onUpdate(todo.id, buildPayload()).catch((err) => {
-        toast?.error(`Changes were not saved. ${userMessage(err)}`, { ref: err.requestId ?? null });
-      });
+  // Closing never saves -- "Save changes" is the only way to commit, and Cancel,
+  // the X, the backdrop and Escape all mean the same thing. They used to
+  // disagree: the X auto-saved while the button beside it discarded, so the
+  // outcome depended on which of two adjacent affordances you reached for.
+  // Discarding is only silent if nothing was typed; otherwise it asks first.
+  function requestClose() {
+    if (loading) return;
+    if (hasUnsavedChanges(initialPayloadRef.current, buildPayload())) {
+      setConfirmDiscard(true);
+      return;
     }
     onClose();
   }
@@ -479,9 +493,15 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
       onClick={e => {
         const fromBackdrop = backdropMouseDownRef.current;
         backdropMouseDownRef.current = false;
-        if (fromBackdrop && e.target === e.currentTarget) handleClose();
+        if (fromBackdrop && e.target === e.currentTarget) requestClose();
       }}
-      onKeyDown={e => { if (e.key === 'Escape' && !emojiState) handleClose(); }}
+      onKeyDown={e => {
+        if (e.key !== 'Escape' || emojiState) return;
+        // With the prompt up, Escape backs out of the prompt rather than
+        // confirming the thing it is asking about.
+        if (confirmDiscard) setConfirmDiscard(false);
+        else requestClose();
+      }}
     >
       <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-xl w-full max-w-md p-6">
         <div className="flex items-center justify-between mb-5">
@@ -489,7 +509,9 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
             {mode === 'edit' ? 'Edit item' : 'New item'}
           </h2>
           <button
-            onClick={handleClose}
+            type="button"
+            onClick={requestClose}
+            aria-label="Close without saving"
             className="text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition p-1 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -501,6 +523,26 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
         {error && (
           <div className="bg-red-50 dark:bg-red-950 text-red-600 text-sm px-3 py-2.5 rounded-lg mb-4">
             {error}
+          </div>
+        )}
+
+        {confirmDiscard && (
+          <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-200 text-sm px-3 py-2.5 rounded-lg mb-4 flex items-center gap-3">
+            <span className="flex-1">Discard your changes?</span>
+            <button
+              type="button"
+              onClick={() => setConfirmDiscard(false)}
+              className="font-medium underline underline-offset-2 hover:no-underline"
+            >
+              Keep editing
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="font-medium text-red-600 dark:text-red-400 underline underline-offset-2 hover:no-underline"
+            >
+              Discard
+            </button>
           </div>
         )}
 
@@ -685,7 +727,7 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
           <div className="flex gap-2 pt-1">
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               className="flex-1 text-sm font-medium text-zinc-600 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 py-2.5 rounded-lg transition"
             >
               Cancel

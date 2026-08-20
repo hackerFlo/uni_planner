@@ -103,6 +103,64 @@ db.exec(`
     payload    TEXT    NOT NULL,
     fetched_at TEXT    NOT NULL
   );
+
+  -- The motivational quote library. user_id IS NULL means a built-in quote,
+  -- seeded from server/data/quotes.csv and shared by every account; a non-NULL
+  -- user_id means someone uploaded it, and only that account sees it. Reads use
+  -- (user_id IS NULL OR user_id = ?), so everything that HAS an owner is still
+  -- scoped to them and AR-2 holds.
+  --
+  -- AR-15: the built-in rows are deliberately NOT exported by backup.js -- they
+  -- are re-seeded from the shipped CSV on every boot, so exporting them would
+  -- only bloat the file. User-uploaded rows ARE exported.
+  CREATE TABLE IF NOT EXISTS quotes (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    text       TEXT    NOT NULL,
+    author     TEXT    NOT NULL,
+    wikipedia  TEXT,
+    source     TEXT,
+    created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+  );
+
+  -- COALESCE, not a plain UNIQUE(user_id, text): SQLite treats NULLs as
+  -- distinct in a unique index, so without it the 191 built-ins would re-insert
+  -- themselves on every single boot.
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_quotes_owner_text ON quotes(COALESCE(user_id, 0), text);
+
+  CREATE INDEX IF NOT EXISTS idx_quotes_user_id ON quotes(user_id);
+
+  -- Per-user, per-quote bookkeeping. disliked is permanent until the user
+  -- restores it; shown_cycle is which rotation pass last showed the quote,
+  -- which is what makes "no repeat until every other quote has been shown"
+  -- work without a separate history table.
+  --
+  -- AR-15: only the disliked rows are exported by backup.js. shown_cycle and
+  -- last_shown_at are derived scheduling state that self-heals on the next
+  -- pick, so restoring them onto another machine would mean nothing.
+  CREATE TABLE IF NOT EXISTS quote_state (
+    user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    quote_id      INTEGER NOT NULL REFERENCES quotes(id) ON DELETE CASCADE,
+    disliked      INTEGER NOT NULL DEFAULT 0 CHECK(disliked IN (0, 1)),
+    shown_cycle   INTEGER,
+    last_shown_at TEXT,
+    PRIMARY KEY (user_id, quote_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_quote_state_user ON quote_state(user_id, disliked);
+
+  -- Which quote belongs to which calendar day, so a refresh does not reroll it.
+  -- day is the CLIENT's local YYYY-MM-DD, sent with the request: the server has
+  -- no reliable way to know the browser's timezone, and guessing it wrong means
+  -- the quote changes at the wrong hour.
+  --
+  -- AR-15: not exported, for the same reason as shown_cycle above.
+  CREATE TABLE IF NOT EXISTS quote_day (
+    user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    day      TEXT    NOT NULL,
+    quote_id INTEGER NOT NULL REFERENCES quotes(id) ON DELETE CASCADE,
+    PRIMARY KEY (user_id, day)
+  );
 `);
 
 // Migrate: add planner_order column if missing
@@ -130,8 +188,27 @@ if (!todoCols.some(c => c.name === 'recurrence_pattern')) {
 db.exec(`CREATE INDEX IF NOT EXISTS idx_todos_recurrence_parent ON todos(recurrence_parent_id)`);
 
 // Migrate: if todos table still has the day-name CHECK constraint, recreate without it
+const DAY_NAME_ERA_COLS = [
+  'id', 'user_id', 'list_type', 'title', 'description',
+  'completed', 'archived', 'day_assigned', 'created_at', 'updated_at',
+];
+
+// Rendered from PRAGMA table_info rather than hard-coded: this rebuild used to
+// declare only the ten columns above, which silently destroyed planner_order,
+// approx_time and the three recurrence columns that the ALTER TABLE guards had
+// added moments earlier -- and then the list_type migration below, which reads
+// those columns, killed the whole boot with "no such column".
+const declareColumn = (c) =>
+  c.name + ' ' + c.type +
+  (c.notnull ? ' NOT NULL' : '') +
+  (c.dflt_value === null ? '' : ' DEFAULT ' + c.dflt_value);
+
 const schema = db.prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='todos'`).get();
 if (schema && schema.sql.includes("'monday'")) {
+  const carried = db.prepare(`PRAGMA table_info(todos)`).all()
+    .filter(c => !DAY_NAME_ERA_COLS.includes(c.name));
+  const carriedDecls = carried.map(c => ',\n      ' + declareColumn(c)).join('');
+  const carriedNames = carried.map(c => ', ' + c.name).join('');
   db.exec(`
     PRAGMA foreign_keys = OFF;
     CREATE TABLE todos_new (
@@ -144,18 +221,25 @@ if (schema && schema.sql.includes("'monday'")) {
       archived      INTEGER NOT NULL DEFAULT 0 CHECK(archived IN (0, 1)),
       day_assigned  TEXT,
       created_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-      updated_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+      updated_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))${carriedDecls}
     );
-    INSERT INTO todos_new
+    INSERT INTO todos_new (id, user_id, list_type, title, description, completed, archived,
+                           day_assigned, created_at, updated_at${carriedNames})
       SELECT id, user_id, list_type, title, description, completed, archived,
-             NULL, created_at, updated_at
+             NULL, created_at, updated_at${carriedNames}
       FROM todos;
     DROP TABLE todos;
     ALTER TABLE todos_new RENAME TO todos;
     CREATE INDEX IF NOT EXISTS idx_todos_user_id ON todos(user_id);
     PRAGMA foreign_keys = ON;
   `);
-  log.info('db migrated', { change: 'day_assigned now stores ISO dates; cleared old day-name values' });
+  if (carried.some(c => c.name === 'recurrence_parent_id')) {
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_todos_recurrence_parent ON todos(recurrence_parent_id)`);
+  }
+  log.info('db migrated', {
+    change: 'day_assigned now stores ISO dates; cleared old day-name values',
+    carried: carried.length,
+  });
 }
 
 // Migrate: add completed_at to todos
@@ -242,7 +326,8 @@ if (currentTodoCols.includes('list_type')) {
     );
     INSERT INTO todos_new (id, user_id, list_id, title, description, completed, archived,
                            day_assigned, created_at, updated_at, planner_order, approx_time,
-                           recurrence_interval_days, recurrence_parent_id, completed_at)
+                           recurrence_interval_days, recurrence_parent_id, completed_at,
+                           recurrence_pattern)
       SELECT t.id, t.user_id,
         (SELECT l.id FROM lists l WHERE l.user_id = t.user_id
            AND l.name = CASE t.list_type
@@ -252,7 +337,8 @@ if (currentTodoCols.includes('list_type')) {
                         END),
         t.title, t.description, t.completed, t.archived, t.day_assigned,
         t.created_at, t.updated_at, t.planner_order, t.approx_time,
-        t.recurrence_interval_days, t.recurrence_parent_id, t.completed_at
+        t.recurrence_interval_days, t.recurrence_parent_id, t.completed_at,
+        t.recurrence_pattern
       FROM todos t;
     DROP TABLE todos;
     ALTER TABLE todos_new RENAME TO todos;
@@ -271,5 +357,10 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_todos_user_completed ON todos(user_id, completed, completed_at);
   CREATE INDEX IF NOT EXISTS idx_todos_list_id        ON todos(list_id);
 `);
+
+// Built-in quotes, after every table exists. Idempotent and cheap (one
+// transaction, ON CONFLICT DO NOTHING), so it runs on every open -- including
+// in tests, which is what lets a route test find a populated library.
+require('./quotesSeed').seedBuiltInQuotes(db);
 
 module.exports = db;

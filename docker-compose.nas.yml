@@ -2,6 +2,15 @@ services:
   server:
     image: ghcr.io/hackerflo/uni-planner-server:latest
     restart: unless-stopped
+    # Without this the default json-file driver grows without bound AND the
+    # whole log dies with the container -- which Watchtower replaces nightly,
+    # so the audit trail never survives 24 hours. Three 10 MB files per service
+    # is a few days of history at this traffic level and costs nothing.
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     environment:
@@ -41,6 +50,15 @@ services:
   client:
     image: ghcr.io/hackerflo/uni-planner-client:latest
     restart: unless-stopped
+    # Without this the default json-file driver grows without bound AND the
+    # whole log dies with the container -- which Watchtower replaces nightly,
+    # so the audit trail never survives 24 hours. Three 10 MB files per service
+    # is a few days of history at this traffic level and costs nothing.
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     ports:
@@ -57,6 +75,15 @@ services:
   watchtower:
     image: containrrr/watchtower
     restart: unless-stopped
+    # Without this the default json-file driver grows without bound AND the
+    # whole log dies with the container -- which Watchtower replaces nightly,
+    # so the audit trail never survives 24 hours. Three 10 MB files per service
+    # is a few days of history at this traffic level and costs nothing.
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:

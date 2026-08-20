@@ -61,12 +61,21 @@ function parseTodoUpdates(body, existing, userId) {
     if (instanceUpdates.completed === 1) {
       instanceUpdates.archived = 1;
       instanceUpdates.completed_at = NOW();
+    } else {
+      // Un-completing has to undo both halves of the branch above. Leaving
+      // archived = 1 keeps the row hidden from the planner, and a stale
+      // completed_at makes the daily summary count work that was undone.
+      instanceUpdates.archived = 0;
+      instanceUpdates.completed_at = null;
     }
   }
 
   if (body.archived !== undefined) {
     instanceUpdates.archived = body.archived ? 1 : 0;
-    if (instanceUpdates.archived === 0) instanceUpdates.completed = 0;
+    if (instanceUpdates.archived === 0) {
+      instanceUpdates.completed = 0;
+      instanceUpdates.completed_at = null;
+    }
   }
 
   if (body.planner_order !== undefined) {
@@ -102,7 +111,23 @@ function parseTodoUpdates(body, existing, userId) {
   return { seriesUpdates, instanceUpdates, hasRecurrenceChange, recurrenceInterval, recurrencePattern };
 }
 
-// Applies recurrence changes inside an open transaction. Also returns IDs detached from old series.
+// Deletes the rows matching `whereSql` and returns their ids. One predicate feeds
+// both statements on purpose: if the SELECT and the DELETE ever drift apart, the
+// client keeps rendering rows the server has already removed.
+function deleteAndCollectIds(whereSql, params) {
+  const doomed = db.prepare(`SELECT id FROM todos WHERE ${whereSql}`).all(...params);
+  db.prepare(`DELETE FROM todos WHERE ${whereSql}`).run(...params);
+  return doomed.map(r => r.id);
+}
+
+const LATER_SIBLINGS_WHERE = `user_id = ? AND recurrence_parent_id = ?
+   AND completed = 0 AND archived = 0 AND day_assigned >= ? AND id != ?`;
+
+const PENDING_INSTANCES_WHERE = `user_id = ? AND recurrence_parent_id = ?
+   AND completed = 0 AND archived = 0 AND (day_assigned IS NULL OR day_assigned >= ?)`;
+
+// Applies recurrence changes inside an open transaction. Also returns IDs detached
+// from the old series, and the IDs of the instances it deleted.
 function applyRecurrenceChange(id, existing, templateId, isChildEdit, recurrenceInterval, recurrencePattern, isNewRecurring, now, userId) {
   const userRow = db.prepare('SELECT notify_tz FROM users WHERE id = ?').get(userId);
   const userTz = userRow?.notify_tz || 'UTC';
@@ -111,6 +136,7 @@ function applyRecurrenceChange(id, existing, templateId, isChildEdit, recurrence
   }).format(new Date());
 
   let willDetachIds = [];
+  let removedIds = [];
 
   if (isChildEdit) {
     const childDate = existing.day_assigned;
@@ -135,10 +161,7 @@ function applyRecurrenceChange(id, existing, templateId, isChildEdit, recurrence
       ).run(now, templateId, userId);
     }
 
-    db.prepare(
-      `DELETE FROM todos WHERE user_id = ? AND recurrence_parent_id = ?
-       AND completed = 0 AND archived = 0 AND day_assigned >= ? AND id != ?`
-    ).run(userId, templateId, childDate, id);
+    removedIds = deleteAndCollectIds(LATER_SIBLINGS_WHERE, [userId, templateId, childDate, id]);
 
     if (isNewRecurring) {
       db.prepare(
@@ -153,9 +176,7 @@ function applyRecurrenceChange(id, existing, templateId, isChildEdit, recurrence
       ).run(now, id, userId);
     }
   } else {
-    db.prepare(
-      `DELETE FROM todos WHERE user_id = ? AND recurrence_parent_id = ? AND completed = 0 AND archived = 0 AND (day_assigned IS NULL OR day_assigned >= ?)`
-    ).run(userId, templateId, todayIso);
+    removedIds = deleteAndCollectIds(PENDING_INSTANCES_WHERE, [userId, templateId, todayIso]);
 
     db.prepare(`UPDATE todos SET recurrence_interval_days = ?, recurrence_pattern = ?, updated_at = ? WHERE id = ? AND user_id = ?`)
       .run(recurrenceInterval, recurrencePattern, now, templateId, userId);
@@ -165,7 +186,7 @@ function applyRecurrenceChange(id, existing, templateId, isChildEdit, recurrence
     }
   }
 
-  return { willDetachIds };
+  return { willDetachIds, removedIds };
 }
 
 router.get('/', (req, res) => {
@@ -292,6 +313,7 @@ router.patch('/:id', (req, res) => {
 
   const now = NOW();
   let willDetachIds = [];
+  let removedIds = [];
 
   db.transaction(() => {
     if (Object.keys(seriesUpdates).length > 0) {
@@ -320,6 +342,7 @@ router.patch('/:id', (req, res) => {
         now, req.user.id
       );
       willDetachIds = result.willDetachIds;
+      removedIds = result.removedIds;
     }
   })();
 
@@ -338,7 +361,7 @@ router.patch('/:id', (req, res) => {
     }
   }
 
-  res.json({ todo: responseTodo, materialized, removedIds: [] });
+  res.json({ todo: responseTodo, materialized, removedIds });
 });
 
 router.delete('/:id', (req, res) => {

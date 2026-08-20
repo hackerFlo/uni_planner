@@ -4,10 +4,16 @@ name: CI
 # now: docker-publish.yml builds and pushes images on every push to main without
 # running a single test, so a red suite still ships. This workflow is the gate.
 #
-# Deliberately NOT here: eslint, prettier, tsc. The project configures none of
-# them (no .eslintrc, no .prettierrc, no tsconfig.json anywhere), so a step
-# invoking them would fail on "command not found" and teach everyone to ignore
-# CI. Adding those tools is tracked separately -- see the audit report.
+# eslint now runs here (see the lint job): both packages carry an
+# eslint.config.mjs and a `lint` script. It is configured as a defect linter,
+# not a style linter -- the rule that earns its keep is react/jsx-no-undef,
+# because this repo has already shipped a bundle that `vite build` accepted and
+# that then threw at runtime on a component used without being imported.
+#
+# Still NOT here: prettier and tsc. There is no .prettierrc and no tsconfig.json
+# anywhere, and reformatting the tree would bury every real diff. CLAUDE.md's
+# QG-1 and QG-3 therefore remain unenforceable by CI -- knowingly, not by
+# oversight.
 
 on:
   pull_request:
@@ -111,6 +117,37 @@ jobs:
         env:
           VITE_APP_VERSION: ci
           VITE_APP_COMMIT: ${{ github.sha }}
+
+  lint:
+    name: eslint (${{ matrix.package }})
+    runs-on: ubuntu-latest
+    # A matrix is right here for the same reason it is right for audit: the
+    # command is byte-identical for both packages, only the directory moves.
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [server, client]
+    defaults:
+      run:
+        working-directory: ${{ matrix.package }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: ${{ matrix.package }}/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      # Errors fail the build; warnings do not. The two surviving warnings are
+      # deliberate (an exhaustive-deps pair that would loop if "fixed", and one
+      # benign in-memory cache race), so --max-warnings=0 would only invite
+      # someone to silence them badly.
+      - name: Lint
+        run: npm run lint
 
   audit:
     name: npm audit (${{ matrix.package }})

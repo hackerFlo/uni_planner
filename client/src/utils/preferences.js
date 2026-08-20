@@ -14,6 +14,11 @@ export const DEFAULT_PREFERENCES = {
   holidayCountry: 'DE',
   holidaySubdivision: 'DE-BY',
   showHolidays: true,
+  showQuotes: true,
+  // The DAY the quote was snoozed, not an expiry timestamp. "Is it snoozed?" is
+  // then just a comparison against today, so it self-clears at 00:00 with no
+  // timer, and survives a reload or a laptop asleep across midnight.
+  quotesSnoozedOn: null,
 };
 
 function normalizeSubdivision(value) {
@@ -22,6 +27,12 @@ function normalizeSubdivision(value) {
   return typeof value === 'string' && /^[A-Z]{2}-[A-Z0-9]{1,3}$/.test(value)
     ? value
     : DEFAULT_PREFERENCES.holidaySubdivision;
+}
+
+// Anything that is not a plain YYYY-MM-DD becomes null, i.e. "not snoozed".
+// A junk value must never be able to hide the quote bar permanently.
+function normalizeSnoozedOn(value) {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
 }
 
 // A stored blob can be anything a previous version wrote, or hand-edited junk.
@@ -45,6 +56,9 @@ export function normalizePreferences(raw) {
     holidaySubdivision: normalizeSubdivision(input.holidaySubdivision),
     showHolidays: typeof input.showHolidays === 'boolean'
       ? input.showHolidays : DEFAULT_PREFERENCES.showHolidays,
+    showQuotes: typeof input.showQuotes === 'boolean'
+      ? input.showQuotes : DEFAULT_PREFERENCES.showQuotes,
+    quotesSnoozedOn: normalizeSnoozedOn(input.quotesSnoozedOn),
   };
 }
 

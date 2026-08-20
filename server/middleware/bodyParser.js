@@ -12,14 +12,21 @@ const express = require('express');
 // Exported rather than inlined in index.js so a test can exercise the real
 // predicate instead of a hand-copied replica of the middleware order.
 const RESTORE_PATH = '/api/backup/restore';
+const QUOTE_IMPORT_PATH = '/api/quotes/import';
+
+// Every path here MUST mount its own express.json() in its router, or its body
+// is never parsed at all and req.body is undefined. Each also needs a matching
+// client_max_body_size in client/nginx.conf, or nginx returns 413 before the
+// request reaches Node.
+const LARGE_BODY_PATHS = new Set([RESTORE_PATH, QUOTE_IMPORT_PATH]);
 const DEFAULT_LIMIT = '10kb';
 
 function jsonBodyParser({ limit = DEFAULT_LIMIT } = {}) {
   const parse = express.json({ limit });
   return function parseJsonBody(req, res, next) {
-    if (req.path === RESTORE_PATH) return next();
+    if (LARGE_BODY_PATHS.has(req.path)) return next();
     return parse(req, res, next);
   };
 }
 
-module.exports = { jsonBodyParser, RESTORE_PATH, DEFAULT_LIMIT };
+module.exports = { jsonBodyParser, RESTORE_PATH, QUOTE_IMPORT_PATH, LARGE_BODY_PATHS, DEFAULT_LIMIT };

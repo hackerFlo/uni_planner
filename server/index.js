@@ -1,6 +1,7 @@
 require('dotenv').config();
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET || JWT_SECRET.length < 32) {
+  // eslint-disable-next-line no-console -- runs before the logger exists
   console.error('[fatal] JWT_SECRET is missing or too short (must be >= 32 chars). Refusing to start.');
   process.exit(1);
 }
@@ -16,11 +17,25 @@ try {
   ({ log, LEVEL } = require('./logger'));
   config = require('./config');
 } catch (err) {
+  // eslint-disable-next-line no-console -- the logger itself is what failed
   console.error(`[fatal] ${err.message} Refusing to start.`);
   process.exit(1);
 }
-process.on('uncaughtException', (err) => log.error('uncaughtException', { err }));
-process.on('unhandledRejection', (err) => log.error('unhandledRejection', { err }));
+// An uncaught exception leaves the process in an undefined state: module-level
+// invariants may be half-applied and a better-sqlite3 transaction may be open.
+// Logging and carrying on meant the container kept reporting healthy while
+// serving from a corrupted runtime, which is strictly worse than being down --
+// Docker restarts an exited container, but never one that is merely wrong.
+// Exit non-zero so the restart policy takes over. The log write is synchronous
+// (server/logger.js writes to stdout), so nothing is lost by exiting here.
+process.on('uncaughtException', (err) => {
+  log.error('uncaughtException -- exiting so the container restarts', { err });
+  process.exit(1);
+});
+process.on('unhandledRejection', (err) => {
+  log.error('unhandledRejection -- exiting so the container restarts', { err });
+  process.exit(1);
+});
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
@@ -52,6 +67,7 @@ const backupRoutes = require('./routes/backup');
 const dayNoteRoutes = require('./routes/dayNotes');
 const examRoutes = require('./routes/exams');
 const holidayRoutes = require('./routes/holidays');
+const quoteRoutes = require('./routes/quotes');
 const versionRoutes = require('./routes/version');
 const { isMailerEnabled } = require('./mailer');
 const seed = process.env.NODE_ENV !== 'production' ? require('./seed') : () => Promise.resolve();
@@ -93,6 +109,10 @@ app.use('/api/exams', todoLimiter, examRoutes);
 // planner load, plus the country list when Settings opens), so it shares the
 // generous todo budget rather than a tight one.
 app.use('/api/holidays', todoLimiter, holidayRoutes);
+// The daily quote is fetched on every planner load, so it shares the generous
+// todo budget. Import is the exception and carries its own tighter limiter
+// inside routes/quotes.js, the way version.js does it.
+app.use('/api/quotes', todoLimiter, quoteRoutes);
 // Limiters are per-route inside version.js: a check hits GitHub, an install
 // restarts containers, and the two deserve very different budgets.
 app.use('/api/version', versionRoutes);
@@ -123,7 +143,11 @@ app.use((err, req, res, _next) => {
 
 const { startScheduler } = require('./scheduler');
 
-seed().then(() => {
+seed().catch((err) => {
+  // Without this, a rejected seed() skipped app.listen entirely and the process
+  // idled with no listener -- alive, reachable by nothing, and silent about why.
+  log.error('seed failed -- starting without the seed account', { err });
+}).then(() => {
   const server = app.listen(PORT, () => {
     // One line that answers "which build is running, and how is it configured".
     log.info('server started', {

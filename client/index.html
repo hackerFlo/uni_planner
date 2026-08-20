@@ -2,7 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
+    <!-- No user-scalable/maximum-scale: blocking pinch-zoom is a WCAG 1.4.4 failure.
+         Desktop zoom is still suppressed from App.jsx's keydown/wheel handler, which
+         touch pinch never triggers -- so the two do not conflict. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Uni Planner</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
