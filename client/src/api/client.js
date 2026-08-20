@@ -1,7 +1,8 @@
 import { ApiError, KINDS, classifyStatus } from './errors';
 import { probeReachability } from './probe';
+import { beginRequest, endRequest } from './activity';
 
-async function request(path, options = {}) {
+async function performRequest(path, options = {}) {
   let res;
   try {
     res = await fetch(path, {
@@ -35,6 +36,17 @@ async function request(path, options = {}) {
     throw new ApiError(kind, { status: res.status, requestId, message: data?.error });
   }
   return data ?? {};
+}
+
+// The activity counter wraps the whole call, body parsing included, and settles
+// in a finally so a rejection cannot leave the progress bar pinned on screen.
+async function request(path, options) {
+  beginRequest();
+  try {
+    return await performRequest(path, options);
+  } finally {
+    endRequest();
+  }
 }
 
 export const api = {

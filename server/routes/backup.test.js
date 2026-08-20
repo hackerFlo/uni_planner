@@ -10,17 +10,20 @@ process.env.DATABASE_PATH = path.join(
 );
 process.env.JWT_SECRET = 'test-secret-long-enough-for-the-check';
 process.env.LOG_LEVEL = 'error';
-delete process.env.NODE_ENV; // leaves the rate limiters skipped
+// The limiters live in index.js, not in these routers, so this app never mounts one.
+delete process.env.NODE_ENV;
 
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken');
 const db = require('../db');
+const { createSession } = require('../sessions');
 const backupRoutes = require('./backup');
 
 function makeUser(email) {
   const id = db.prepare('INSERT INTO users (email, password_hash) VALUES (?, ?)').run(email, 'x').lastInsertRowid;
-  return { id, token: jwt.sign({ id, email, tv: 0 }, process.env.JWT_SECRET) };
+  // requireAuth needs a live session row, not just a signed token.
+  return { id, token: jwt.sign({ id, email, tv: 0, sid: createSession(id) }, process.env.JWT_SECRET) };
 }
 
 const alice = makeUser('alice@example.com');

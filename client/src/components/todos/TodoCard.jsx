@@ -98,10 +98,10 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
       }}
       className={`group border rounded-lg shadow-sm transition-all select-none cursor-grab active:cursor-grabbing ${
         isDraggingOverDay
-          ? 'bg-white border-zinc-100 p-2.5'
+          ? 'bg-white dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800 p-2.5'
           : isAssigned
-          ? 'bg-zinc-50 border-zinc-100 p-3 opacity-50 hover:opacity-70'
-          : 'bg-white border-zinc-100 p-3 hover:shadow-md hover:-translate-y-0.5'
+          ? 'bg-zinc-50 dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800 p-3 opacity-50 hover:opacity-70'
+          : 'bg-white dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800 p-3 hover:shadow-md hover:-translate-y-0.5'
       }`}
     >
       {isDraggingOverDay ? (
@@ -111,18 +111,18 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
               {listName}
             </span>
             {todo.approx_time && (
-              <span className="text-[9px] font-medium text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded-full">
+              <span className="text-[9px] font-medium text-zinc-400 dark:text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded-full">
                 {fmtTime(todo.approx_time)}
               </span>
             )}
           </div>
-          <LinkText text={todo.title} className="text-xs font-medium text-zinc-800 leading-snug break-words min-w-0 w-full block" />
+          <LinkText text={todo.title} className="text-xs font-medium text-zinc-800 dark:text-zinc-100 leading-snug break-words min-w-0 w-full block" />
           {todo.description && (
-            <RichText text={todo.description} className="text-[11px] text-zinc-400 mt-0.5 line-clamp-2 block" />
+            <RichText text={todo.description} className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5 line-clamp-2 block" />
           )}
           <div className="flex gap-1 mt-2">
             {[0, 1, 2].map(i => (
-              <div key={i} className="w-5 h-5 rounded bg-zinc-50" />
+              <div key={i} className="w-5 h-5 rounded bg-zinc-50 dark:bg-zinc-900" />
             ))}
           </div>
         </>
@@ -135,7 +135,7 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
             className={`mt-0.5 flex-shrink-0 w-4 h-4 rounded border transition-all duration-150 flex items-center justify-center hover:scale-110 active:scale-95 ${
               checked
                 ? 'bg-indigo-500 border-indigo-500'
-                : 'border-zinc-300 hover:border-indigo-400 hover:bg-indigo-50'
+                : 'border-zinc-300 dark:border-zinc-700 hover:border-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950'
             }`}
           >
             <svg
@@ -157,41 +157,41 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
 
           <div className="flex-1 min-w-0">
             <div className="flex items-start gap-1.5 min-w-0">
-              <LinkText text={todo.title} className={`text-sm font-medium break-words flex-1 min-w-0 ${isAssigned ? 'text-zinc-400' : 'text-zinc-800'}`} />
+              <LinkText text={todo.title} className={`text-sm font-medium break-words flex-1 min-w-0 ${isAssigned ? 'text-zinc-400 dark:text-zinc-500' : 'text-zinc-800 dark:text-zinc-100'}`} />
               <div className={`flex items-center gap-1.5 flex-shrink-0 ${hideOnHover}`}>
                 {(todo.recurrence_interval_days != null || todo.recurrence_pattern != null) && (
                   <Tooltip text={recurrenceLabel(todo.recurrence_interval_days, todo.recurrence_pattern)}>
-                    <svg className="w-3 h-3 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                    <svg className="w-3 h-3 text-zinc-400 dark:text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                       <path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
                     </svg>
                   </Tooltip>
                 )}
                 {todo.approx_time && (
-                  <span className="text-[9px] font-medium text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded-full">
+                  <span className="text-[9px] font-medium text-zinc-400 dark:text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded-full">
                     {fmtTime(todo.approx_time)}
                   </span>
                 )}
                 {isAssigned && (
-                  <span className="text-[9px] font-medium text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded-full">
+                  <span className="text-[9px] font-medium text-zinc-400 dark:text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded-full">
                     {dayLabel(todo.day_assigned)}
                   </span>
                 )}
               </div>
             </div>
             {todo.description && (
-              <RichText text={todo.description} className="text-xs text-zinc-400 mt-0.5 line-clamp-2 block" />
+              <RichText text={todo.description} className="text-xs text-zinc-400 dark:text-zinc-500 mt-0.5 line-clamp-2 block" />
             )}
           </div>
 
           <div
               className={`absolute right-0 top-0 items-center gap-1 pl-4 ${anyModalOpen ? 'hidden' : 'hidden group-hover:flex'}`}
-              style={{ background: `linear-gradient(to right, transparent, ${isAssigned ? '#fafafa' : '#ffffff'} 40%)` }}
+              style={{ background: `linear-gradient(to right, transparent, ${isAssigned ? 'var(--card-bg-assigned, #fafafa)' : 'var(--card-bg, #ffffff)'} 40%)` }}
               onPointerDown={e => e.stopPropagation()}
             >
               <Tooltip text="Edit">
                 <button
                   onClick={e => { e.stopPropagation(); onEdit(todo); }}
-                  className="p-1 rounded hover:bg-zinc-100 text-zinc-400 hover:text-zinc-600 transition"
+                  className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition"
                 >
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -209,7 +209,7 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
                   }}
                   tooltipText="Delete"
                 >
-                  <button className="p-1 rounded hover:bg-red-50 text-zinc-400 hover:text-red-500 transition">
+                  <button className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950 text-zinc-400 dark:text-zinc-500 hover:text-red-500 transition">
                     <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
@@ -219,7 +219,7 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
                 <Tooltip text="Delete">
                   <button
                     onClick={e => { e.stopPropagation(); onDelete(todo.id); }}
-                    className="p-1 rounded hover:bg-red-50 text-zinc-400 hover:text-red-500 transition"
+                    className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950 text-zinc-400 dark:text-zinc-500 hover:text-red-500 transition"
                   >
                     <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

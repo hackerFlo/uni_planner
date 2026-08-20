@@ -7,6 +7,8 @@ const {
   validateRecurrenceInterval,
   validateRecurrencePattern,
   sanitizeDayNote,
+  sanitizeTitle,
+  sanitizeDescription,
 } = require('../middleware/validate');
 
 const backupJsonParser = express.json({ limit: '5mb' });
@@ -40,8 +42,8 @@ router.get('/', requireAuth, (req, res) => {
             pl.name           AS recurrence_parent_list_name
        FROM todos t
        JOIN lists l ON l.id = t.list_id
-       LEFT JOIN todos parent ON parent.id = t.recurrence_parent_id
-       LEFT JOIN lists pl     ON pl.id = parent.list_id
+       LEFT JOIN todos parent ON parent.id = t.recurrence_parent_id AND parent.user_id = t.user_id
+       LEFT JOIN lists pl     ON pl.id = parent.list_id            AND pl.user_id = t.user_id
       WHERE t.user_id = ?`
   ).all(req.user.id);
 
@@ -157,12 +159,17 @@ router.post('/restore', requireAuth, backupJsonParser, (req, res) => {
     const pendingLinks = [];
 
     for (const t of todos) {
-      if (!t.title || typeof t.title !== 'string' || t.title.trim().length === 0) { skipped++; continue; }
+      // A backup file is untrusted input like any other body (AR-1), so it goes
+      // through the same sanitisers as POST /todos rather than a bare slice().
+      const title = sanitizeTitle(t.title);
+      if (title === null) { skipped++; continue; }
+      const description = sanitizeDescription(t.description);
+      if (description === null) { skipped++; continue; }
       const listName = resolveListName(t);
       if (!listName) { skipped++; continue; }
       const day = validateDayAssigned(t.day_assigned);
       if (day === false) { skipped++; continue; }
-      const key = todoKey(t.title, listName, t.created_at);
+      const key = todoKey(title, listName, t.created_at);
       if (existingIds.has(key)) { skipped++; continue; }
       const listId = ensureList(listName.slice(0, 40), resolveListColor(t));
       const now = new Date().toISOString();
@@ -171,8 +178,8 @@ router.post('/restore', requireAuth, backupJsonParser, (req, res) => {
       const pattern = validateRecurrencePattern(t.recurrence_pattern);
       const result = insert.run(
         req.user.id,
-        t.title.trim().slice(0, 200),
-        typeof t.description === 'string' ? t.description.slice(0, 5000) : '',
+        title,
+        description,
         listId,
         t.completed ? 1 : 0,
         t.archived ? 1 : 0,

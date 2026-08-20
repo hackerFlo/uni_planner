@@ -1,0 +1,117 @@
+[
+  {
+    "name": "splices a new tag out of a bare < and an unknown tag",
+    "input": "<<x>img src=x onerror=alert(1)>",
+    "expected": "&lt;img src=x onerror=alert(1)&gt;"
+  },
+  {
+    "name": "splices an anchor out of a bare < and an unknown closing tag",
+    "input": "<</q>a href=\"javascript:alert(1)\">click</a>",
+    "expected": "&lt;a href=\"javascript:alert(1)\"&gt;click"
+  },
+  {
+    "name": "splices a new tag across a dropped script tag",
+    "input": "<<script>img src=x onerror=alert(1)>",
+    "expected": "&lt;img src=x onerror=alert(1)&gt;"
+  },
+  {
+    "name": "splices a new tag across a dropped block tag",
+    "input": "<<div>img src=x onerror=alert(1)>",
+    "expected": ""
+  },
+  {
+    "name": "drops an img with an event handler",
+    "input": "<img src=x onerror=alert(1)>",
+    "expected": ""
+  },
+  {
+    "name": "drops an svg with an event handler",
+    "input": "<svg onload=alert(1)>",
+    "expected": ""
+  },
+  {
+    "name": "strips event handler attributes from an allowed tag",
+    "input": "<strong onclick=alert(1)>hi</strong>",
+    "expected": "<strong>hi</strong>"
+  },
+  {
+    "name": "drops an anchor whose attribute hides a closing bracket",
+    "input": "<a title=\"a>b\" href=\"javascript:alert(1)\">click</a>",
+    "expected": "b\" href=\"javascript:alert(1)\"&gt;click"
+  },
+  {
+    "name": "keeps plain prose untouched",
+    "input": "Read chapter 3 before Monday",
+    "expected": "Read chapter 3 before Monday"
+  },
+  {
+    "name": "keeps bold and italic",
+    "input": "<strong>bold</strong> and <em>italic</em>",
+    "expected": "<strong>bold</strong> and <em>italic</em>"
+  },
+  {
+    "name": "keeps an explicit line break",
+    "input": "line one<br>line two",
+    "expected": "line one<br>line two"
+  },
+  {
+    "name": "turns a closing block tag into a line break",
+    "input": "line one</div>line two",
+    "expected": "line one<br>line two"
+  },
+  {
+    "name": "keeps an unordered list",
+    "input": "<ul><li>one</li><li>two</li></ul>",
+    "expected": "<ul><li>one</li><li>two</li></ul>"
+  },
+  {
+    "name": "keeps emoji and accented characters",
+    "input": "Café ☕ 100% done 🎓",
+    "expected": "Café ☕ 100% done 🎓"
+  },
+  {
+    "name": "escapes an ampersand in ordinary prose",
+    "input": "Tom & Jerry",
+    "expected": "Tom &amp; Jerry"
+  },
+  {
+    "name": "leaves an already-encoded ampersand alone",
+    "input": "Tom &amp; Jerry",
+    "expected": "Tom &amp; Jerry"
+  },
+  {
+    "name": "leaves already-encoded angle brackets alone",
+    "input": "5 &lt; 10 &amp;&amp; 10 &gt; 5",
+    "expected": "5 &lt; 10 &amp;&amp; 10 &gt; 5"
+  },
+  {
+    "name": "leaves an already-encoded quote alone",
+    "input": "a &quot;quoted&quot; word",
+    "expected": "a &quot;quoted&quot; word"
+  },
+  {
+    "name": "leaves a numeric character reference alone",
+    "input": "costs &#8364;20 &#x24;25",
+    "expected": "costs &#8364;20 &#x24;25"
+  },
+  {
+    "name": "re-sanitises its own output for the bare < splice",
+    "input": "&lt;img src=x onerror=alert(1)&gt;",
+    "expected": "&lt;img src=x onerror=alert(1)&gt;"
+  },
+  {
+    "name": "re-sanitises its own output for mixed markup",
+    "input": "<strong>Tom &amp; Jerry</strong><br>5 &lt; 10",
+    "expected": "<strong>Tom &amp; Jerry</strong><br>5 &lt; 10"
+  },
+  {
+    "name": "keeps a javascript: url that is only text",
+    "input": "see javascript:alert(1) in the notes",
+    "expected": "see javascript:alert(1) in the notes"
+  },
+  {
+    "name": "drops an unknown tag but keeps its text",
+    "input": "a <span class=x>b</span> c",
+    "expected": "a b c"
+  }
+]

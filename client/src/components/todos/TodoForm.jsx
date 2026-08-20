@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import EmojiPicker from '../ui/EmojiPicker';
 import ConfirmPopover from '../ui/ConfirmPopover';
+import Tooltip from '../ui/Tooltip';
 import { useLists } from '../../context/ListsContext';
 import { loadEmojis, getLoadedEmojis } from '../../data/loadEmojis';
 import useIsMobile from '../../hooks/useIsMobile';
@@ -8,13 +9,8 @@ import { useRegisterModal } from '../../context/ModalContext';
 import { useToast } from '../../context/ToastContext';
 import { userMessage } from '../../api/errors';
 import { sanitizeRichHtml, richTextToPlain } from '../../utils/richText';
-
-function toIso(d) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${dd}`;
-}
+import { renderRichTextInto } from '../../utils/richTextDom';
+import { toIso } from '../../utils/dates';
 
 function getAssignableDates(extraDate) {
   const today = new Date();
@@ -94,7 +90,7 @@ function MobileActionButtons({ todo, dayAssigned, onComplete, onUpdate, onDelete
       <button
         type="button"
         onClick={() => { onComplete(todo); onClose(); }}
-        className="flex-1 py-3 text-sm font-medium rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition flex items-center justify-center"
+        className="flex-1 py-3 text-sm font-medium rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-600 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition flex items-center justify-center"
       >
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -104,7 +100,7 @@ function MobileActionButtons({ todo, dayAssigned, onComplete, onUpdate, onDelete
         <button
           type="button"
           onClick={() => { onUpdate(todo.id, { day_assigned: null }); onClose(); }}
-          className="flex-1 py-3 text-sm font-medium rounded-lg bg-zinc-100 text-zinc-700 hover:bg-zinc-200 transition flex items-center justify-center"
+          className="flex-1 py-3 text-sm font-medium rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition flex items-center justify-center"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -125,7 +121,7 @@ function MobileActionButtons({ todo, dayAssigned, onComplete, onUpdate, onDelete
         >
           <button
             type="button"
-            className="flex-1 py-3 text-sm font-medium rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition flex items-center justify-center"
+            className="flex-1 py-3 text-sm font-medium rounded-lg bg-red-50 dark:bg-red-950 text-red-600 hover:bg-red-100 dark:hover:bg-red-900 transition flex items-center justify-center"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -136,7 +132,7 @@ function MobileActionButtons({ todo, dayAssigned, onComplete, onUpdate, onDelete
         <button
           type="button"
           onClick={() => { if (window.confirm('Delete this task?')) { onDelete(todo.id); onClose(); } }}
-          className="flex-1 py-3 text-sm font-medium rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition flex items-center justify-center"
+          className="flex-1 py-3 text-sm font-medium rounded-lg bg-red-50 dark:bg-red-950 text-red-600 hover:bg-red-100 dark:hover:bg-red-900 transition flex items-center justify-center"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -168,6 +164,10 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const toast = useToast();
+  // Alt/Option turns the primary button into "Add & complete". Tracked rather than
+  // read off the click event so the label can change while the key is down --
+  // a modifier nobody can see is a modifier nobody uses.
+  const [altHeld, setAltHeld] = useState(false);
   const [emojiState, setEmojiState] = useState(null);
 
   const titleRef = useRef(null);
@@ -177,10 +177,12 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
 
   useEffect(() => { loadEmojis(); }, []);
 
-  // Seed contentEditable innerHTML once on mount (description is uncontrolled after that)
+  // Seed the contentEditable once on mount (uncontrolled after that). Built as
+  // DOM nodes rather than assigned as innerHTML: this was the client's only
+  // live-markup sink, and it is what made a sanitiser slip exploitable.
   useEffect(() => {
     if (descRef.current) {
-      descRef.current.innerHTML = todo?.description ?? '';
+      renderRichTextInto(descRef.current, todo?.description ?? '');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -424,7 +426,27 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
     }
   }
 
-  async function handleSubmit(e) {
+  useEffect(() => {
+    const sync = (e) => setAltHeld(e.altKey);
+    // blur matters: alt-tabbing away never delivers the keyup, leaving the button
+    // stuck on the wrong label.
+    const clear = () => setAltHeld(false);
+    window.addEventListener('keydown', sync);
+    window.addEventListener('keyup', sync);
+    window.addEventListener('blur', clear);
+    return () => {
+      window.removeEventListener('keydown', sync);
+      window.removeEventListener('keyup', sync);
+      window.removeEventListener('blur', clear);
+    };
+  }, []);
+
+  const canLogAsDone = mode !== 'edit' && Boolean(dayAssigned);
+
+  // completeNow logs something already done rather than planning it: create the
+  // item on the chosen day and tick it off in the same action, so the day column
+  // ends up an honest record of what happened.
+  async function handleSubmit(e, { completeNow = false } = {}) {
     e.preventDefault();
     if (!title.trim()) return setError('Title is required');
     if (!effectiveListId) return setError('Please select a list');
@@ -435,7 +457,11 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
       if (mode === 'edit') {
         await onUpdate(todo.id, data);
       } else {
-        await onCreate(data);
+        const created = await onCreate(data);
+        if (completeNow && created) {
+          await onComplete(created);
+          toast?.success('Added and marked complete.');
+        }
       }
       onClose();
     } catch (err) {
@@ -457,14 +483,14 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
       }}
       onKeyDown={e => { if (e.key === 'Escape' && !emojiState) handleClose(); }}
     >
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+      <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-xl w-full max-w-md p-6">
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-base font-semibold text-zinc-800">
+          <h2 className="text-base font-semibold text-zinc-800 dark:text-zinc-100">
             {mode === 'edit' ? 'Edit item' : 'New item'}
           </h2>
           <button
             onClick={handleClose}
-            className="text-zinc-400 hover:text-zinc-600 transition p-1 rounded-lg hover:bg-zinc-50"
+            className="text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition p-1 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -473,7 +499,7 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
         </div>
 
         {error && (
-          <div className="bg-red-50 text-red-600 text-sm px-3 py-2.5 rounded-lg mb-4">
+          <div className="bg-red-50 dark:bg-red-950 text-red-600 text-sm px-3 py-2.5 rounded-lg mb-4">
             {error}
           </div>
         )}
@@ -484,7 +510,7 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
           className="space-y-4"
         >
           <div>
-            <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1.5">
+            <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide mb-1.5">
               Title <span className="text-red-400">*</span>
             </label>
             <div className="relative">
@@ -505,14 +531,14 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
                 maxLength={200}
                 autoFocus
                 required
-                className="w-full px-3.5 py-2.5 text-sm bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                className="w-full px-3.5 py-2.5 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
                 placeholder="What needs to be done?"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1.5">
+            <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide mb-1.5">
               Description
             </label>
             <div className="relative">
@@ -526,7 +552,7 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
               )}
               <div className="relative">
                 {!description && (
-                  <span className="absolute top-2.5 left-3.5 text-sm text-zinc-400 pointer-events-none select-none">
+                  <span className="absolute top-2.5 left-3.5 text-sm text-zinc-400 dark:text-zinc-500 pointer-events-none select-none">
                     Optional details…
                   </span>
                 )}
@@ -538,7 +564,7 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
                   onKeyDown={handleDescKeyDown}
                   onPaste={handleDescPaste}
                   onBlur={() => setTimeout(() => setEmojiState(null), 150)}
-                  className="w-full px-3.5 py-2.5 text-sm bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition min-h-[80px] whitespace-pre-wrap break-words outline-none [&_ul]:list-['-_'] [&_ul]:pl-5 [&_ul]:my-0"
+                  className="w-full px-3.5 py-2.5 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition min-h-[80px] whitespace-pre-wrap break-words outline-none [&_ul]:list-['-_'] [&_ul]:pl-5 [&_ul]:my-0"
                 />
               </div>
             </div>
@@ -546,13 +572,13 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1.5">
+              <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide mb-1.5">
                 List
               </label>
               <select
                 value={effectiveListId ?? ''}
                 onChange={e => setListId(Number(e.target.value))}
-                className="w-full px-3.5 py-2.5 text-sm bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                className="w-full px-3.5 py-2.5 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
               >
                 {lists.map(l => (
                   <option key={l.id} value={l.id}>{l.name}</option>
@@ -561,13 +587,13 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1.5">
+              <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide mb-1.5">
                 Assign to day
               </label>
               <select
                 value={dayAssigned}
                 onChange={e => { setDayAssigned(e.target.value); if (!e.target.value) setRecurrence(''); }}
-                className="w-full px-3.5 py-2.5 text-sm bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition capitalize"
+                className="w-full px-3.5 py-2.5 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition capitalize"
               >
                 <option value="">None</option>
                 {assignableDates.flatMap(({ value, label, isNextWeek }, idx) => {
@@ -583,13 +609,13 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1.5">
-                Approx. time <span className="normal-case text-zinc-400 font-normal">(optional)</span>
+              <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide mb-1.5">
+                Approx. time <span className="normal-case text-zinc-400 dark:text-zinc-500 font-normal">(optional)</span>
               </label>
               <select
                 value={approxTime}
                 onChange={e => setApproxTime(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-sm bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                className="w-full px-3.5 py-2.5 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
               >
                 <option value="">None</option>
                 <option value="5m">5m</option>
@@ -615,21 +641,21 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
                   }}
                   placeholder="e.g. 20m or 3h"
                   maxLength={3}
-                  className="mt-1.5 w-full px-3.5 py-2.5 text-sm bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                  className="mt-1.5 w-full px-3.5 py-2.5 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
                 />
               )}
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1.5">
-                Repeat <span className="normal-case text-zinc-400 font-normal">(optional)</span>
+              <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide mb-1.5">
+                Repeat <span className="normal-case text-zinc-400 dark:text-zinc-500 font-normal">(optional)</span>
               </label>
               <select
                 value={recurrence}
                 onChange={e => setRecurrence(e.target.value)}
                 disabled={!dayAssigned}
                 title={!dayAssigned ? 'Pick a day first' : undefined}
-                className="w-full px-3.5 py-2.5 text-sm bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition disabled:opacity-40 disabled:cursor-not-allowed"
+                className="w-full px-3.5 py-2.5 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <option value="">Does not repeat</option>
                 <option value="1">Every day</option>
@@ -660,17 +686,37 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 text-sm font-medium text-zinc-600 bg-zinc-100 hover:bg-zinc-200 py-2.5 rounded-lg transition"
+              className="flex-1 text-sm font-medium text-zinc-600 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 py-2.5 rounded-lg transition"
             >
               Cancel
             </button>
+            {canLogAsDone && (
+              <Tooltip text="Create it already ticked off (or hold Alt)">
+                <button
+                  type="button"
+                  disabled={loading}
+                  aria-label="Add and mark complete"
+                  onClick={e => handleSubmit(e, { completeNow: true })}
+                  className="flex-shrink-0 w-10 py-2.5 text-sm font-medium rounded-lg border border-emerald-300 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950 disabled:opacity-60 transition flex items-center justify-center"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                  </svg>
+                </button>
+              </Tooltip>
+            )}
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 text-sm font-medium text-white bg-indigo-500 hover:bg-indigo-600 disabled:opacity-60 py-2.5 rounded-lg transition flex items-center justify-center gap-2"
+              onClick={canLogAsDone && altHeld ? (e => handleSubmit(e, { completeNow: true })) : undefined}
+              className={`flex-1 text-sm font-medium text-white disabled:opacity-60 py-2.5 rounded-lg transition flex items-center justify-center gap-2 ${
+                canLogAsDone && altHeld ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-indigo-500 hover:bg-indigo-600'
+              }`}
             >
               {loading && <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-              {mode === 'edit' ? 'Save changes' : 'Add item'}
+              {mode === 'edit'
+                ? 'Save changes'
+                : canLogAsDone && altHeld ? 'Add & complete' : 'Add item'}
             </button>
           </div>
         </form>

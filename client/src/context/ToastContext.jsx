@@ -5,10 +5,10 @@ const ToastContext = createContext(null);
 const DEFAULT_DURATION_MS = 4000;
 
 const STYLES = {
-  success: 'bg-emerald-50 text-emerald-800 border-emerald-200',
-  error: 'bg-red-50 text-red-700 border-red-200',
-  warning: 'bg-amber-50 text-amber-800 border-amber-200',
-  info: 'bg-indigo-50 text-indigo-800 border-indigo-200',
+  success: 'bg-emerald-50 dark:bg-emerald-950 text-emerald-800 border-emerald-200 dark:border-emerald-900',
+  error: 'bg-red-50 dark:bg-red-950 text-red-700 border-red-200',
+  warning: 'bg-amber-50 dark:bg-amber-950 text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-900',
+  info: 'bg-indigo-50 dark:bg-indigo-950 text-indigo-800 border-indigo-200 dark:border-indigo-900',
 };
 
 export function ToastProvider({ children }) {

@@ -1,30 +1,13 @@
-import { useRef, useState, useMemo, useEffect } from 'react';
+import { useRef, useMemo, useEffect } from 'react';
 import DayColumn from './DayColumn';
 import { useHolidays } from '../../hooks/useHolidays';
 import { useLists } from '../../context/ListsContext';
 import { useExams } from '../../context/ExamsContext';
-
-function getWeekDates(offset = 0) {
-  const today = new Date();
-  const day = today.getDay();
-  const diffToMonday = day === 0 ? -6 : 1 - day;
-  const monday = new Date(today);
-  monday.setDate(today.getDate() + diffToMonday + offset * 7);
-
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${dd}`;
-  });
-}
+import { toIso } from '../../utils/dates';
 
 const WEEK_LABEL = { '-1': 'Last Week', '0': 'This Week', '1': 'Next Week' };
 
-export default function WeeklyPlanner({ todos, isDragging, notes, onNoteChange, onUnassign, onComplete, onEdit, onDelete, onReorder, onAdd }) {
-  const [weekOffset, setWeekOffset] = useState(0);
+export default function WeeklyPlanner({ todos, weekOffset, weekDates, onWeekOffsetChange, completedByDate, revealedDays, onToggleCompleted, isDragging, notes, onNoteChange, onUnassign, onComplete, onEdit, onDelete, onReorder, onAdd }) {
   const holidays = useHolidays();
   const { lists } = useLists();
   const { upcomingExams } = useExams();
@@ -42,8 +25,6 @@ export default function WeeklyPlanner({ todos, isDragging, notes, onNoteChange, 
     lists.forEach((l, idx) => { order[l.id] = idx; });
     return order;
   }, [lists]);
-
-  const weekDates = useMemo(() => getWeekDates(weekOffset), [weekOffset]);
 
   const todosByDate = useMemo(() => {
     const result = {};
@@ -72,12 +53,7 @@ export default function WeeklyPlanner({ todos, isDragging, notes, onNoteChange, 
       } else if (weekOffset === -1) {
         container.scrollLeft = container.scrollWidth;
       } else {
-        const today = new Date();
-        const y = today.getFullYear();
-        const m = String(today.getMonth() + 1).padStart(2, '0');
-        const d = String(today.getDate()).padStart(2, '0');
-        const todayStr = `${y}-${m}-${d}`;
-        const idx = weekDates.indexOf(todayStr);
+        const idx = weekDates.indexOf(toIso(new Date()));
         if (idx < 0) return;
         const col = container.firstChild?.children[idx];
         if (!col) return;
@@ -91,12 +67,12 @@ export default function WeeklyPlanner({ todos, isDragging, notes, onNoteChange, 
   return (
     <div className="h-full flex flex-col p-5">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-widest">
+        <h2 className="text-xs font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">
           {WEEK_LABEL[String(weekOffset)]}
         </h2>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setWeekOffset(v => Math.max(-1, v - 1))}
+            onClick={() => onWeekOffsetChange(Math.max(-1, weekOffset - 1))}
             disabled={weekOffset === -1}
             className="text-xs font-semibold px-3 py-1 rounded-full bg-indigo-500/30 text-indigo-600 hover:bg-indigo-500/50 disabled:opacity-25 disabled:cursor-not-allowed transition-all"
           >
@@ -105,14 +81,14 @@ export default function WeeklyPlanner({ todos, isDragging, notes, onNoteChange, 
           </button>
           {weekOffset !== 0 && (
             <button
-              onClick={() => setWeekOffset(0)}
-              className="text-xs font-medium px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-500 hover:bg-zinc-200 transition-all"
+              onClick={() => onWeekOffsetChange(0)}
+              className="text-xs font-medium px-2.5 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-all"
             >
               Current
             </button>
           )}
           <button
-            onClick={() => setWeekOffset(v => Math.min(1, v + 1))}
+            onClick={() => onWeekOffsetChange(Math.min(1, weekOffset + 1))}
             disabled={weekOffset === 1}
             className="text-xs font-semibold px-3 py-1 rounded-full bg-indigo-500 text-white hover:bg-indigo-600 disabled:opacity-25 disabled:cursor-not-allowed transition-all"
           >
@@ -133,6 +109,9 @@ export default function WeeklyPlanner({ todos, isDragging, notes, onNoteChange, 
               key={date}
               date={date}
               todos={todosByDate[date]}
+              completedTodos={completedByDate[date] ?? []}
+              showCompleted={revealedDays.has(date)}
+              onToggleCompleted={onToggleCompleted}
               holiday={holidays.get(date) ?? null}
               exam={examsByDate.get(date) ?? null}
               isDragging={isDragging}

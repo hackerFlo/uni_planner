@@ -4,26 +4,23 @@ import { userMessage } from '../api/errors';
 import { useAuth } from './AuthContext';
 import { useUndo } from './UndoContext';
 import { useToast } from './ToastContext';
+import { parseDateLocal } from '../utils/dates';
+import { useToday } from './TimeContext';
+import { useAutoRefresh } from '../hooks/useAutoRefresh';
 
 const ExamsContext = createContext(null);
 
 const MS_PER_DAY = 86400000;
 
-function parseDateLocal(dateStr) {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  return new Date(y, m - 1, d);
-}
-
-function daysUntil(dateStr) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return Math.round((parseDateLocal(dateStr) - today) / MS_PER_DAY);
+function daysUntil(dateStr, todayIso) {
+  return Math.round((parseDateLocal(dateStr) - parseDateLocal(todayIso)) / MS_PER_DAY);
 }
 
 export function ExamsProvider({ children }) {
   const { user } = useAuth();
   const { recordUndo } = useUndo();
   const toast = useToast();
+  const todayIso = useToday();
   const [exams, setExams] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const examsRef = useRef(exams);
@@ -41,13 +38,16 @@ export function ExamsProvider({ children }) {
   }, [user, toast]);
 
   useEffect(() => { fetchExams(); }, [fetchExams]);
+  useAutoRefresh(fetchExams);
 
+  // todayIso is a real dependency: daysUntil reads it, so leaving it out froze
+  // every countdown at whatever it was when the exams were last fetched.
   const upcomingExams = useMemo(
     () => exams
-      .map(e => ({ ...e, daysRemaining: daysUntil(e.exam_date) }))
+      .map(e => ({ ...e, daysRemaining: daysUntil(e.exam_date, todayIso) }))
       .filter(e => e.daysRemaining >= 0)
       .sort((a, b) => a.daysRemaining - b.daysRemaining),
-    [exams]
+    [exams, todayIso]
   );
 
   const addExam = useCallback(async (title, examDate) => {

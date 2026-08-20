@@ -1,0 +1,146 @@
+name: CI
+
+# G-2 requires tests to pass before a commit lands. Nothing enforced that until
+# now: docker-publish.yml builds and pushes images on every push to main without
+# running a single test, so a red suite still ships. This workflow is the gate.
+#
+# Deliberately NOT here: eslint, prettier, tsc. The project configures none of
+# them (no .eslintrc, no .prettierrc, no tsconfig.json anywhere), so a step
+# invoking them would fail on "command not found" and teach everyone to ignore
+# CI. Adding those tools is tracked separately -- see the audit report.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# This workflow only reads the repo. It publishes nothing, comments on nothing,
+# and needs no packages:write (that belongs to docker-publish.yml alone).
+permissions:
+  contents: read
+
+# A hobby project has finite Actions minutes. Superseded pushes to the same PR
+# stop paying for themselves.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Separate jobs rather than one matrix, because the two packages genuinely
+  # need different runtimes and different commands -- a matrix would need an
+  # `if:` on nearly every step, which is a matrix in name only.
+  server-test:
+    name: server tests (node 20)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Matches server/Dockerfile's `node:20-alpine`. Testing on the version
+          # that actually ships is the whole point.
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+  client-test:
+    name: client tests (node 22)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # NOT 20, unlike every other job here. client/package.json's test
+          # script is `node --test "src/**/*.test.js"`, and glob expansion by
+          # the test runner only exists from Node 22 -- Node 20.19.5 treats the
+          # pattern as a literal path, prints "Could not find .../src/**/*.test.js"
+          # and exits 1. That failure says nothing about the code. Node 20 is
+          # only a runtime concern for the server; the client ships as static
+          # files, so the version that runs its tests is free to be newer.
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+  client-build:
+    name: client build (node 20)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Matches client/Dockerfile's builder stage, so a build that passes
+          # here is the build that produces the shipped bundle.
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      # Necessary, explicitly NOT sufficient. `vite build` resolves imports but
+      # does not execute the app: this project has already shipped a bundle that
+      # built cleanly and then threw at runtime on a missing import, because the
+      # broken path was only reached at render time. A green build means "it
+      # bundles", not "it works". Only the tests above and a manual smoke test
+      # of the deployed page can say the latter.
+      - name: Build
+        run: npm run build
+        env:
+          VITE_APP_VERSION: ci
+          VITE_APP_COMMIT: ${{ github.sha }}
+
+  audit:
+    name: npm audit (${{ matrix.package }})
+    runs-on: ubuntu-latest
+    # VS-13 (MUST): a dependency scanner on every PR. A matrix IS right here --
+    # the command is byte-identical for both packages, only the directory moves.
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [server, client]
+    defaults:
+      run:
+        working-directory: ${{ matrix.package }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: ${{ matrix.package }}/package-lock.json
+
+      # --omit=dev on purpose. The client's dev tree (vite, postcss, workbox,
+      # babel) carries several highs that are all build-time-only: they process
+      # this repo's own source on a trusted runner and never see a request from
+      # a user. Failing CI on those would make the signal worthless within a
+      # week. Dependabot (see .github/dependabot.yml) still raises them as PRs.
+      #
+      # No continue-on-error: this is a real gate. Both packages are clean at
+      # --audit-level=high today (server 0, client 2 moderate), so a high
+      # appearing here means something genuinely new arrived.
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high

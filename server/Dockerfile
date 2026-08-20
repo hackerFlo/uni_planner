@@ -6,6 +6,9 @@ RUN npm ci --omit=dev
 
 FROM node:20-alpine
 WORKDIR /app
+# The image is production by default rather than relying on compose to say so;
+# a missing NODE_ENV used to load the dev seed. Still overridable at run time.
+ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # Only /app/data needs to be writable. The application files stay root-owned and

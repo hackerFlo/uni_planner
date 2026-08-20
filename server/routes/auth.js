@@ -10,6 +10,9 @@ const { sendDailySummary } = require('../mailer');
 const { localDayBoundsUtc } = require('../time');
 const { SESSION_COOKIE_NAME, sessionCookieOptions, clearSessionCookieOptions } = require('../config');
 const { authLimiter, sessionLimiter } = require('../middleware/rateLimiter');
+const {
+  createSession, deleteSession, deleteAllSessions, sweepExpiredSessions,
+} = require('../sessions');
 
 const router = express.Router();
 
@@ -40,7 +43,11 @@ router.post('/login', authLimiter, async (req, res) => {
     return res.status(401).json({ error: 'Invalid email or password' });
   }
 
-  const token = jwt.sign({ id: user.id, email: user.email, tv: user.token_version }, process.env.JWT_SECRET, {
+  // Cheap housekeeping on a route that runs rarely, so the table cannot grow
+  // without bound from devices that simply stopped coming back.
+  sweepExpiredSessions();
+  const sid = createSession(user.id);
+  const token = jwt.sign({ id: user.id, email: user.email, tv: user.token_version, sid }, process.env.JWT_SECRET, {
     expiresIn: JWT_EXPIRES_IN,
   });
 
@@ -77,7 +84,8 @@ router.post('/register', authLimiter, async (req, res) => {
   })();
 
   const user = db.prepare('SELECT id, email, created_at, token_version FROM users WHERE id = ?').get(userId);
-  const token = jwt.sign({ id: user.id, email: user.email, tv: user.token_version }, process.env.JWT_SECRET, {
+  const sid = createSession(user.id);
+  const token = jwt.sign({ id: user.id, email: user.email, tv: user.token_version, sid }, process.env.JWT_SECRET, {
     expiresIn: JWT_EXPIRES_IN,
   });
 
@@ -85,7 +93,26 @@ router.post('/register', authLimiter, async (req, res) => {
   res.status(201).json({ user: { id: user.id, email: user.email, created_at: user.created_at } });
 });
 
+// Clearing the cookie alone left the JWT valid for its remaining 7 days, so a
+// copied token outlived the sign-out. Deleting the session row named by `sid`
+// revokes it -- and only it, so signing out on a phone leaves the desktop signed
+// in. Best effort by design: logout has no requireAuth and must still answer 200
+// when the cookie is missing, expired or forged.
+function revokeThisDevice(req) {
+  const token = req.cookies?.[SESSION_COOKIE_NAME];
+  if (!token) return;
+  const rlog = req.log || log;
+  try {
+    const { id, sid } = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
+    const revoked = sid ? deleteSession(sid, id) > 0 : false;
+    rlog.info('logout ok', { userId: id, deviceRevoked: revoked });
+  } catch (err) {
+    rlog.warn('logout without a valid session', { reason: 'jwt-verify-failed', err });
+  }
+}
+
 router.post('/logout', sessionLimiter, (req, res) => {
+  revokeThisDevice(req);
   res.clearCookie(SESSION_COOKIE_NAME, clearSessionCookieOptions(req));
   res.json({ ok: true });
 });
@@ -127,10 +154,18 @@ router.patch('/me', authLimiter, requireAuth, async (req, res) => {
     passwordHash = await bcrypt.hash(newPassword, 12);
   }
 
-  const newTokenVersion = newPassword ? user.token_version + 1 : user.token_version;
+  // Unlike logout, this revokes EVERY device. Changing a password or the login
+  // identifier is the "someone may have my credentials" lever, and a lever that
+  // spared some devices would not be one. Both mechanisms are used: the bumped
+  // token_version kills tokens already in flight, and dropping the session rows
+  // means a stolen `sid` cannot be replayed either. The device making the change
+  // gets a fresh session immediately, so it stays signed in.
+  const newTokenVersion = user.token_version + 1;
   db.prepare('UPDATE users SET email = ?, password_hash = ?, token_version = ? WHERE id = ?').run(email, passwordHash, newTokenVersion, req.user.id);
+  deleteAllSessions(req.user.id);
 
-  const token = jwt.sign({ id: req.user.id, email, tv: newTokenVersion }, process.env.JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+  const sid = createSession(req.user.id);
+  const token = jwt.sign({ id: req.user.id, email, tv: newTokenVersion, sid }, process.env.JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
   res.cookie(SESSION_COOKIE_NAME, token, sessionCookieOptions(req));
   res.json({ user: { id: req.user.id, email, created_at: user.created_at } });
 });
@@ -185,6 +220,10 @@ router.patch('/notification-settings', sessionLimiter, requireAuth, (req, res) =
       try {
         updates.notify_email_enc = encryptEmail(notify_email);
       } catch (err) {
+        // One message covers a missing key, a rotated key and a corrupt
+        // ciphertext, so without this line the cause is unrecoverable. The
+        // address itself is never logged (S-5); the logger redacts anyway.
+        (req.log || log).error('notification email encrypt failed', { userId: req.user.id, err });
         return res.status(500).json({ error: 'Encryption not configured' });
       }
     }
@@ -209,6 +248,7 @@ router.post('/test-email', authLimiter, requireAuth, async (req, res) => {
   try {
     toEmail = decryptEmail(user.notify_email_enc);
   } catch (err) {
+    (req.log || log).error('notification email decrypt failed', { userId: req.user.id, err });
     return res.status(500).json({ error: 'Encryption not configured on server.' });
   }
 

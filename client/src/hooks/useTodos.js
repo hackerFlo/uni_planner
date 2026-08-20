@@ -3,6 +3,7 @@ import { api } from '../api/client';
 import { userMessage } from '../api/errors';
 import { useUndo } from '../context/UndoContext';
 import { useToast } from '../context/ToastContext';
+import { useAutoRefresh } from './useAutoRefresh';
 
 function mergeTodoUpdate(prev, todo, materialized, removedIds) {
   const removed = new Set(removedIds);
@@ -41,29 +42,7 @@ export function useTodos() {
     }
   }, [toast]);
 
-  useEffect(() => {
-    function handleVisibility() {
-      if (document.visibilityState === 'visible') fetchTodos();
-    }
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, [fetchTodos]);
-
-  useEffect(() => {
-    const timerRef = { current: null };
-    function scheduleAtMidnight() {
-      const now = new Date();
-      const msUntilMidnight =
-        new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime() - now.getTime();
-      timerRef.current = setTimeout(() => {
-        // Skip fetch when hidden; visibilitychange handler will catch up on resume
-        if (document.visibilityState === 'visible') fetchTodos();
-        scheduleAtMidnight();
-      }, msUntilMidnight);
-    }
-    scheduleAtMidnight();
-    return () => clearTimeout(timerRef.current);
-  }, [fetchTodos]);
+  useAutoRefresh(fetchTodos);
 
   const createTodo = useCallback(async (data) => {
     const { todo, materialized = [] } = await api.post('/api/todos', data);

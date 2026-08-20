@@ -2,6 +2,7 @@ import { useState } from 'react';
 import SettingsPanel from './SettingsPanel';
 import Tooltip from '../ui/Tooltip';
 import { useExams } from '../../context/ExamsContext';
+import { formatCountdown } from '../../utils/dates';
 
 function CapIcon({ className }) {
   return (
@@ -18,7 +19,7 @@ function ExamControl({ nextExam, openModal }) {
       <Tooltip text="Exams">
         <button
           onClick={e => { e.currentTarget.blur(); openModal(); }}
-          className="flex items-center justify-center w-8 h-8 rounded-lg transition text-zinc-400 hover:text-zinc-700 hover:bg-zinc-50"
+          className="flex items-center justify-center w-8 h-8 rounded-lg transition text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800"
         >
           <CapIcon className="w-4 h-4" />
         </button>
@@ -32,7 +33,7 @@ function ExamControl({ nextExam, openModal }) {
   const displayTitle = truncated ? nextExam.title.slice(0, MAX_TITLE_CHARS) + '…' : nextExam.title;
 
   const subtitle = (
-    <span className="block text-[10px] font-medium text-zinc-400 leading-none mt-0.5">
+    <span className="block text-[10px] font-medium text-zinc-400 dark:text-zinc-500 leading-none mt-0.5">
       Next exam · {displayTitle}
     </span>
   );
@@ -42,13 +43,13 @@ function ExamControl({ nextExam, openModal }) {
       onClick={e => { e.currentTarget.blur(); openModal(); }}
       className={`inline-flex items-center gap-2 pl-3.5 pr-1 py-1 rounded-full border border-transparent active:scale-[0.98] transition ${
         isUrgent
-          ? 'bg-rose-50 hover:bg-rose-100 hover:border-rose-200'
-          : 'bg-indigo-50 hover:bg-indigo-100 hover:border-indigo-200'
+          ? 'bg-rose-50 dark:bg-rose-950 hover:bg-rose-100 dark:hover:bg-rose-900 hover:border-rose-200'
+          : 'bg-indigo-50 dark:bg-indigo-950 hover:bg-indigo-100 dark:hover:bg-indigo-900 hover:border-indigo-200'
       }`}
     >
       <span className="flex flex-col items-end leading-none min-w-0">
         <span className={`text-sm font-bold tracking-tight leading-none ${isUrgent ? 'text-rose-600' : 'text-indigo-600'}`}>
-          {nextExam.daysRemaining} days
+          {formatCountdown(nextExam.daysRemaining)}
         </span>
         {truncated ? <Tooltip text={nextExam.title}>{subtitle}</Tooltip> : subtitle}
       </span>
@@ -65,14 +66,14 @@ export default function Navbar({ onArchiveToggle, archiveOpen, fetchTodos, onOpe
 
   return (
     <>
-      <header className="h-14 flex-shrink-0 border-b border-zinc-100 flex items-center px-5 gap-4 bg-white">
+      <header className="h-14 flex-shrink-0 border-b border-zinc-100 dark:border-zinc-800 flex items-center px-5 gap-4 bg-white dark:bg-zinc-900">
         <div className="flex items-center gap-2.5 mr-auto">
           <div className="w-7 h-7 rounded-lg bg-indigo-500 flex items-center justify-center">
             <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
             </svg>
           </div>
-          <span className="text-sm font-semibold text-zinc-800 tracking-tight">Uni Planner</span>
+          <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-100 tracking-tight">Uni Planner</span>
         </div>
 
         <ExamControl nextExam={nextExam} openModal={openModal} />
@@ -82,8 +83,8 @@ export default function Navbar({ onArchiveToggle, archiveOpen, fetchTodos, onOpe
             onClick={onArchiveToggle}
             className={`hidden sm:flex items-center justify-center w-8 h-8 rounded-lg transition ${
               archiveOpen
-                ? 'bg-indigo-50 text-indigo-600'
-                : 'text-zinc-400 hover:text-zinc-700 hover:bg-zinc-50'
+                ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-600'
+                : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800'
             }`}
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -96,7 +97,7 @@ export default function Navbar({ onArchiveToggle, archiveOpen, fetchTodos, onOpe
           <button
             onClick={() => setSettingsOpen(v => !v)}
             className={`flex items-center justify-center w-8 h-8 rounded-lg transition ${
-              settingsOpen ? 'bg-indigo-50 text-indigo-600' : 'text-zinc-400 hover:text-zinc-700 hover:bg-zinc-50'
+              settingsOpen ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-600' : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800'
             }`}
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

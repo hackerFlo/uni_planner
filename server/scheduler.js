@@ -5,6 +5,7 @@ const { decryptEmail } = require('./crypto');
 const { sendDailySummary } = require('./mailer');
 const { materializeWindowForUser } = require('./recurrence');
 const { localDayBoundsUtc } = require('./time');
+const { sweepExpiredSessions } = require('./sessions');
 
 // Intl.DateTimeFormat instances are expensive to construct; cache by key.
 const dtfCache = new Map();
@@ -137,7 +138,19 @@ function startScheduler() {
     await sendDueSummaries(now);
   });
 
-  log.info('scheduler started', { jobs: 'daily summary, recurrence materialization' });
+  // Expired sessions are already refused at auth time; this only keeps the table
+  // from growing forever. Nightly is ample, and 03:30 stays clear of the 04:00
+  // Watchtower window so a sweep is never half-done when the container restarts.
+  cron.schedule('30 3 * * *', () => {
+    try {
+      const removed = sweepExpiredSessions();
+      if (removed > 0) log.info('expired sessions swept', { removed });
+    } catch (err) {
+      log.error('session sweep failed', { err });
+    }
+  });
+
+  log.info('scheduler started', { jobs: 'daily summary, recurrence materialization, session sweep' });
 }
 
 module.exports = { startScheduler };

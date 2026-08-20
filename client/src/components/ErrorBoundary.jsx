@@ -26,7 +26,7 @@ export default class ErrorBoundary extends Component {
     if (!this.state.error) return this.props.children;
 
     return (
-      <div className="min-h-screen bg-zinc-50 flex items-center justify-center px-4">
+      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-900 flex items-center justify-center px-4">
         <div className="w-full max-w-sm text-center">
           <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-indigo-500 mb-5">
             <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -34,10 +34,10 @@ export default class ErrorBoundary extends Component {
             </svg>
           </div>
 
-          <h1 className="text-xl font-semibold text-zinc-800 tracking-tight mb-2">Something went wrong</h1>
-          <p className="text-sm text-zinc-400 mb-2">An unexpected error occurred.</p>
+          <h1 className="text-xl font-semibold text-zinc-800 dark:text-zinc-100 tracking-tight mb-2">Something went wrong</h1>
+          <p className="text-sm text-zinc-400 dark:text-zinc-500 mb-2">An unexpected error occurred.</p>
           {this.state.error?.message && (
-            <p className="text-xs font-mono text-zinc-400 bg-zinc-100 rounded-lg px-3 py-2 mb-8 text-left break-all">
+            <p className="text-xs font-mono text-zinc-400 dark:text-zinc-500 bg-zinc-100 dark:bg-zinc-800 rounded-lg px-3 py-2 mb-8 text-left break-all">
               {this.state.error.message}
             </p>
           )}
@@ -52,7 +52,7 @@ export default class ErrorBoundary extends Component {
             Reload app
           </button>
 
-          <p className="mt-8 font-mono text-[11px] text-zinc-300">
+          <p className="mt-8 font-mono text-[11px] text-zinc-300 dark:text-zinc-600">
             v{__APP_VERSION__} · {__APP_COMMIT__}
           </p>
         </div>

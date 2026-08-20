@@ -26,7 +26,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-50 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-900 flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="mb-10 text-center">
           <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-indigo-500 mb-5">
@@ -34,13 +34,13 @@ export default function LoginPage() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
             </svg>
           </div>
-          <h1 className="text-2xl font-semibold text-zinc-800 tracking-tight">Uni Planner</h1>
-          <p className="text-sm text-zinc-400 mt-1">Sign in to your workspace</p>
+          <h1 className="text-2xl font-semibold text-zinc-800 dark:text-zinc-100 tracking-tight">Uni Planner</h1>
+          <p className="text-sm text-zinc-400 dark:text-zinc-500 mt-1">Sign in to your workspace</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="bg-red-50 border border-red-100 text-red-600 text-sm px-4 py-3 rounded-lg">
+            <div className="bg-red-50 dark:bg-red-950 border border-red-100 text-red-600 text-sm px-4 py-3 rounded-lg">
               <p>{userMessage(error)}</p>
               {/* Matches a line in `docker logs` -- see server/middleware/requestId.js */}
               {error.requestId && (
@@ -59,7 +59,7 @@ export default function LoginPage() {
           )}
 
           <div>
-            <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1.5">
+            <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide mb-1.5">
               Username or Email
             </label>
             <input
@@ -69,13 +69,13 @@ export default function LoginPage() {
               required
               autoFocus
               maxLength={100}
-              className="w-full px-3.5 py-2.5 text-sm bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+              className="w-full px-3.5 py-2.5 text-sm bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
               placeholder="username or you@example.com"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1.5">
+            <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide mb-1.5">
               Password
             </label>
             <input
@@ -84,7 +84,7 @@ export default function LoginPage() {
               onChange={e => setPassword(e.target.value)}
               required
               maxLength={128}
-              className="w-full px-3.5 py-2.5 text-sm bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+              className="w-full px-3.5 py-2.5 text-sm bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
               placeholder="••••••••"
             />
           </div>
@@ -100,7 +100,7 @@ export default function LoginPage() {
         </form>
 
         {/* The one build check that needs neither a login nor a shell on the NAS. */}
-        <p className="mt-10 text-center font-mono text-[11px] text-zinc-300">
+        <p className="mt-10 text-center font-mono text-[11px] text-zinc-300 dark:text-zinc-600">
           v{__APP_VERSION__} · {__APP_COMMIT__}
         </p>
       </div>

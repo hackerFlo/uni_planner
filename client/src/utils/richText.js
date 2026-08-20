@@ -2,6 +2,17 @@ const BLOCK_CLOSE_RE = /<\/(div|p)>/gi;
 const BLOCK_OPEN_RE = /<(div|p|span|a|img|table|ol|header|footer|section|article|nav|h[1-6])[^>]*>/gi;
 const TAG_RE = /<\/?[a-zA-Z][^>]*>/g;
 
+// Matches an `&` that does not already begin a character reference, so text that
+// arrived as `&amp;`/`&lt;` (the browser's own innerHTML serialisation) is left
+// alone and sanitising twice cannot double-encode it.
+const BARE_AMP_RE = /&(?!(?:#\d+|#[xX][0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]{1,31});)/g;
+
+// A raw `<` surviving in a text run is what lets a dropped tag splice its
+// neighbours into a brand-new tag that the tokeniser has already walked past.
+function escapeTextRun(text) {
+  return text.replace(BARE_AMP_RE, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 function normalizeInlineTag(tag) {
   if (/^<br[\s/]*>$/i.test(tag)) return '<br>';
   if (/^<(strong|b)(\s[^>]*)?>$/i.test(tag)) return '<strong>';
@@ -28,12 +39,12 @@ export function sanitizeRichHtml(input) {
   TAG_RE.lastIndex = 0;
   let m;
   while ((m = TAG_RE.exec(s)) !== null) {
-    if (m.index > lastIdx) result.push(s.slice(lastIdx, m.index));
+    if (m.index > lastIdx) result.push(escapeTextRun(s.slice(lastIdx, m.index)));
     const norm = normalizeInlineTag(m[0]);
     if (norm) result.push(norm);
     lastIdx = m.index + m[0].length;
   }
-  if (lastIdx < s.length) result.push(s.slice(lastIdx));
+  if (lastIdx < s.length) result.push(escapeTextRun(s.slice(lastIdx)));
 
   let html = result.join('');
   // Collapse 3+ consecutive breaks to 2

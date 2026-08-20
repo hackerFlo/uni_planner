@@ -101,10 +101,10 @@ export default function EmojiPicker({ anchorRef, query, onSelect, onClose }) {
     <div
       ref={pickerRef}
       style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 9999 }}
-      className="flex flex-col bg-white border border-zinc-200 rounded-xl shadow-lg p-1.5"
+      className="flex flex-col bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg p-1.5"
     >
       {q.length === 0 && (
-        <p className="text-[9px] text-zinc-400 px-1 mb-1 uppercase tracking-wide font-medium">Recent</p>
+        <p className="text-[9px] text-zinc-400 dark:text-zinc-500 px-1 mb-1 uppercase tracking-wide font-medium">Recent</p>
       )}
       <div className="flex items-center gap-0.5">
         {results.map(({ e, n }, i) => (
@@ -114,7 +114,7 @@ export default function EmojiPicker({ anchorRef, query, onSelect, onClose }) {
             onPointerDown={ev => { ev.preventDefault(); handleClick(e); }}
             title={`:${n[0]}:`}
             className={`text-xl w-9 h-9 flex items-center justify-center rounded-lg transition-colors ${
-              i === idx ? 'bg-indigo-50 ring-2 ring-indigo-200' : 'hover:bg-zinc-100'
+              i === idx ? 'bg-indigo-50 dark:bg-indigo-950 ring-2 ring-indigo-200' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800'
             }`}
           >
             {e}
@@ -122,7 +122,7 @@ export default function EmojiPicker({ anchorRef, query, onSelect, onClose }) {
         ))}
       </div>
       {results[idx] && (
-        <p className="text-[10px] text-zinc-400 px-1 mt-0.5 truncate max-w-[288px]">
+        <p className="text-[10px] text-zinc-400 dark:text-zinc-500 px-1 mt-0.5 truncate max-w-[288px]">
           :{results[idx].n[0]}:
         </p>
       )}

@@ -27,6 +27,7 @@ const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const { todoLimiter, backupLimiter } = require('./middleware/rateLimiter');
 const requestId = require('./middleware/requestId');
+const { jsonBodyParser } = require('./middleware/bodyParser');
 const requestLog = require('./middleware/requestLog');
 const { VERSION, COMMIT } = require('./version');
 const { TRUST_PROXY_HOPS, COOKIE_SECURE_OVERRIDE, CORS_ORIGIN } = config;
@@ -74,7 +75,9 @@ app.use('/api', (_req, res, next) => {
 // Ahead of the body parser: a malformed body short-circuits straight to the
 // error handler, and that request must still appear in the log.
 app.use('/api', requestLog);
-app.use(express.json({ limit: '10kb' }));
+// 10 kB everywhere except the backup restore, which carries its own 5 MB
+// parser. See middleware/bodyParser.js for why this cannot be a plain app.use.
+app.use(jsonBodyParser());
 app.use(cookieParser());
 
 app.use('/api/health', healthRoutes); // public by design -- see routes/health.js

@@ -50,3 +50,82 @@
     @apply bg-zinc-200;
   }
 }
+
+/* Loading bar. Creeps toward 90% while a request is open -- it can never honestly
+   report progress, so it eases toward "almost there" and only completes when the
+   request actually does. prefers-reduced-motion gets a static bar, not a crawl. */
+.loading-bar {
+  width: 0;
+  animation: loading-bar-creep 8s cubic-bezier(0.1, 0.6, 0.3, 1) forwards;
+  transition: width 200ms ease-out, opacity 300ms ease-out;
+}
+
+.loading-bar--done {
+  animation: none;
+  width: 100%;
+  opacity: 0;
+}
+
+@keyframes loading-bar-creep {
+  0%   { width: 0; }
+  30%  { width: 45%; }
+  60%  { width: 70%; }
+  100% { width: 90%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-bar {
+    animation: none;
+    width: 90%;
+    transition: none;
+  }
+  .loading-bar--done { transition: none; }
+}
+
+/* Surfaces that are set from JS rather than a Tailwind class. Kept here so the
+   two themes are defined in one place instead of inside component logic. */
+:root {
+  --day-bg: #ffffff;
+  --day-bg-today: rgb(246,248,255);
+  --day-bg-exam: rgb(255,241,242);
+  --day-bg-holiday: rgb(244,252,249);
+  --card-bg: #ffffff;
+  --card-bg-assigned: #fafafa;
+}
+
+.dark {
+  --day-bg: #18181b;          /* zinc-900 */
+  --day-bg-today: #1e1b4b;    /* indigo-950 */
+  --day-bg-exam: #4c0519;     /* rose-950 */
+  --day-bg-holiday: #022c22;  /* emerald-950 */
+  --card-bg: #18181b;
+  --card-bg-assigned: #27272a; /* zinc-800 */
+}
+
+/* The viewer paints its own ground behind the app, so body needs an explicit
+   background or the page borrows the host's colour at the edges. */
+html.dark body {
+  background-color: #18181b;
+  color: #f4f4f5;
+}
+
+/* Compact density trims the vertical rhythm of the cards and day columns without
+   touching their layout, so the same board fits more of a week on a phone. */
+:root[data-density='compact'] {
+  --card-padding: 0.5rem;
+}
+:root[data-density='compact'] .space-y-2 > * + * { margin-top: 0.25rem; }
+:root[data-density='compact'] .p-3 { padding: 0.5rem; }
+:root[data-density='compact'] .p-2\.5 { padding: 0.375rem; }
+:root[data-density='compact'] .py-3 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+
+/* An explicit preference, honoured alongside the OS one. The media query below
+   already covers users who set it system-wide; this covers the in-app toggle. */
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}

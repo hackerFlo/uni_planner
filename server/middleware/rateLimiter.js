@@ -1,8 +1,17 @@
 const rateLimit = require('express-rate-limit');
 const { log } = require('../logger');
 
-const isDev = process.env.NODE_ENV !== 'production';
-const skipInDev = () => isDev;
+// Fail closed. This read `NODE_ENV !== 'production'`, so every limiter switched
+// itself off whenever NODE_ENV was unset, misspelt or simply not passed through
+// by the runtime -- a security control that disappears without a trace. Now the
+// limiters are on unless something explicitly asks for them to be off, and that
+// choice is announced once at boot.
+const rateLimitDisabled = process.env.DISABLE_RATE_LIMIT === 'true';
+const skipWhenDisabled = () => rateLimitDisabled;
+
+if (rateLimitDisabled) {
+  log.warn('rate limiting disabled', { via: 'DISABLE_RATE_LIMIT' });
+}
 
 // express-rate-limit answers a 429 and tells nobody. Naming the limiter makes
 // "the app locked me out" greppable instead of invisible.
@@ -21,7 +30,7 @@ const authLimiter = rateLimit({
   handler: limitHandler('auth'),
   windowMs: 15 * 60 * 1000,
   max: 20,
-  skip: skipInDev,
+  skip: skipWhenDisabled,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later.' },
@@ -31,7 +40,7 @@ const todoLimiter = rateLimit({
   handler: limitHandler('todo'),
   windowMs: 15 * 60 * 1000,
   max: 300,
-  skip: skipInDev,
+  skip: skipWhenDisabled,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later.' },
@@ -44,7 +53,7 @@ const sessionLimiter = rateLimit({
   handler: limitHandler('session'),
   windowMs: 15 * 60 * 1000,
   max: 300,
-  skip: skipInDev,
+  skip: skipWhenDisabled,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later.' },
@@ -54,10 +63,10 @@ const backupLimiter = rateLimit({
   handler: limitHandler('backup'),
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 10,
-  skip: skipInDev,
+  skip: skipWhenDisabled,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later.' },
 });
 
-module.exports = { authLimiter, sessionLimiter, todoLimiter, backupLimiter };
+module.exports = { authLimiter, sessionLimiter, todoLimiter, backupLimiter, rateLimitDisabled };

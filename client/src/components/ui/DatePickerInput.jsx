@@ -67,10 +67,10 @@ export default function DatePickerInput({ value, onChange, className = '', minVa
       <button
         type="button"
         onClick={openPicker}
-        className="w-full flex items-center gap-2 text-sm font-medium border border-indigo-200 bg-white rounded-lg px-3 py-2 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition text-left"
+        className="w-full flex items-center gap-2 text-sm font-medium border border-indigo-200 dark:border-indigo-900 bg-white dark:bg-zinc-900 rounded-lg px-3 py-2 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition text-left"
       >
-        <CalendarIcon size={14} className="text-zinc-400 flex-shrink-0" />
-        <span className={value ? 'text-zinc-900' : 'text-zinc-400'}>
+        <CalendarIcon size={14} className="text-zinc-400 dark:text-zinc-500 flex-shrink-0" />
+        <span className={value ? 'text-zinc-900 dark:text-zinc-50' : 'text-zinc-400 dark:text-zinc-500'}>
           {value ? formatDisplay(value) : 'Select date…'}
         </span>
       </button>
@@ -79,7 +79,7 @@ export default function DatePickerInput({ value, onChange, className = '', minVa
         <div
           ref={popupRef}
           style={{ top: pos.top, left: pos.left }}
-          className="fixed z-[9999] bg-white rounded-xl border border-zinc-200 shadow-xl p-3 animate-[fadeIn_0.15s_ease]"
+          className="fixed z-[9999] bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-xl p-3 animate-[fadeIn_0.15s_ease]"
         >
           <Calendar value={calValue} onChange={handleSelect} minValue={minValue} />
         </div>,

@@ -184,6 +184,33 @@ router.get('/archived', (req, res) => {
   res.json({ todos });
 });
 
+// Completed work for a date range, so a day column can show what was actually
+// done there. Deliberately range-bound rather than "all completed": the planner
+// only ever asks about one visible week, and an unbounded archive query would
+// grow without limit for no one's benefit. GET /archived remains the full view.
+const MAX_COMPLETED_RANGE_DAYS = 62;
+
+router.get('/completed', (req, res) => {
+  const from = validateDayAssigned(req.query.from);
+  const to = validateDayAssigned(req.query.to);
+  if (!from || !to) return res.status(400).json({ error: 'from and to must be YYYY-MM-DD dates' });
+  if (to < from) return res.status(400).json({ error: 'to must not precede from' });
+
+  const spanDays = Math.round(
+    (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000
+  );
+  if (!Number.isFinite(spanDays) || spanDays > MAX_COMPLETED_RANGE_DAYS) {
+    return res.status(400).json({ error: 'Range too large' });
+  }
+
+  const todos = db.prepare(
+    `${TODO_SELECT} WHERE t.user_id = ? AND t.completed = 1
+       AND t.day_assigned IS NOT NULL AND t.day_assigned >= ? AND t.day_assigned <= ?
+     ORDER BY t.day_assigned ASC, t.completed_at ASC`
+  ).all(req.user.id, from, to);
+  res.json({ todos });
+});
+
 router.post('/', (req, res) => {
   const { title, description, list_id, day_assigned, approx_time, recurrence_interval_days, recurrence_pattern } = req.body;
 

@@ -15,7 +15,7 @@ function ColorDot({ color, size = 'md' }) {
 
 function ColorPicker({ value, onChange, onClose }) {
   return (
-    <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-zinc-200 rounded-xl shadow-lg p-2 flex flex-wrap gap-1.5 w-[116px]">
+    <div className="absolute left-0 top-full mt-1 z-50 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg p-2 flex flex-wrap gap-1.5 w-[116px]">
       {PALETTE_KEYS.map(key => (
         <button
           key={key}
@@ -34,18 +34,18 @@ function DeleteDialog({ list, otherLists, onConfirm, onCancel }) {
 
   return (
     <div data-modal-root className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm px-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-5">
-        <h3 className="text-sm font-semibold text-zinc-800 mb-2">Delete "{list.name}"?</h3>
-        <p className="text-xs text-zinc-500 mb-4">
+      <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-xl w-full max-w-sm p-5">
+        <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-100 mb-2">Delete "{list.name}"?</h3>
+        <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4">
           Any todos in this list will be moved to another list before deleting.
         </p>
         {otherLists.length > 0 && (
           <div className="mb-4">
-            <label className="block text-xs text-zinc-500 mb-1">Move todos to</label>
+            <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Move todos to</label>
             <select
               value={moveTo}
               onChange={e => setMoveTo(Number(e.target.value))}
-              className="w-full text-sm border border-zinc-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition"
+              className="w-full text-sm border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition"
             >
               {otherLists.map(l => (
                 <option key={l.id} value={l.id}>{l.name}</option>
@@ -57,7 +57,7 @@ function DeleteDialog({ list, otherLists, onConfirm, onCancel }) {
           <button
             type="button"
             onClick={onCancel}
-            className="flex-1 text-xs font-medium text-zinc-600 bg-zinc-100 hover:bg-zinc-200 py-2 rounded-lg transition"
+            className="flex-1 text-xs font-medium text-zinc-600 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 py-2 rounded-lg transition"
           >
             Cancel
           </button>
@@ -116,12 +116,12 @@ function ListRow({ list, index, canDelete, onDelete }) {
         <div
           ref={provided.innerRef}
           {...provided.draggableProps}
-          className={`flex items-center gap-2 bg-white border border-zinc-200 rounded-lg px-2.5 py-2 ${snapshot.isDragging ? 'shadow-lg' : ''}`}
+          className={`flex items-center gap-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-2 ${snapshot.isDragging ? 'shadow-lg' : ''}`}
         >
           {/* Drag handle */}
           <div
             {...provided.dragHandleProps}
-            className="text-zinc-300 hover:text-zinc-500 cursor-grab active:cursor-grabbing flex-shrink-0"
+            className="text-zinc-300 dark:text-zinc-600 hover:text-zinc-500 dark:hover:text-zinc-400 cursor-grab active:cursor-grabbing flex-shrink-0"
           >
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
               <circle cx="9" cy="6" r="1.5" /><circle cx="15" cy="6" r="1.5" />
@@ -135,7 +135,7 @@ function ListRow({ list, index, canDelete, onDelete }) {
             <button
               type="button"
               onClick={() => setShowPicker(v => !v)}
-              className="flex items-center justify-center w-5 h-5 rounded-full hover:ring-2 hover:ring-zinc-300 transition"
+              className="flex items-center justify-center w-5 h-5 rounded-full hover:ring-2 hover:ring-zinc-300 dark:hover:ring-zinc-600 transition"
             >
               <ColorDot color={list.color} />
             </button>
@@ -163,7 +163,7 @@ function ListRow({ list, index, canDelete, onDelete }) {
               }}
               maxLength={40}
               disabled={saving}
-              className="w-full text-xs text-zinc-700 bg-transparent border-none outline-none focus:bg-zinc-50 focus:ring-1 focus:ring-indigo-300 rounded px-1 py-0.5 transition disabled:opacity-50"
+              className="w-full text-xs text-zinc-700 dark:text-zinc-200 bg-transparent border-none outline-none focus:bg-zinc-50 focus:ring-1 focus:ring-indigo-300 rounded px-1 py-0.5 transition disabled:opacity-50"
             />
             {emojiState && (
               <EmojiPicker anchorRef={nameRef} query={emojiState.query} onSelect={handleEmojiSelect} onClose={closeEmojiPicker} />
@@ -175,7 +175,7 @@ function ListRow({ list, index, canDelete, onDelete }) {
             <button
               type="button"
               onClick={onDelete}
-              className="flex-shrink-0 text-zinc-300 hover:text-red-500 transition p-0.5 rounded"
+              className="flex-shrink-0 text-zinc-300 dark:text-zinc-600 hover:text-red-500 transition p-0.5 rounded"
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -248,7 +248,7 @@ export default function ListsSection({ fetchTodos }) {
 
   return (
     <div className="space-y-3">
-      <h3 className="text-xs font-semibold text-zinc-600 uppercase tracking-widest">Lists</h3>
+      <h3 className="text-xs font-semibold text-zinc-600 dark:text-zinc-300 uppercase tracking-widest">Lists</h3>
 
       <DragDropContext onDragEnd={handleDragEnd}>
         <Droppable droppableId="settings-lists">
@@ -275,7 +275,7 @@ export default function ListsSection({ fetchTodos }) {
           <button
             type="button"
             onClick={() => setShowNewPicker(v => !v)}
-            className="flex items-center justify-center w-5 h-5 rounded-full hover:ring-2 hover:ring-zinc-300 transition"
+            className="flex items-center justify-center w-5 h-5 rounded-full hover:ring-2 hover:ring-zinc-300 dark:hover:ring-zinc-600 transition"
           >
             <ColorDot color={newColor} />
           </button>
@@ -295,7 +295,7 @@ export default function ListsSection({ fetchTodos }) {
             onChange={handleNewNameChange}
             maxLength={40}
             placeholder="New list name…"
-            className="w-full text-xs border border-zinc-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition bg-zinc-50"
+            className="w-full text-xs border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition bg-zinc-50 dark:bg-zinc-900"
           />
           {newNameEmojiState && (
             <EmojiPicker anchorRef={newNameRef} query={newNameEmojiState.query} onSelect={handleNewNameEmojiSelect} onClose={closeNewNameEmojiPicker} />

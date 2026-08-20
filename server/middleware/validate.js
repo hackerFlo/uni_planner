@@ -11,6 +11,17 @@ function sanitizeTitle(str) {
   return s;
 }
 
+// Matches an `&` that does not already begin a character reference, so text that
+// arrived as `&amp;`/`&lt;` (the browser's own innerHTML serialisation) is left
+// alone and sanitising twice cannot double-encode it.
+const BARE_AMP_RE = /&(?!(?:#\d+|#[xX][0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]{1,31});)/g;
+
+// A raw `<` surviving in a text run is what lets a dropped tag splice its
+// neighbours into a brand-new tag that the tokeniser has already walked past.
+function escapeTextRun(text) {
+  return text.replace(BARE_AMP_RE, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 function normalizeDescTag(tag) {
   if (/^<br[\s/]*>$/i.test(tag)) return '<br>';
   if (/^<(strong|b)(\s[^>]*)?>$/i.test(tag)) return '<strong>';
@@ -39,12 +50,12 @@ function sanitizeDescription(str) {
   const tagRe = /<\/?[a-zA-Z][^>]*>/g;
   let m;
   while ((m = tagRe.exec(s)) !== null) {
-    if (m.index > lastIdx) result.push(s.slice(lastIdx, m.index));
+    if (m.index > lastIdx) result.push(escapeTextRun(s.slice(lastIdx, m.index)));
     const norm = normalizeDescTag(m[0]);
     if (norm) result.push(norm);
     lastIdx = m.index + m[0].length;
   }
-  if (lastIdx < s.length) result.push(s.slice(lastIdx));
+  if (lastIdx < s.length) result.push(escapeTextRun(s.slice(lastIdx)));
 
   let html = result.join('');
   html = html.replace(/(<br>){3,}/g, '<br><br>');

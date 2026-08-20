@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useIsMobile from '../hooks/useIsMobile';
 import { DragDropContext } from '@hello-pangea/dnd';
 import { useTodos } from '../hooks/useTodos';
@@ -12,8 +12,15 @@ import TodoList from '../components/todos/TodoList';
 import TodoForm from '../components/todos/TodoForm';
 import ArchiveDrawer from '../components/todos/ArchiveDrawer';
 import WeeklyPlanner from '../components/planner/WeeklyPlanner';
+import StrandedTasks from '../components/todos/StrandedTasks';
 import WhatsNewModal from '../components/layout/WhatsNewModal';
 import Tooltip from '../components/ui/Tooltip';
+import { getWeekDates, parseDateLocal } from '../utils/dates';
+import { useToday } from '../context/TimeContext';
+import { useCompletedTodos } from '../hooks/useCompletedTodos';
+import { usePullToRefresh } from '../hooks/usePullToRefresh';
+import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
+import { buildSidebar } from '../utils/sidebar';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const SIDEBAR_MIN_PX = 200;
@@ -22,6 +29,18 @@ const SIDEBAR_MAX_PX = 520;
 // full-width, so a dragged card's centre of gravity can't track the finger — shrink it to
 // the column width before @hello-pangea/dnd measures it (see onBeforeCapture below).
 const COLUMN_WIDTH_PX = 180;
+const REVEALED_DAYS_KEY = 'uniPlanner.revealedDays';
+
+// localStorage can throw (Safari private mode) and can hold anything a previous
+// version wrote, so neither read nor write is allowed to take the page down.
+function loadRevealedDays() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(REVEALED_DAYS_KEY) ?? '[]');
+    return new Set(Array.isArray(raw) ? raw.filter(d => typeof d === 'string') : []);
+  } catch {
+    return new Set();
+  }
+}
 
 function localArrayMove(arr, from, to) {
   const result = [...arr];
@@ -37,25 +56,18 @@ function getRealId(draggableId) {
   return Number(draggableId);
 }
 
-function sortSidebar(items) {
-  const unassigned = items
-    .filter(t => !t.day_assigned)
-    .sort((a, b) => b.created_at.localeCompare(a.created_at));
-  const assigned = items
-    .filter(t => t.day_assigned)
-    .sort((a, b) => a.day_assigned.localeCompare(b.day_assigned));
-  return [...unassigned, ...assigned];
-}
-
 export default function PlannerPage() {
   const { todos, loading, fetchTodos, createTodo, updateTodo, deleteTodo, assignDay, reorderDay } = useTodos();
   const { canUndo, undo } = useUndo();
   const { notes, setNote } = useDayNotes();
   const { lists } = useLists();
   const whatsNew = useWhatsNew();
+  const todayIso = useToday();
   const [activeTodo, setActiveTodo] = useState(null);
   const [formState, setFormState] = useState(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [revealedDays, setRevealedDays] = useState(loadRevealedDays);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(288);
   const [isResizing, setIsResizing] = useState(false);
@@ -193,16 +205,61 @@ export default function PlannerPage() {
 
   const plannerTodos = useMemo(() => todos.filter(t => t.day_assigned), [todos]);
 
+  // Keyed on todayIso as well as the offset: without it a tab left open across
+  // midnight keeps rendering the week it was opened in.
+  const weekDates = useMemo(
+    () => getWeekDates(weekOffset, parseDateLocal(todayIso)),
+    [weekOffset, todayIso]
+  );
+
   const sidebarByList = useMemo(() => {
     const result = {};
     for (const list of lists) {
-      result[list.id] = sortSidebar(todos.filter(t => t.list_id === list.id));
+      result[list.id] = buildSidebar(todos.filter(t => t.list_id === list.id), weekDates);
     }
     return result;
-  }, [todos, lists]);
+  }, [todos, lists, weekDates]);
+
+  // Assigned to a week the arrows cannot reach: shown in neither the planner nor
+  // the lists above, so it gets its own escape hatch rather than vanishing.
+  const strandedTodos = useMemo(
+    () => buildSidebar(todos, weekDates, { stranded: true }),
+    [todos, weekDates]
+  );
+
+  const { byDate: completedByDate, refresh: refreshCompleted } =
+    useCompletedTodos(weekDates, revealedDays.size > 0);
+
+  function toggleCompleted(date) {
+    setRevealedDays(prev => {
+      const next = new Set(prev);
+      if (next.has(date)) next.delete(date); else next.add(date);
+      try {
+        localStorage.setItem(REVEALED_DAYS_KEY, JSON.stringify([...next]));
+      } catch {
+        // A full or disabled store costs the preference, never the toggle.
+      }
+      return next;
+    });
+  }
+
+  // Completing an item moves it out of the live board and into the completed
+  // list, so both have to be refreshed for the card to reappear below the fold.
+  function completeTodo(todo) {
+    return updateTodo(todo.id, { completed: 1, archived: 1 }).then(refreshCompleted);
+  }
+
+  // An installed PWA has no browser pull-to-refresh; this restores it and pulls
+  // every surface at once, so the gesture means "bring the board up to date".
+  const pullRefresh = useCallback(
+    () => Promise.all([fetchTodos(), refreshCompleted()]),
+    [fetchTodos, refreshCompleted]
+  );
+  const { distance: pullDistancePx, refreshing: pullRefreshing } = usePullToRefresh(pullRefresh);
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-white">
+    <div className="flex flex-col h-screen overflow-hidden bg-white dark:bg-zinc-900">
+      <PullToRefreshIndicator distance={pullDistancePx} refreshing={pullRefreshing} />
       <Navbar onArchiveToggle={() => setArchiveOpen(v => !v)} archiveOpen={archiveOpen} fetchTodos={fetchTodos} onOpenWhatsNew={whatsNew.openManually} />
 
       <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
@@ -212,11 +269,17 @@ export default function PlannerPage() {
           <main className="h-1/2 md:h-auto md:flex-1 flex-shrink-0 overflow-hidden order-1 md:order-2">
             <WeeklyPlanner
               todos={plannerTodos}
+              weekOffset={weekOffset}
+              weekDates={weekDates}
+              onWeekOffsetChange={setWeekOffset}
+              completedByDate={completedByDate}
+              revealedDays={revealedDays}
+              onToggleCompleted={toggleCompleted}
               isDragging={!!activeTodo}
               notes={notes}
               onNoteChange={setNote}
               onUnassign={id => assignDay(id, null)}
-              onComplete={todo => updateTodo(todo.id, { completed: 1, archived: 1 })}
+              onComplete={completeTodo}
               onEdit={todo => setFormState({ mode: 'edit', todo })}
               onDelete={deleteTodo}
               onReorder={reorderDay}
@@ -226,12 +289,12 @@ export default function PlannerPage() {
 
           {/* Sidebar */}
           <div
-            className="relative h-1/2 md:h-auto flex-shrink-0 md:flex-none bg-zinc-50 order-2 md:order-1 border-t border-zinc-200 md:border-t-0"
+            className="relative h-1/2 md:h-auto flex-shrink-0 md:flex-none bg-zinc-50 dark:bg-zinc-900 order-2 md:order-1 border-t border-zinc-200 dark:border-zinc-800 md:border-t-0"
             style={isMobile ? undefined : (sidebarCollapsed ? { width: 0 } : { width: `${sidebarWidth}px` })}
           >
             <aside
               style={isMobile ? undefined : (sidebarCollapsed ? { width: 0 } : { width: `${sidebarWidth}px` })}
-              className={`bg-zinc-50 flex flex-col h-full overflow-hidden ${isMobile || isResizing ? '' : 'transition-[width] duration-200'}`}
+              className={`bg-zinc-50 dark:bg-zinc-900 flex flex-col h-full overflow-hidden ${isMobile || isResizing ? '' : 'transition-[width] duration-200'}`}
             >
               <div
                 ref={sidebarScrollRef}
@@ -253,10 +316,16 @@ export default function PlannerPage() {
                     loading={loading}
                     onAdd={() => setFormState({ mode: 'create', defaults: { list_id: list.id } })}
                     onEdit={todo => setFormState({ mode: 'edit', todo })}
-                    onComplete={todo => updateTodo(todo.id, { completed: 1, archived: 1 })}
+                    onComplete={completeTodo}
                     onDelete={id => deleteTodo(id)}
                   />
                 ))}
+
+                <StrandedTasks
+                  todos={strandedTodos}
+                  onUnassign={id => assignDay(id, null)}
+                  onEdit={todo => setFormState({ mode: 'edit', todo })}
+                />
               </div>
             </aside>
 
@@ -271,7 +340,7 @@ export default function PlannerPage() {
                   <button
                     onMouseDown={e => e.stopPropagation()}
                     onClick={() => setSidebarCollapsed(true)}
-                    className="opacity-0 group-hover/resize:opacity-100 transition-opacity absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-5 h-12 bg-white border border-zinc-200 rounded-full shadow-md flex items-center justify-center text-zinc-400 hover:text-indigo-500 hover:border-indigo-200 cursor-pointer"
+                    className="opacity-0 group-hover/resize:opacity-100 transition-opacity absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-5 h-12 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-full shadow-md flex items-center justify-center text-zinc-400 dark:text-zinc-500 hover:text-indigo-500 hover:border-indigo-200 cursor-pointer"
                   >
                     <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -286,7 +355,7 @@ export default function PlannerPage() {
               <Tooltip text="Expand sidebar">
                 <button
                   onClick={() => setSidebarCollapsed(false)}
-                  className="absolute top-1/2 -translate-y-1/2 left-full w-5 h-10 bg-white border border-zinc-200 rounded-r-lg shadow-sm flex items-center justify-center text-zinc-400 hover:text-indigo-500 hover:border-indigo-200 transition-colors z-10"
+                  className="absolute top-1/2 -translate-y-1/2 left-full w-5 h-10 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-r-lg shadow-sm flex items-center justify-center text-zinc-400 dark:text-zinc-500 hover:text-indigo-500 hover:border-indigo-200 transition-colors z-10"
                 >
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
@@ -307,7 +376,7 @@ export default function PlannerPage() {
           onClose={() => setFormState(null)}
           onCreate={handleCreate}
           onUpdate={(id, data) => updateTodo(id, data)}
-          onComplete={todo => updateTodo(todo.id, { completed: 1, archived: 1 })}
+          onComplete={completeTodo}
           onDelete={deleteTodo}
         />
       )}

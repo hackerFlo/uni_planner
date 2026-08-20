@@ -62,6 +62,21 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_exams_user_id ON exams(user_id);
+
+  -- One row per signed-in device. Without it the only revocation lever was
+  -- users.token_version, which is shared by every device, so signing out on a
+  -- phone signed you out on the desktop too. The JWT now carries this row's id
+  -- as the sid claim: deleting one row logs out exactly one device, while
+  -- bumping token_version still revokes everything at once for a password change.
+  CREATE TABLE IF NOT EXISTS sessions (
+    id         TEXT    PRIMARY KEY,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    expires_at TEXT    NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+  CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
 `);
 
 // Migrate: add planner_order column if missing

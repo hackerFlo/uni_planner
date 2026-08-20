@@ -32,6 +32,48 @@ export const CHANGELOG = [
         desc: 'The backup file you can download in Settings was quietly leaving out your day notes, and repeating tasks came back as ordinary one-off items. Both are now included, so a restore returns the planner you actually had.',
         svgPath: 'M4 7c0-1.66 3.58-3 8-3s8 1.34 8 3M4 7v10c0 1.66 3.58 3 8 3s8-1.34 8-3V7M4 7c0 1.66 3.58 3 8 3s8-1.34 8-3M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3',
       },
+      {
+        icon: 'green',
+        name: 'Repeating tasks stop disappearing',
+        desc: 'A repeating task quietly stopped generating new copies once you ticked off its first occurrence, so after a couple of weeks it simply vanished. Completing an occurrence no longer ends the series — only deleting it does.',
+        svgPath: 'M17 2l4 4-4 4M3 11V9a4 4 0 014-4h14M7 22l-4-4 4-4M21 13v2a4 4 0 01-4 4H3',
+      },
+      {
+        icon: 'blue',
+        name: 'Restoring a backup works again',
+        desc: 'Any backup larger than a few dozen tasks was rejected on upload, and the error blamed the file rather than the size limit that caused it. Real backups now restore.',
+        svgPath: 'M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3',
+      },
+      {
+        icon: 'purple',
+        name: 'Dark mode, and a planner that fits you',
+        desc: 'Settings now carries an Appearance section: dark, light or follow-your-system, a compact card density, and a reduce-motion switch. Public holidays are no longer fixed to one region — pick your country and state, or turn them off.',
+        svgPath: 'M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z',
+      },
+      {
+        icon: 'green',
+        name: 'See what you finished',
+        desc: 'Every day column has an eye toggle that reveals the tasks you completed on that day, listed underneath. Creating an item from a day column can also tick it off immediately, so you can record something you have already done.',
+        svgPath: 'M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7zM15 12a3 3 0 11-6 0 3 3 0 016 0z',
+      },
+      {
+        icon: 'amber',
+        name: 'The planner stops showing yesterday',
+        desc: 'Left open overnight, the app kept highlighting the wrong day and froze every exam countdown at whatever it was when you opened it. It now keeps up on its own, and a task parked on a week you can no longer reach is listed rather than silently hidden.',
+        svgPath: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
+      },
+      {
+        icon: 'rose',
+        name: 'Signing out is per device',
+        desc: 'Logging out used to leave the session valid for another week, so a copied session stayed usable. It now ends properly — and only on the device you signed out from, so your phone and your laptop are independent.',
+        svgPath: 'M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1',
+      },
+      {
+        icon: 'blue',
+        name: 'Smoother on a phone',
+        desc: 'Pull down to refresh in the installed app, and a slim progress bar across the top shows when something is still loading.',
+        svgPath: 'M4 4v5h5M20 20v-5h-5M4 9a9 9 0 0114.65-3.36L20 7M20 15a9 9 0 01-14.65 3.36L4 17',
+      },
     ],
   },
   {

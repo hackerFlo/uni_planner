@@ -118,9 +118,16 @@ function materializeForTemplate(templateId, userTz, userId) {
 
 function materializeWindowForUser(userId, userTz) {
   const tz = userTz || 'UTC';
+  // Deliberately NOT filtered on archived. The template row is itself the first
+  // occurrence of the series, so ticking it off sets archived = 1 on the very row
+  // that carries the rule. Excluding those killed the series silently: the
+  // instances already materialised kept showing until the two-week window drained,
+  // and then the task was simply gone. Deleting the series is what ends it --
+  // DELETE /api/todos/:id?scope=all removes template and instances together, after
+  // which there is no row left to generate from.
   const templates = db.prepare(
     `SELECT id FROM todos
-     WHERE user_id = ? AND archived = 0 AND recurrence_parent_id IS NULL
+     WHERE user_id = ? AND recurrence_parent_id IS NULL
        AND (recurrence_interval_days IS NOT NULL OR recurrence_pattern IS NOT NULL)`
   ).all(userId);
   let total = 0;

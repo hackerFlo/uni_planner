@@ -7,11 +7,14 @@ import { ExamsProvider } from './context/ExamsContext';
 import ExamsModal from './components/exams/ExamsModal';
 import { ModalProvider } from './context/ModalContext';
 import { ToastProvider } from './context/ToastContext';
+import { TimeProvider } from './context/TimeContext';
+import { PreferencesProvider } from './context/PreferencesContext';
 import PlannerPage from './pages/PlannerPage';
 import ErrorBoundary from './components/ErrorBoundary';
 import UpdatePrompt from './components/UpdatePrompt';
 import GlobalErrorToast from './components/GlobalErrorToast';
 import StaleBuildNotice from './components/StaleBuildNotice';
+import LoadingBar from './components/LoadingBar';
 
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
@@ -52,7 +55,10 @@ export default function App() {
 
   return (
     <ErrorBoundary>
+      <PreferencesProvider>
+      <TimeProvider>
       <ToastProvider>
+      <LoadingBar />
       <GlobalErrorToast />
       <UpdatePrompt />
       <StaleBuildNotice />
@@ -77,6 +83,8 @@ export default function App() {
       </AuthProvider>
       </ModalProvider>
       </ToastProvider>
+      </TimeProvider>
+      </PreferencesProvider>
     </ErrorBoundary>
   );
 }

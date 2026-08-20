@@ -61,7 +61,7 @@ export default function ConfirmPopover({ options, onSelect, tooltipText, childre
       {open && createPortal(
         <div
           ref={popRef}
-          className={`fixed z-[9999] bg-white border border-zinc-200 rounded-lg shadow-lg overflow-hidden transition-[opacity,transform] duration-150 ease-out ${
+          className={`fixed z-[9999] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-lg overflow-hidden transition-[opacity,transform] duration-150 ease-out ${
             pos.placement === 'top' ? 'origin-bottom' : 'origin-top'
           } ${shown ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}
           style={{ top: pos.top, left: pos.left, display: 'inline-block' }}
@@ -74,9 +74,9 @@ export default function ConfirmPopover({ options, onSelect, tooltipText, childre
               onClick={e => { e.stopPropagation(); setOpen(false); onSelect(label); }}
               className={`block text-left px-3 py-2 text-xs font-medium transition ${
                 tone === 'danger'
-                  ? 'text-red-600 hover:bg-red-50'
-                  : 'text-zinc-700 hover:bg-zinc-50'
-              }${i > 0 ? ' border-t border-zinc-100' : ''}`}
+                  ? 'text-red-600 hover:bg-red-50 dark:hover:bg-red-950'
+                  : 'text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800'
+              }${i > 0 ? ' border-t border-zinc-100 dark:border-zinc-800' : ''}`}
             >
               {label}
             </button>

@@ -1,0 +1,76 @@
+# VS-13 (MUST) / VS-14 (SHOULD): automated dependency scanning and a regular
+# update cadence. This is a single-maintainer hobby project, so the shape here
+# is chosen to produce a handful of reviewable PRs a week, not a wall of them:
+#
+#   - patch + minor are GROUPED into one PR per package. Those are the updates
+#     that are almost always safe and almost never worth reading individually.
+#   - major stays UNGROUPED, one PR each, on purpose. Every major in this repo
+#     needs a decision, and a decision is easier to make when the diff is one
+#     package wide.
+version: 2
+
+updates:
+  # ---------------------------------------------------------------- server ---
+  - package-ecosystem: npm
+    directory: /server
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+      include: scope
+    labels: [dependencies, server]
+    groups:
+      server-minor-and-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
+    # Not ignored, but read the PR before merging: better-sqlite3 is a native
+    # addon. It is compiled from source inside server/Dockerfile (that is what
+    # the `apk add python3 make g++` line is for -- there is no musl prebuild),
+    # and 13.x declares `engines: node >=22` while the Dockerfile still runs
+    # node:20-alpine. A better-sqlite3 major therefore has a Dockerfile change
+    # as a prerequisite, and CI cannot catch that because CI does not build the
+    # image. Same caution for any future major of bcrypt.
+
+  # ---------------------------------------------------------------- client ---
+  - package-ecosystem: npm
+    directory: /client
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+      include: scope
+    labels: [dependencies, client]
+    groups:
+      # Split by dependency-type: a vite/postcss/workbox bump cannot reach a
+      # user and can be merged on a green build, whereas a react or
+      # react-router bump changes what the browser runs. Keeping them in
+      # separate PRs keeps the risky one from riding along with the boring one.
+      client-runtime-minor-and-patch:
+        dependency-type: production
+        patterns: ['*']
+        update-types: [minor, patch]
+      client-build-minor-and-patch:
+        dependency-type: development
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  # -------------------------------------------------------- github-actions ---
+  # Covers .github/workflows/*. Pinned-to-major actions still drift (v4 -> v5),
+  # and a stale actions/checkout is the most common way a workflow starts
+  # warning about a deprecated runner. One grouped PR is plenty.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: chore
+    labels: [dependencies, ci]
+    groups:
+      github-actions:
+        patterns: ['*']
