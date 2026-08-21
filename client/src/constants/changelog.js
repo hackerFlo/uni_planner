@@ -50,6 +50,12 @@ export const CHANGELOG = [
         desc: 'The app could get stuck on an old version once its sign-in ran out: it kept answering with its own saved copy of the page, so the sign-in screen never appeared, so the update could never download -- each problem holding the other in place. The page is now always fetched fresh, so an expired sign-in takes you straight to the sign-in screen and the next update installs by itself.',
         svgPath: 'M12 3l7 4v5c0 4.4-3 8.3-7 9-4-.7-7-4.6-7-9V7l7-4zM9 12l2 2 4-4',
       },
+      {
+        icon: 'blue',
+        name: 'This window reads right in dark mode',
+        desc: 'The soft fade at the bottom of this list was always painted white, so on a dark background it showed up as a pale smear across the text. It now takes the colour of whichever theme you are using.',
+        svgPath: 'M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z',
+      },
     ],
   },
   {

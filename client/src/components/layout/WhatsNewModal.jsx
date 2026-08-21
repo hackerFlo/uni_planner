@@ -133,7 +133,7 @@ export default function WhatsNewModal({ entries, onClose }) {
           {/* Scroll cue: bottom fade + bouncing chevron */}
           {showScrollCue && (
             <div className="pointer-events-none absolute bottom-0 left-0 right-0 flex flex-col items-center">
-              <div className="w-full h-14 bg-gradient-to-t from-white to-transparent" />
+              <div className="w-full h-14 bg-gradient-to-t from-white to-white/0 dark:from-zinc-900 dark:to-zinc-900/0" />
               <div className="absolute bottom-2 animate-bounce text-zinc-300 dark:text-zinc-600">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M19 9l-7 7-7-7" />
