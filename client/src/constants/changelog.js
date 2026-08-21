@@ -56,6 +56,12 @@ export const CHANGELOG = [
         desc: 'The soft fade at the bottom of this list was always painted white, so on a dark background it showed up as a pale smear across the text. It now takes the colour of whichever theme you are using.',
         svgPath: 'M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z',
       },
+      {
+        icon: 'amber',
+        name: 'The update check knows what it is looking at',
+        desc: 'Settings reported "GitHub could not be reached" whenever it could not find a published version -- even though it had reached GitHub perfectly well. It now reads the version history directly, so it finds the newest version whether or not a release was ever announced, and if something really is unreachable it says so only then.',
+        svgPath: 'M4 12a8 8 0 0114-5.3M20 12a8 8 0 01-14 5.3M18 4v3h-3M6 20v-3h3',
+      },
     ],
   },
   {

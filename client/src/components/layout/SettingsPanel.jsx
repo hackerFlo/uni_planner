@@ -138,12 +138,10 @@ export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
     return data;
   }, []);
 
-  const checkOp = useAsync(async () => {
-    const data = await loadVersion(true);
-    if (!data.available) return '';
-    if (data.checkFailed) throw new Error('Could not reach GitHub to check for updates.');
-    return data.updateAvailable ? `Version ${data.latest.version} is available.` : 'You are on the latest version.';
-  });
+  // Only a failed request surfaces as an error here. A check that reached
+  // GitHub and came back empty is reported by the paragraphs below, which can
+  // say which of the two happened -- this one could only guess.
+  const checkOp = useAsync(async () => { await loadVersion(true); });
 
   const [backupLoading, setBackupLoading] = useState(false);
   const [restoreLoading, setRestoreLoading] = useState(false);
@@ -450,7 +448,12 @@ export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
               </p>
             )}
 
-            {versionInfo?.available && versionInfo.checkFailed && (
+            {versionInfo?.available && versionInfo.checkFailed && versionInfo.checkReason === 'no-versions' && (
+              <p className="text-[11px] text-zinc-400 dark:text-zinc-500 leading-relaxed">
+                No versions have been published for this app yet, so there is nothing to compare against. Nothing is wrong with this app.
+              </p>
+            )}
+            {versionInfo?.available && versionInfo.checkFailed && versionInfo.checkReason !== 'no-versions' && (
               <p className="text-[11px] text-amber-600 dark:text-amber-500 leading-relaxed">
                 GitHub could not be reached, so the latest version is unknown. Nothing is wrong with this app.
               </p>

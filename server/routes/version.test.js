@@ -39,6 +39,14 @@ const versionRoutes = require('./version');
 const RELEASE = { tag_name: 'v2.10', published_at: '2026-08-19T09:00:00Z' };
 const LATEST = { version: '2.10', tag: 'v2.10', publishedAt: RELEASE.published_at };
 
+// A repository with no published Release: 404 on /releases/latest, and the
+// given list on /tags.
+const onlyTags = (tags) => async (url) => (
+  url.includes('/tags')
+    ? new Response(JSON.stringify(tags), { status: 200 })
+    : new Response(JSON.stringify({ message: 'Not Found' }), { status: 404 })
+);
+
 const realFetch = globalThis.fetch;
 const calls = { github: 0, watchtower: [] };
 let githubResponder = async () => new Response(JSON.stringify(RELEASE), { status: 200 });
@@ -154,6 +162,48 @@ test.describe('GET /api/version', () => {
     githubResponder = async () => new Response(JSON.stringify({ tag_name: 42 }), { status: 200 });
     const body = await (await get('/api/version')).json();
     assert.equal(body.checkFailed, true);
+  });
+
+  // A repository that only pushes annotated tags gets a permanent 404 from
+  // /releases/latest. That is this project's own repository, so the fallback
+  // is the path that actually runs in production.
+  test('falls back to the tag list when no Release has been published', async () => {
+    githubResponder = onlyTags([{ name: 'v2.8' }, { name: 'v2.10' }, { name: 'v2.9' }]);
+    const body = await (await get('/api/version')).json();
+    assert.deepEqual(body.latest, { version: '2.10', tag: 'v2.10', publishedAt: null });
+  });
+
+  test('picks the highest tag numerically, not the order GitHub returned', async () => {
+    githubResponder = onlyTags([{ name: 'v2.10' }, { name: 'v2.9' }]);
+    const body = await (await get('/api/version')).json();
+    assert.equal(body.updateAvailable, true);
+  });
+
+  test('ignores tag names that are not a dotted number', async () => {
+    githubResponder = onlyTags([{ name: 'nightly' }, { name: '' }, { name: 'v2.10' }]);
+    const body = await (await get('/api/version')).json();
+    assert.equal(body.latest.version, '2.10');
+  });
+
+  test('reports no-versions, not a network failure, for a repository with neither', async () => {
+    githubResponder = onlyTags([]);
+    const body = await (await get('/api/version')).json();
+    assert.deepEqual(
+      { checkFailed: body.checkFailed, checkReason: body.checkReason },
+      { checkFailed: true, checkReason: 'no-versions' },
+    );
+  });
+
+  test('reports unreachable when GitHub cannot be called at all', async () => {
+    githubResponder = async () => { throw new Error('ECONNREFUSED'); };
+    const body = await (await get('/api/version')).json();
+    assert.equal(body.checkReason, 'unreachable');
+  });
+
+  test('does not reach for tags when GitHub failed for a reason other than 404', async () => {
+    githubResponder = async () => new Response('rate limited', { status: 403 });
+    await get('/api/version');
+    assert.equal(calls.github, 1);
   });
 
   test('reports itself unavailable when no repository is configured', async () => {

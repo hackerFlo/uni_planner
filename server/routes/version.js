@@ -26,6 +26,17 @@ class UpstreamError extends Error {
   }
 }
 
+// "this repository has not published a version yet" is a different answer from
+// "GitHub could not be reached", and the UI must never conflate the two -- the
+// first is a fact about the repository, the second a fault the user might act
+// on. Distinguishing them here is what lets the client stop guessing.
+class NoVersionsError extends UpstreamError {
+  constructor(message) {
+    super(message);
+    this.name = 'NoVersionsError';
+  }
+}
+
 let releaseCache = null; // { latest, checkedAt }
 
 // "v2.10" -> [2, 10]. Returns null for anything that is not a dotted number, so
@@ -60,15 +71,39 @@ function readRelease(body) {
   return { version: tag.replace(/^v/i, ''), tag, publishedAt };
 }
 
-async function fetchLatestRelease() {
-  const url = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
-  const res = await fetch(url, {
+// The tag list is a list, and GitHub returns it in its own order rather than
+// version order, so the newest has to be chosen rather than taken. Names that
+// are not a dotted number are ignored instead of guessed at.
+function readNewestTag(body) {
+  if (!Array.isArray(body)) throw new UpstreamError('tag payload is not a list');
+  const names = body
+    .map((entry) => entry?.name)
+    .filter((name) => typeof name === 'string' && name !== '' && name.length <= 64 && parseVersionParts(name));
+  if (names.length === 0) throw new NoVersionsError('repository has no version tags');
+  const tag = names.reduce((best, name) => (isNewerVersion(name, best) ? name : best));
+  return { version: tag.replace(/^v/i, ''), tag, publishedAt: null };
+}
+
+function githubGet(path) {
+  return fetch(`https://api.github.com${path}`, {
     headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'uni-planner' },
     // A hung third party must not hold this request -- or a socket -- open.
     signal: AbortSignal.timeout(GITHUB_TIMEOUT_MS),
   });
-  if (!res.ok) throw new UpstreamError(`github answered ${res.status}`);
-  return readRelease(await res.json());
+}
+
+// GitHub answers /releases/latest only once a Release has been *published*; a
+// repository that pushes annotated tags and nothing else gets a 404 there for
+// ever. This project's release workflow always tags and only creates a Release
+// when `gh` happens to be authed, so the tag list is the fallback -- without it
+// the check reports itself broken on a repository working exactly as intended.
+async function fetchLatestRelease() {
+  const res = await githubGet(`/repos/${GITHUB_REPO}/releases/latest`);
+  if (res.ok) return readRelease(await res.json());
+  if (res.status !== 404) throw new UpstreamError(`github answered ${res.status}`);
+  const tags = await githubGet(`/repos/${GITHUB_REPO}/tags?per_page=100`);
+  if (!tags.ok) throw new UpstreamError(`github answered ${tags.status} for tags`);
+  return readNewestTag(await tags.json());
 }
 
 // Returns the cached release when it is fresh; on a failed refresh it falls
@@ -77,15 +112,19 @@ async function fetchLatestRelease() {
 async function loadLatestRelease(rlog) {
   const now = Date.now();
   if (releaseCache && now - releaseCache.checkedAt < RELEASE_CACHE_TTL_MS) {
-    return { ...releaseCache, stale: false };
+    return { ...releaseCache, stale: false, reason: null };
   }
   try {
     releaseCache = { latest: await fetchLatestRelease(), checkedAt: now };
-    return { ...releaseCache, stale: false };
+    return { ...releaseCache, stale: false, reason: null };
   } catch (err) {
-    rlog.warn('release check failed', { repo: GITHUB_REPO, err });
-    if (releaseCache) return { ...releaseCache, stale: true };
-    return { latest: null, checkedAt: null, stale: false };
+    const reason = err instanceof NoVersionsError ? 'no-versions' : 'unreachable';
+    // A repository that has published no version is not an anomaly, and would
+    // otherwise warn on every cache miss for the life of the deployment.
+    if (reason === 'unreachable') rlog.warn('release check failed', { repo: GITHUB_REPO, err });
+    else rlog.debug('repository publishes no versions', { repo: GITHUB_REPO });
+    if (releaseCache) return { ...releaseCache, stale: true, reason: null };
+    return { latest: null, checkedAt: null, stale: false, reason };
   }
 }
 
@@ -93,9 +132,9 @@ router.get('/', versionCheckLimiter, requireAuth, asyncHandler(async (req, res) 
   const running = { version: VERSION, commit: COMMIT };
   const base = { running, canInstall: Boolean(WATCHTOWER_TOKEN), updateAvailable: false };
   if (!GITHUB_REPO) {
-    return res.json({ ...base, available: false, latest: null, checkedAt: null, stale: false, checkFailed: false });
+    return res.json({ ...base, available: false, latest: null, checkedAt: null, stale: false, checkFailed: false, checkReason: null });
   }
-  const { latest, checkedAt, stale } = await loadLatestRelease(req.log || log);
+  const { latest, checkedAt, stale, reason } = await loadLatestRelease(req.log || log);
   res.json({
     ...base,
     available: true,
@@ -104,6 +143,7 @@ router.get('/', versionCheckLimiter, requireAuth, asyncHandler(async (req, res) 
     checkedAt: checkedAt === null ? null : new Date(checkedAt).toISOString(),
     stale,
     checkFailed: latest === null,
+    checkReason: reason,
   });
 }));
 
