@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { Droppable } from '@hello-pangea/dnd';
 import AssignedCard from './AssignedCard';
+import CompletedCard from './CompletedCard';
 import Tooltip from '../ui/Tooltip';
 import EmojiPicker from '../ui/EmojiPicker';
 import useEmojiInput from '../../hooks/useEmojiInput';
@@ -118,7 +119,7 @@ function DaySkeleton() {
   );
 }
 
-export default function DayColumn({ date, todos, loading = false, completedTodos = [], showCompleted = false, onToggleCompleted, holiday, exam, isDragging, note, onNoteChange, onUnassign, onComplete, onEdit, onDelete, onAdd }) {
+export default function DayColumn({ date, todos, loading = false, completedTodos = [], showCompleted = false, onToggleCompleted, onUncomplete, holiday, exam, isDragging, note, onNoteChange, onUnassign, onComplete, onEdit, onDelete, onAdd }) {
   const todayIso = useToday();
   const dateObj = parseDateLocal(date);
   const isToday = date === todayIso;
@@ -260,18 +261,11 @@ export default function DayColumn({ date, todos, loading = false, completedTodos
                 {completedTodos.length === 0 ? (
                   <p className="text-[10px] text-zinc-300 dark:text-zinc-600 text-center py-1">Nothing completed</p>
                 ) : (
-                  <ul className="space-y-1">
+                  <div className="space-y-2">
                     {completedTodos.map(todo => (
-                      <li key={todo.id} className="flex items-start gap-1.5 px-1">
-                        <svg className="w-3 h-3 mt-0.5 flex-shrink-0 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                        </svg>
-                        <span className="text-[11px] text-zinc-400 dark:text-zinc-500 line-through break-words leading-snug">
-                          {todo.title}
-                        </span>
-                      </li>
+                      <CompletedCard key={todo.id} todo={todo} onUncomplete={onUncomplete} />
                     ))}
-                  </ul>
+                  </div>
                 )}
               </div>
             )}

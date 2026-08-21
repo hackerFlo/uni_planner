@@ -229,6 +229,14 @@ export default function PlannerPage() {
     return updateTodo(todo.id, { completed: 1, archived: 1 }).then(refreshCompleted);
   }
 
+  // The inverse of the checkbox that filed it away. Both surfaces have to be
+  // refreshed: the item leaves the completed list and rejoins the live board on
+  // the same day it was assigned to, which `completed = 0` does not disturb.
+  function uncompleteTodo(todo) {
+    return updateTodo(todo.id, { completed: 0, archived: 0 })
+      .then(() => Promise.all([fetchTodos(), refreshCompleted()]));
+  }
+
   // An installed PWA has no browser pull-to-refresh; this restores it and pulls
   // every surface at once, so the gesture means "bring the board up to date".
   const pullRefresh = useCallback(
@@ -256,6 +264,7 @@ export default function PlannerPage() {
               completedByDate={completedByDate}
               revealedDays={revealedDays}
               onToggleCompleted={toggleCompleted}
+              onUncomplete={uncompleteTodo}
               isDragging={!!activeTodo}
               notes={notes}
               onNoteChange={setNote}

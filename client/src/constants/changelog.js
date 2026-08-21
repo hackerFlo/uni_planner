@@ -62,6 +62,12 @@ export const CHANGELOG = [
         desc: 'Settings reported "GitHub could not be reached" whenever it could not find a published version -- even though it had reached GitHub perfectly well. It now reads the version history directly, so it finds the newest version whether or not a release was ever announced, and if something really is unreachable it says so only then.',
         svgPath: 'M4 12a8 8 0 0114-5.3M20 12a8 8 0 01-14 5.3M18 4v3h-3M6 20v-3h3',
       },
+      {
+        icon: 'green',
+        name: 'Finished work shows as cards',
+        desc: 'Revealing the completed items on a day used to show a plain list of struck-through lines. They now appear as the same cards as everything else, only faded, the way a task planned for another week already looks in the sidebar. Clicking the tick on a finished card puts it back on the board unfinished.',
+        svgPath: 'M9 12l2 2 4-4M6 4h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2z',
+      },
     ],
   },
   {
