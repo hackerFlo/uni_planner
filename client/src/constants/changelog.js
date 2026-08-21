@@ -44,6 +44,12 @@ export const CHANGELOG = [
         desc: 'Tasks planned for another week no longer sit in a section of their own. The sidebar is a single list: everything unassigned first, then everything you have scheduled, whichever week it falls in.',
         svgPath: 'M4 6h16M4 12h16M4 18h16',
       },
+      {
+        icon: 'purple',
+        name: 'Updates arrive even after a sign-in expires',
+        desc: 'The app could get stuck on an old version once its sign-in ran out: it kept answering with its own saved copy of the page, so the sign-in screen never appeared, so the update could never download -- each problem holding the other in place. The page is now always fetched fresh, so an expired sign-in takes you straight to the sign-in screen and the next update installs by itself.',
+        svgPath: 'M12 3l7 4v5c0 4.4-3 8.3-7 9-4-.7-7-4.6-7-9V7l7-4zM9 12l2 2 4-4',
+      },
     ],
   },
   {

@@ -11,11 +11,11 @@ function runningAssetUrls() {
     .sort();
 }
 
-// The query string is what makes this reliable. Workbox's precache only strips
-// utm_*/fbclid before matching, so `?_=` misses the precached index.html, and
-// its NavigationRoute only handles requests whose mode is 'navigate', which a
-// fetch is not. So this reaches nginx even when the service worker is stale --
-// which is precisely the case being detected.
+// index.html is no longer precached and there is no NavigationRoute (see the
+// workbox block in vite.config.js), so nothing in the service worker can answer
+// this -- it reaches nginx even when the worker is stale, which is precisely the
+// case being detected. The cache-busting query string is belt-and-braces against
+// an older worker that still holds a precached index.html.
 async function deployedAssetUrls() {
   const res = await fetch(`/index.html?_=${Date.now()}`, { cache: 'no-store' });
   if (!res.ok) return [];
