@@ -87,6 +87,14 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
+      # Watchtower's cron runs in the container's own timezone, and the image
+      # ships none -- so without this "04:00" below is 04:00 UTC, i.e. 06:00
+      # local in summer and 05:00 in winter. The release workflow defines its
+      # deploy window as 04:00-04:00 *local*, so an unset TZ makes that window
+      # arithmetic quietly wrong. Only Watchtower needs it: the server derives
+      # every user-facing time from the per-user notify_tz through Intl, never
+      # from the container clock.
+      TZ: ${TZ:-UTC}
       WATCHTOWER_CLEANUP: "true"
       WATCHTOWER_SCHEDULE: "0 0 4 * * *"
       WATCHTOWER_INCLUDE_STOPPED: "false"
