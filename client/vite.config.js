@@ -18,7 +18,7 @@ export default defineConfig({
       // Deliberately still 'autoUpdate'. Switching to 'prompt' would leave every
       // already-installed client on a *waiting* worker until all its tabs close,
       // because the currently-active worker is the one that decides to hand over.
-      // So the worker keeps self-activating, and components/UpdatePrompt.jsx
+      // So the worker keeps self-activating, and components/NewVersionNotice.jsx
       // watches for the handover to offer a reload -- visibility without the
       // stuck-worker trap.
       registerType: 'autoUpdate',

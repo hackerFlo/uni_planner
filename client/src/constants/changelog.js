@@ -4,11 +4,24 @@
 // This way every Watchtower deploy maps to exactly one version.
 // Versioning: X.Y — increment Y for regular updates, bump X (reset Y to 0) for big releases.
 // Add a new entry to CHANGELOG (newest first) on first push of a window; append to top entry otherwise.
-export const CURRENT_VERSION = '3.0';
+export const CURRENT_VERSION = '3.1';
 
 // icon: 'purple' | 'green' | 'amber' | 'blue' | 'rose'
 // Each feature needs: icon, name, desc, and a 24×24 SVG path string (stroke icons).
 export const CHANGELOG = [
+  {
+    version: '3.1',
+    date: '2026-08-22',
+    title: 'One word when an update lands',
+    features: [
+      {
+        icon: 'blue',
+        name: 'One notice when an update lands',
+        desc: 'A new version used to announce itself twice, in two colours, saying the same thing both times. It now says it once, and no longer in the amber normally reserved for something going wrong -- a new version is not a fault. Reloading from that message also clears the old cached app, so you always land on the new version.',
+        svgPath: 'M4 4v6h6M20 20v-6h-6M20 9A8 8 0 006.3 5.3M4 15a8 8 0 0013.7 3.7',
+      },
+    ],
+  },
   {
     version: '3.0',
     date: '2026-08-21',

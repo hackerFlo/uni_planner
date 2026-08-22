@@ -11,9 +11,8 @@ import { TimeProvider } from './context/TimeContext';
 import { PreferencesProvider } from './context/PreferencesContext';
 import PlannerPage from './pages/PlannerPage';
 import ErrorBoundary from './components/ErrorBoundary';
-import UpdatePrompt from './components/UpdatePrompt';
 import GlobalErrorToast from './components/GlobalErrorToast';
-import StaleBuildNotice from './components/StaleBuildNotice';
+import NewVersionNotice from './components/NewVersionNotice';
 import LoadingBar from './components/LoadingBar';
 
 const LoginPage = lazy(() => import('./pages/LoginPage'));
@@ -60,8 +59,7 @@ export default function App() {
       <ToastProvider>
       <LoadingBar />
       <GlobalErrorToast />
-      <UpdatePrompt />
-      <StaleBuildNotice />
+      <NewVersionNotice />
       <ModalProvider>
       <AuthProvider>
         <UndoProvider>
