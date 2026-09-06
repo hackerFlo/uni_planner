@@ -1,14 +1,21 @@
 import { useRef, useState } from 'react';
 import { Droppable } from '@hello-pangea/dnd';
 import AssignedCard from './AssignedCard';
+import DividerCard from './DividerCard';
 import CompletedCard from './CompletedCard';
 import Tooltip from '../ui/Tooltip';
 import EmojiPicker from '../ui/EmojiPicker';
 import useEmojiInput from '../../hooks/useEmojiInput';
 import { parseDateLocal } from '../../utils/dates';
+import { withCopyGhost } from '../../utils/copyDrag';
 import { useToday } from '../../context/TimeContext';
 
 const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const ALT_LABEL = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent ?? '') ? '⌥' : 'Alt';
+
+// A todo drags under its number, a divider under the namespaced string it is
+// already stored as -- so the same expression covers both kinds of row.
+const dayDraggableId = item => String(item.id);
 
 function NoteSlot({ note, isToday, exam, holiday, onSave }) {
   const [editing, setEditing] = useState(false);
@@ -119,7 +126,7 @@ function DaySkeleton() {
   );
 }
 
-export default function DayColumn({ date, todos, loading = false, completedTodos = [], showCompleted = false, onToggleCompleted, onUncomplete, holiday, exam, isDragging, note, onNoteChange, onUnassign, onComplete, onEdit, onDelete, onAdd }) {
+export default function DayColumn({ date, items, copyGhostId = null, loading = false, completedTodos = [], showCompleted = false, onToggleCompleted, onUncomplete, holiday, exam, isDragging, note, onNoteChange, onUnassign, onComplete, onEdit, onDelete, onAdd, onAddDivider, onDeleteDivider }) {
   const todayIso = useToday();
   const dateObj = parseDateLocal(date);
   const isToday = date === todayIso;
@@ -216,27 +223,43 @@ export default function DayColumn({ date, todos, loading = false, completedTodos
             }`}
           >
             <div className="space-y-2">
-              {todos.map((todo, index) => (
-                <AssignedCard
-                  key={todo.id}
-                  todo={todo}
+              {/* One row per item, plus the inert stand-in that holds the
+                  original's place while a copy is dragged out of this column. */}
+              {withCopyGhost(items, copyGhostId, dayDraggableId).map((row, index) => (row.item.kind === 'divider' ? (
+                <DividerCard
+                  key={row.key}
+                  item={row.item}
                   index={index}
+                  draggableId={row.draggableId}
+                  isGhost={row.isGhost}
+                  boardDragging={isDragging}
+                  onDelete={onDeleteDivider}
+                />
+              ) : (
+                <AssignedCard
+                  key={row.key}
+                  todo={row.item}
+                  index={index}
+                  draggableId={row.draggableId}
+                  isGhost={row.isGhost}
                   onUnassign={onUnassign}
                   onComplete={onComplete}
                   onEdit={onEdit}
                   onDelete={onDelete}
                 />
-              ))}
+              )))}
               {provided.placeholder}
-              {loading && todos.length === 0 && <DaySkeleton />}
+              {loading && items.length === 0 && <DaySkeleton />}
               {isDragging && !snapshot.isDraggingOver && (
                 <p className="text-[11px] text-zinc-300 dark:text-zinc-600 text-center py-2">Drop here</p>
               )}
               {!isDragging && !loading && (
-                <Tooltip text="Add item" className="w-full">
+                <Tooltip text={`Add item — hold ${ALT_LABEL} for a divider`} className="w-full">
                   <button
                     onPointerDown={e => e.stopPropagation()}
-                    onClick={() => onAdd(date)}
+                    // Alt/Option turns the same button into "insert a divider
+                    // here", which is why the divider has no control of its own.
+                    onClick={e => (e.altKey ? onAddDivider(date, items) : onAdd(date))}
                     aria-label={`Add an item to ${dayLabel} ${dayNum}`}
                     className={`mt-2 w-full flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] transition-colors ${
                       isToday

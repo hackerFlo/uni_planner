@@ -55,6 +55,16 @@ db.prepare(
 db.prepare('INSERT INTO day_notes (user_id, date, note) VALUES (?, ?, ?)')
   .run(alice.id, '2026-08-05', 'Reading week');
 
+// AR-15: dividers are user data too. Two on one day, at non-adjacent slots,
+// because todos and dividers share one dense sequence per day -- the export has
+// to carry the position, not merely the count.
+const DIVIDER_DATE = '2026-08-06';
+const DIVIDER_SLOTS = [1, 4];
+for (const slot of DIVIDER_SLOTS) {
+  db.prepare('INSERT INTO day_dividers (user_id, date, planner_order) VALUES (?, ?, ?)')
+    .run(alice.id, DIVIDER_DATE, slot);
+}
+
 const app = express();
 app.use(cookieParser());
 app.use('/api/backup', backupRoutes);
@@ -80,6 +90,13 @@ test.describe('backup export', () => {
     assert.deepEqual(backup.day_notes, [
       { date: '2026-08-05', note: 'Reading week', updated_at: backup.day_notes[0].updated_at },
     ]);
+  });
+
+  test('includes day dividers with the day and the slot they occupy', () => {
+    assert.deepEqual(
+      backup.day_dividers.map(d => ({ date: d.date, planner_order: d.planner_order })),
+      DIVIDER_SLOTS.map(planner_order => ({ date: DIVIDER_DATE, planner_order })),
+    );
   });
 
   test('carries the recurrence rule on the template', () => {
@@ -118,9 +135,22 @@ test.describe('backup export', () => {
 });
 
 test.describe('backup restore', () => {
+  let firstRestore;
+
   test('brings day notes back into a fresh account', async () => {
-    const result = await restoreAs(bob, backup);
-    assert.equal(result.notesImported, 1);
+    firstRestore = await restoreAs(bob, backup);
+    assert.equal(firstRestore.notesImported, 1);
+  });
+
+  test('reports the dividers it imported', () => {
+    assert.equal(firstRestore.dividersImported, DIVIDER_SLOTS.length);
+  });
+
+  test('brings each divider back on its own day, in its own slot', () => {
+    const rows = db.prepare(
+      'SELECT date, planner_order FROM day_dividers WHERE user_id = ? ORDER BY planner_order ASC'
+    ).all(bob.id);
+    assert.deepEqual(rows, DIVIDER_SLOTS.map(planner_order => ({ date: DIVIDER_DATE, planner_order })));
   });
 
   test('restores the recurrence rule, not just a one-off todo', () => {
@@ -145,8 +175,11 @@ test.describe('backup restore', () => {
   test('is idempotent: restoring the same file again imports nothing', async () => {
     const again = await restoreAs(bob, backup);
     assert.deepEqual(
-      { todos: again.imported, notes: again.notesImported, exams: again.examsImported },
-      { todos: 0, notes: 0, exams: 0 },
+      {
+        todos: again.imported, notes: again.notesImported,
+        exams: again.examsImported, dividers: again.dividersImported,
+      },
+      { todos: 0, notes: 0, exams: 0, dividers: 0 },
     );
   });
 
@@ -250,7 +283,7 @@ test.describe('quotes in the backup', () => {
 
   test('bumped the export version so an older reader can tell', async () => {
     const out = await exportAs(alice);
-    assert.equal(out.version, 6);
+    assert.equal(out.version, 7);
   });
 });
 
@@ -300,5 +333,61 @@ test.describe('restoring untrusted fields', () => {
 
   test('leaves the account\'s own settings alone when the file carries none', () => {
     assert.equal(db.prepare('SELECT notify_tz FROM users WHERE id = ?').get(carol.id).notify_tz, NOTIFY.tz);
+  });
+});
+
+// AR-15 for dividers: they are the only record of where a day was cut in two,
+// and a restore that drops them rebuilds the column in the wrong order.
+test.describe('day dividers in a restored file', () => {
+  // Kept equal to MAX_DIVIDERS_PER_DAY in routes/dayDividers.js and backup.js.
+  const MAX_DIVIDERS_PER_DAY = 20;
+  const OVERSIZED_DATE = '2026-10-01';
+
+  test('restores a version 6 file, which has no day_dividers key at all', async () => {
+    const nina = makeUser('nina-dividers@example.com');
+    const result = await restoreAs(nina, {
+      version: 6,
+      todos: [],
+      day_notes: [{ date: '2026-08-07', note: 'Written before dividers existed' }],
+    });
+    assert.deepEqual(
+      { notes: result.notesImported, dividers: result.dividersImported },
+      { notes: 1, dividers: 0 },
+    );
+  });
+
+  test('skips a divider whose date the calendar does not have', async () => {
+    const oscar = makeUser('oscar-dividers@example.com');
+    const result = await restoreAs(oscar, {
+      todos: [],
+      day_dividers: [{ date: '2026-02-30', planner_order: 0 }],
+    });
+    assert.deepEqual(
+      { imported: result.dividersImported, skipped: result.dividersSkipped },
+      { imported: 0, skipped: 1 },
+    );
+  });
+
+  test('skips a divider with no slot rather than inventing one', async () => {
+    const peggy = makeUser('peggy-dividers@example.com');
+    await restoreAs(peggy, { todos: [], day_dividers: [{ date: OVERSIZED_DATE, planner_order: 'first' }] });
+    const { n } = db.prepare('SELECT COUNT(*) AS n FROM day_dividers WHERE user_id = ?').get(peggy.id);
+    assert.equal(n, 0);
+  });
+
+  // A hand-edited file is untrusted input (AR-1) and must not be a way past a
+  // cap the live endpoint enforces.
+  test('holds a hand-edited file to the same per-day cap the API applies', async () => {
+    const quentin = makeUser('quentin-dividers@example.com');
+    const overflow = 5;
+    const result = await restoreAs(quentin, {
+      todos: [],
+      day_dividers: Array.from({ length: MAX_DIVIDERS_PER_DAY + overflow }, (_, planner_order) =>
+        ({ date: OVERSIZED_DATE, planner_order })),
+    });
+    assert.deepEqual(
+      { imported: result.dividersImported, skipped: result.dividersSkipped },
+      { imported: MAX_DIVIDERS_PER_DAY, skipped: overflow },
+    );
   });
 });

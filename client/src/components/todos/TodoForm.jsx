@@ -548,7 +548,7 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
 
         <form
           onSubmit={handleSubmit}
-          onKeyDown={e => { if (e.key === 'Enter' && e.metaKey) handleSubmit(e); }}
+          onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSubmit(e); }}
           className="space-y-4"
         >
           <div>

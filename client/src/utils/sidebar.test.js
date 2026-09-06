@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildSidebar } from './sidebar.js';
+import { buildSidebar, sidebarDraggableId } from './sidebar.js';
 
 const todo = (id, { day = null, created = '2026-08-01T00:00:00.000Z' } = {}) =>
   ({ id, day_assigned: day, created_at: created });
@@ -57,5 +57,15 @@ test.describe('buildSidebar', () => {
 
   test('returns an empty list for no todos', () => {
     assert.deepEqual(buildSidebar([]), []);
+  });
+});
+
+test.describe('sidebarDraggableId', () => {
+  test('prefixes an assigned todo, whose day column already holds the raw id', () => {
+    assert.equal(sidebarDraggableId(todo(1, { day: '2026-08-19' })), 'sidebar-1');
+  });
+
+  test('leaves an unassigned todo on its bare id', () => {
+    assert.equal(sidebarDraggableId(todo(1)), '1');
   });
 });

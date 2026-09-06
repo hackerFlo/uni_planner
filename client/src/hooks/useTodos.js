@@ -131,9 +131,10 @@ export function useTodos() {
     }
   }, [makeDayRevert]);
 
-  const applyReorder = useCallback(async (orderedTodos) => {
-    const prevItems = snapshotOrderItems(todosRef.current, orderedTodos);
-    const items = toOrderItems(orderedTodos);
+  // Takes the two payloads already built, so a day holding both todos and
+  // divider lines can be renumbered from one dense run across both tables.
+  const applyTodoOrder = useCallback(async (items, prevItems) => {
+    if (items.length === 0) return { revert: null };
     setTodos(prev => applyOrderItems(prev, items));
     try {
       await api.patch('/api/todos/reorder', { items });
@@ -143,6 +144,30 @@ export function useTodos() {
       throw err;
     }
   }, [makeOrderRevert]);
+
+  const applyReorder = useCallback((orderedTodos) => applyTodoOrder(
+    toOrderItems(orderedTodos),
+    snapshotOrderItems(todosRef.current, orderedTodos),
+  ), [applyTodoOrder]);
+
+  // Option+drag duplicates instead of moving. Recurrence fields are deliberately
+  // dropped: the gesture exists for chores that have to be done several times
+  // *without* being on a schedule, and cloning a template would materialize a
+  // whole second series.
+  const applyCopy = useCallback(async (source, day) => {
+    const { todo } = await api.post('/api/todos', {
+      title: source.title,
+      description: source.description,
+      list_id: source.list_id,
+      approx_time: source.approx_time,
+      day_assigned: day,
+    });
+    setTodos(prev => [todo, ...prev]);
+    return { todo, revert: async () => {
+      await api.delete(`/api/todos/${todo.id}`);
+      setTodos(prev => prev.filter(t => t.id !== todo.id));
+    } };
+  }, []);
 
   const assignDay = useCallback(async (id, day) => {
     try {
@@ -193,5 +218,12 @@ export function useTodos() {
     assignDay,
     reorderDay,
     moveTodoToDay,
+    // Primitives for usePlannerBoard, which spans todos and dividers: each
+    // returns its revert instead of recording it so several writes compose
+    // into a single undo entry.
+    applyAssignDay,
+    applyTodoOrder,
+    applyCopy,
+    reportFailure,
   };
 }

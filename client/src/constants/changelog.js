@@ -4,11 +4,54 @@
 // This way every Watchtower deploy maps to exactly one version.
 // Versioning: X.Y — increment Y for regular updates, bump X (reset Y to 0) for big releases.
 // Add a new entry to CHANGELOG (newest first) on first push of a window; append to top entry otherwise.
-export const CURRENT_VERSION = '3.1';
+export const CURRENT_VERSION = '4.0';
 
 // icon: 'purple' | 'green' | 'amber' | 'blue' | 'rose'
 // Each feature needs: icon, name, desc, and a 24×24 SVG path string (stroke icons).
 export const CHANGELOG = [
+  {
+    version: '4.0',
+    date: '2026-09-06',
+    title: 'Copies, dividers, and a week you can scroll',
+    features: [
+      {
+        icon: 'purple',
+        name: 'Copy a card instead of moving it',
+        desc: 'Hold Option (Alt on Windows) while dragging and the card is copied rather than moved -- from the sidebar onto a day, or from one day to another. A "Copy" label appears on the card while you hold it, so you always know which of the two you are about to do. Handy for a chore that has to happen three times this week but is not on a schedule. Ctrl+Z removes the copy again.',
+        svgPath: 'M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2M10 20h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z',
+      },
+      {
+        icon: 'blue',
+        name: 'A line to break up a day',
+        desc: 'Hold Option and click the + button on a day to drop in a divider -- a plain rule that says everything below this is the evening. It appears at the bottom of the column and drags into place like a card, between days too. Hover it for the trashcan; Ctrl+Z brings it back.',
+        svgPath: 'M4 12h16M7 6h10M7 18h10',
+      },
+      {
+        icon: 'green',
+        name: 'The week says when there is more of it',
+        desc: 'On a narrow window the seven days ran off the edge with nothing to show for it. There is now a scrollbar underneath, which appears only when the columns actually overflow and does not fade away while it is there. Drag the thumb, or click the track to page across.',
+        svgPath: 'M9 8l-4 4 4 4m6-8l4 4-4 4M3 20h18',
+      },
+      {
+        icon: 'amber',
+        name: 'Take a task off its day from the sidebar',
+        desc: 'The button that clears the day from a task only existed in the week view. It now sits on the sidebar card too, left of the pencil, on any task that has a day -- so you can unschedule something without hunting for it in the planner first.',
+        svgPath: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2zM10 14l4 4m0-4l-4 4',
+      },
+      {
+        icon: 'rose',
+        name: 'Every shortcut, written down',
+        desc: 'The app has quietly grown a set of gestures -- undo, shake to undo on a phone, typing -> for an arrow, :name: for an emoji, and now the two above. Settings has a Shortcuts section listing all of them, with the right keys for your platform.',
+        svgPath: 'M8 7h.01M12 7h.01M16 7h.01M8 11h.01M12 11h.01M16 11h.01M8 15h8M4 5h16a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V6a1 1 0 011-1z',
+      },
+      {
+        icon: 'purple',
+        name: 'Longer quotes fit',
+        desc: 'The daily quote was given a fixed slice of the header, so a long one was cut off mid-sentence even on a wide screen where there was room to spare. It now takes whatever width the header can actually give it.',
+        svgPath: 'M7 8h10M7 12h6M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+      },
+    ],
+  },
   {
     version: '3.1',
     date: '2026-08-22',

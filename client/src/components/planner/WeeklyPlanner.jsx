@@ -1,5 +1,6 @@
 import { useRef, useMemo, useEffect } from 'react';
 import DayColumn from './DayColumn';
+import WeekScrollbar from './WeekScrollbar';
 import { useHolidays } from '../../hooks/useHolidays';
 import { useLists } from '../../context/ListsContext';
 import { useExams } from '../../context/ExamsContext';
@@ -7,7 +8,7 @@ import { toIso } from '../../utils/dates';
 
 const WEEK_LABEL = { '-1': 'Last Week', '0': 'This Week', '1': 'Next Week' };
 
-export default function WeeklyPlanner({ todos, loading = false, weekOffset, weekDates, onWeekOffsetChange, completedByDate, revealedDays, onToggleCompleted, onUncomplete, isDragging, notes, onNoteChange, onUnassign, onComplete, onEdit, onDelete, onAdd }) {
+export default function WeeklyPlanner({ todos, dividers, loading = false, weekOffset, weekDates, onWeekOffsetChange, completedByDate, revealedDays, onToggleCompleted, onUncomplete, isDragging, copyGhostId, notes, onNoteChange, onUnassign, onComplete, onEdit, onDelete, onAdd, onAddDivider, onDeleteDivider }) {
   const holidays = useHolidays();
   const { lists } = useLists();
   const { upcomingExams } = useExams();
@@ -26,10 +27,15 @@ export default function WeeklyPlanner({ todos, loading = false, weekOffset, week
     return order;
   }, [lists]);
 
-  const todosByDate = useMemo(() => {
+  // Todos and dividers are sorted together: they share one dense planner_order
+  // run per day, which is what lets a divider sit between two cards. A divider
+  // has no list_id, so on the (post-renumber, near-impossible) tie it sorts
+  // last -- right for one that was just appended to the bottom of a day.
+  const itemsByDate = useMemo(() => {
     const result = {};
+    const all = [...todos, ...dividers];
     for (const date of weekDates) {
-      result[date] = todos
+      result[date] = all
         .filter(t => t.day_assigned === date)
         .sort((a, b) => {
           const ao = a.planner_order ?? Infinity;
@@ -39,7 +45,7 @@ export default function WeeklyPlanner({ todos, loading = false, weekOffset, week
         });
     }
     return result;
-  }, [todos, weekDates, listOrder]);
+  }, [todos, dividers, weekDates, listOrder]);
 
   const scrollRef = useRef(null);
 
@@ -108,7 +114,8 @@ export default function WeeklyPlanner({ todos, loading = false, weekOffset, week
             <DayColumn
               key={date}
               date={date}
-              todos={todosByDate[date]}
+              items={itemsByDate[date]}
+              copyGhostId={copyGhostId}
               loading={loading}
               completedTodos={completedByDate[date] ?? []}
               showCompleted={revealedDays.has(date)}
@@ -124,10 +131,14 @@ export default function WeeklyPlanner({ todos, loading = false, weekOffset, week
               onEdit={onEdit}
               onDelete={onDelete}
               onAdd={onAdd}
+              onAddDivider={onAddDivider}
+              onDeleteDivider={onDeleteDivider}
             />
           ))}
         </div>
       </div>
+
+      <WeekScrollbar scrollRef={scrollRef} />
     </div>
   );
 }

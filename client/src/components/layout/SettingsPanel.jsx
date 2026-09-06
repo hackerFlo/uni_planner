@@ -10,6 +10,7 @@ import { userMessage } from '../../api/errors';
 import { TimePicker } from '../ui/TimePicker';
 import ListsSection from '../settings/ListsSection';
 import AppearanceSection from '../settings/AppearanceSection';
+import ShortcutsSection from '../settings/ShortcutsSection';
 import QuotesSection from '../settings/QuotesSection';
 
 // Mirrors the server's own 15-minute cache, so reopening this panel does not
@@ -315,6 +316,10 @@ export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
               {passwordOp.loading ? 'Saving…' : 'Update Password'}
             </button>
           </form>
+
+          <div className="border-t border-zinc-100 dark:border-zinc-800" />
+
+          <ShortcutsSection />
 
           <div className="border-t border-zinc-100 dark:border-zinc-800" />
 

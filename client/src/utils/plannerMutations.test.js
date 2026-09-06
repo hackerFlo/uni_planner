@@ -223,3 +223,52 @@ test.describe('undo after a cross-day drag', () => {
     assert.deepEqual(todosForDay(drag.board(), TUE).map(t => t.id), [3]);
   });
 });
+
+// Dividers live in their own table but are normalised into the same shape a
+// todo has, so the three planners above operate on a merged array unchanged.
+// These cases exist to keep that reuse honest: a change to plannerMutations
+// that started reading a todo-only field would break here first.
+test.describe('merged todo and divider items', () => {
+  const divider = (id, { day = null, order = null } = {}) =>
+    ({ id: `divider-${id}`, dividerId: id, kind: 'divider', day_assigned: day, planner_order: order });
+
+  test('a divider takes an ordinal between two cards', () => {
+    const board = [todo(1, { day: MON, order: 0 }), divider(5, { day: MON, order: 1 }), todo(2, { day: MON, order: 2 })];
+    assert.deepEqual(todosForDay(board, MON).map(i => i.id), [1, 'divider-5', 2]);
+  });
+
+  test('dragging a card past a divider reorders across both kinds', () => {
+    const board = [todo(1, { day: MON, order: 0 }), divider(5, { day: MON, order: 1 }), todo(2, { day: MON, order: 2 })];
+    const next = planSameDayReorder(board, { day: MON, from: 2, to: 0 });
+    assert.deepEqual(next.map(i => i.id), [2, 1, 'divider-5']);
+  });
+
+  test('dragging the divider itself is the same operation', () => {
+    const board = [todo(1, { day: MON, order: 0 }), todo(2, { day: MON, order: 1 }), divider(5, { day: MON, order: 2 })];
+    const next = planSameDayReorder(board, { day: MON, from: 2, to: 1 });
+    assert.deepEqual(next.map(i => i.id), [1, 'divider-5', 2]);
+  });
+
+  test('a divider dropped on another day keeps its kind and row id', () => {
+    const board = [divider(5, { day: MON, order: 0 }), todo(3, { day: TUE, order: 0 })];
+    const next = planCrossDayDrop(board, { todoId: 'divider-5', toDay: TUE, index: 0 });
+    assert.deepEqual(next[0], { id: 'divider-5', dividerId: 5, kind: 'divider', day_assigned: TUE, planner_order: 0 });
+  });
+
+  test('a divider dropped on another day lands at the requested index', () => {
+    const board = [divider(5, { day: MON, order: 0 }), todo(3, { day: TUE, order: 0 }), todo(4, { day: TUE, order: 1 })];
+    const next = planCrossDayDrop(board, { todoId: 'divider-5', toDay: TUE, index: 1 });
+    assert.deepEqual(next.map(i => i.id), [3, 'divider-5', 4]);
+  });
+
+  test('a copy is spliced in at the drop index without disturbing its source', () => {
+    const dayBefore = [todo(3, { day: TUE, order: 0 }), todo(4, { day: TUE, order: 1 })];
+    const copy = todo(9, { day: TUE });
+    const next = [...dayBefore.slice(0, 1), copy, ...dayBefore.slice(1)];
+    assert.deepEqual(toOrderItems(next), [
+      { id: 3, planner_order: 0 },
+      { id: 9, planner_order: 1 },
+      { id: 4, planner_order: 2 },
+    ]);
+  });
+});

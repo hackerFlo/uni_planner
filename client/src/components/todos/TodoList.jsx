@@ -2,8 +2,10 @@ import { Droppable } from '@hello-pangea/dnd';
 import TodoCard from './TodoCard';
 import Tooltip from '../ui/Tooltip';
 import { LIST_PALETTE } from '../../constants/listPalette';
+import { sidebarDraggableId } from '../../utils/sidebar';
+import { withCopyGhost } from '../../utils/copyDrag';
 
-export default function TodoList({ list, todos, loading, onAdd, onEdit, onComplete, onDelete }) {
+export default function TodoList({ list, todos, loading, onAdd, onEdit, onComplete, onDelete, onUnassign, copyGhostId = null, isDropDisabled = false }) {
   const palette = LIST_PALETTE[list.color] ?? LIST_PALETTE.slate;
 
   return (
@@ -30,6 +32,7 @@ export default function TodoList({ list, todos, loading, onAdd, onEdit, onComple
 
       <Droppable
         droppableId={`${list.id}-list`}
+        isDropDisabled={isDropDisabled}
       >
         {(provided) => (
           <div
@@ -50,15 +53,20 @@ export default function TodoList({ list, todos, loading, onAdd, onEdit, onComple
                 No items — click + to add
               </button>
             )}
-            {todos.map((todo, index) => (
+            {/* One row per todo, plus the inert stand-in that holds the
+                original's place while a copy is dragged out of this list. */}
+            {withCopyGhost(todos, copyGhostId, sidebarDraggableId).map((row, index) => (
               <TodoCard
-                key={todo.id}
-                todo={todo}
+                key={row.key}
+                todo={row.item}
                 index={index}
-                isAssigned={!!todo.day_assigned}
+                draggableId={row.draggableId}
+                isGhost={row.isGhost}
+                isAssigned={!!row.item.day_assigned}
                 onComplete={onComplete}
                 onEdit={onEdit}
                 onDelete={onDelete}
+                onUnassign={onUnassign}
               />
             ))}
             {provided.placeholder}

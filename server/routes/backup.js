@@ -18,6 +18,9 @@ const backupJsonParser = express.json({ limit: '5mb' });
 // Must stay equal to routes/lists.js and client/src/constants/listPalette.js.
 // It fell one colour behind them once, and every exported teal list came back
 // grey with nothing logged and nothing rejected.
+// Must stay equal to MAX_DIVIDERS_PER_DAY in routes/dayDividers.js.
+const MAX_DIVIDERS_PER_DAY = 20;
+
 const PALETTE = ['indigo', 'emerald', 'teal', 'amber', 'rose', 'sky', 'violet', 'pink', 'slate'];
 const ISO_DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
 const cleanIsoDatetime = (v) => (typeof v === 'string' && ISO_DATETIME.test(v) ? v : null);
@@ -103,6 +106,12 @@ router.get('/', requireAuth, (req, res) => {
     'SELECT date, note, updated_at FROM day_notes WHERE user_id = ? ORDER BY date ASC'
   ).all(req.user.id);
 
+  // AR-15: user data, and no row id travels -- a divider is identified by the
+  // day it sits on and its slot in that day's shared todo/divider sequence.
+  const dayDividers = db.prepare(
+    'SELECT date, planner_order, created_at FROM day_dividers WHERE user_id = ? ORDER BY date ASC, planner_order ASC'
+  ).all(req.user.id);
+
   // AR-15. Only the two halves that are genuinely this user's:
   //  - quotes they uploaded. The 191 built-ins are re-seeded from the CSV
   //    shipped in the image on every boot, so exporting them would add ~25 kB
@@ -123,12 +132,13 @@ router.get('/', requireAuth, (req, res) => {
   ).all(req.user.id).map(r => r.text);
 
   res.json({
-    version: 6,
+    version: 7,
     exported_at: new Date().toISOString(),
     lists: lists.map(l => ({ name: l.name, color: l.color, sort_order: l.sort_order })),
     todos,
     exams,
     day_notes: dayNotes,
+    day_dividers: dayDividers,
     quotes,
     quote_dislikes: quoteDislikes,
     settings: exportSettings(req),
@@ -193,7 +203,8 @@ function restoreSettings(raw, rlog, userId) {
 router.post('/restore', requireAuth, backupJsonParser, (req, res) => {
   const {
     todos, lists: backupLists, exams: backupExams,
-    day_notes: backupNotes, settings: backupSettings,
+    day_notes: backupNotes, day_dividers: backupDividers,
+    settings: backupSettings,
     quotes: backupQuotes, quote_dislikes: backupDislikes,
   } = req.body;
   if (!Array.isArray(todos)) return res.status(400).json({ error: 'Invalid backup file' });
@@ -276,12 +287,18 @@ router.post('/restore', requireAuth, backupJsonParser, (req, res) => {
     ON CONFLICT(user_id, date) DO NOTHING
   `);
 
+  const insertDivider = db.prepare(
+    'INSERT INTO day_dividers (user_id, date, planner_order, created_at) VALUES (?, ?, ?, ?)'
+  );
+
   let imported = 0;
   let skipped = 0;
   let examsImported = 0;
   let examsSkipped = 0;
   let notesImported = 0;
   let notesSkipped = 0;
+  let dividersImported = 0;
+  let dividersSkipped = 0;
   let quotesImported = 0;
   let quotesSkipped = 0;
   let dislikesImported = 0;
@@ -383,6 +400,37 @@ router.post('/restore', requireAuth, backupJsonParser, (req, res) => {
       }
     }
 
+    // Absent on any file written before version 7, which restores as zero
+    // dividers rather than as a failure.
+    if (Array.isArray(backupDividers)) {
+      // (date, planner_order) is the identity here: todos and dividers share
+      // one dense sequence per day, so two dividers cannot hold the same slot.
+      // That is also what makes a repeated restore a no-op, the way the day
+      // note upsert is, rather than a column of duplicated rules.
+      const existingSlots = new Set(db.prepare(
+        'SELECT date, planner_order FROM day_dividers WHERE user_id = ?'
+      ).all(req.user.id).map(r => `${r.date}|${r.planner_order}`));
+      const perDay = new Map(db.prepare(
+        'SELECT date, COUNT(*) AS n FROM day_dividers WHERE user_id = ? GROUP BY date'
+      ).all(req.user.id).map(r => [r.date, r.n]));
+
+      for (const d of backupDividers) {
+        const date = validateDayAssigned(d?.date);
+        const order = Number.isSafeInteger(d?.planner_order) && d.planner_order >= 0 ? d.planner_order : null;
+        // The same per-day cap POST /api/day-dividers enforces: a backup file
+        // is untrusted input and must not be a way around it (AR-1).
+        const full = (perDay.get(date) ?? 0) >= MAX_DIVIDERS_PER_DAY;
+        if (!date || order === null || full || existingSlots.has(`${date}|${order}`)) {
+          dividersSkipped++;
+          continue;
+        }
+        insertDivider.run(req.user.id, date, order, cleanIsoDatetime(d.created_at) || new Date().toISOString());
+        existingSlots.add(`${date}|${order}`);
+        perDay.set(date, (perDay.get(date) ?? 0) + 1);
+        dividersImported++;
+      }
+    }
+
     // Uploaded quotes. Validated with the same parser the live import uses, so
     // a hand-edited backup cannot put anything in the table that an upload
     // could not (AR-1). ON CONFLICT DO NOTHING makes a repeated restore a
@@ -430,7 +478,7 @@ router.post('/restore', requireAuth, backupJsonParser, (req, res) => {
   run();
   res.json({
     imported, skipped, examsImported, examsSkipped,
-    notesImported, notesSkipped, settingsRestored,
+    notesImported, notesSkipped, dividersImported, dividersSkipped, settingsRestored,
     quotesImported, quotesSkipped, dislikesImported, dislikesSkipped,
   });
 });

@@ -7,6 +7,8 @@ import ConfirmPopover from '../ui/ConfirmPopover';
 import { useLists } from '../../context/ListsContext';
 import { LIST_PALETTE } from '../../constants/listPalette';
 import { useAnyModalOpen } from '../../context/ModalContext';
+import { useCopyDrag } from '../../context/CopyDragContext';
+import { sidebarDraggableId } from '../../utils/sidebar';
 
 const COMPLETION_DELAY_MS = 500;
 
@@ -24,8 +26,9 @@ function dayLabel(iso) {
   return DAY_NAMES[new Date(y, m - 1, d).getDay()];
 }
 
-const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAssigned, checked, onComplete, onEdit, onDelete }) {
+const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAssigned, checked, isGhost, onComplete, onEdit, onDelete, onUnassign }) {
   const anyModalOpen = useAnyModalOpen();
+  const isCopying = useCopyDrag() && snapshot.isDragging;
   const hideOnHover = anyModalOpen ? '' : 'group-hover:invisible group-focus-within:invisible';
   const { getList } = useLists();
   const list = getList(todo.list_id);
@@ -102,11 +105,17 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
           : isAssigned
           ? 'bg-zinc-50 dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800 p-3 opacity-50 hover:opacity-70'
           : 'bg-white dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800 p-3 hover:shadow-md hover:-translate-y-0.5'
-      }`}
+      }${isGhost ? ' pointer-events-none' : ''}`}
+      aria-hidden={isGhost || undefined}
     >
       {isDraggingOverDay ? (
         <>
           <div className="flex items-center gap-2 mb-1.5">
+        {isCopying && (
+          <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full uppercase tracking-wide bg-indigo-100 text-indigo-600 dark:bg-indigo-900 dark:text-indigo-200">
+            Copy
+          </span>
+        )}
             <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full uppercase tracking-wide ${palette.badge}`}>
               {listName}
             </span>
@@ -161,6 +170,11 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
             <div className="flex items-start gap-1.5 min-w-0">
               <LinkText text={todo.title} className={`text-sm font-medium break-words flex-1 min-w-0 ${isAssigned ? 'text-zinc-400 dark:text-zinc-500' : 'text-zinc-800 dark:text-zinc-100'}`} />
               <div className={`flex items-center gap-1.5 flex-shrink-0 ${hideOnHover}`}>
+        {isCopying && (
+          <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full uppercase tracking-wide bg-indigo-100 text-indigo-600 dark:bg-indigo-900 dark:text-indigo-200">
+            Copy
+          </span>
+        )}
                 {(todo.recurrence_interval_days != null || todo.recurrence_pattern != null) && (
                   <Tooltip text={recurrenceLabel(todo.recurrence_interval_days, todo.recurrence_pattern)}>
                     {/* The tooltip is pointer-only, so the icon carries its own name. */}
@@ -191,7 +205,7 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
               keyboard. Opacity keeps them focusable and group-focus-within reveals
               them. The bar is absolutely positioned, so nothing shifts. */}
           <div
-              className={`absolute right-0 top-0 items-center gap-1 pl-4 transition-opacity ${
+              className={`absolute right-0 top-0 items-center gap-1 pl-8 transition-opacity ${
                 anyModalOpen
                   ? 'hidden'
                   : 'flex opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto'
@@ -199,6 +213,20 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
               style={{ background: `linear-gradient(to right, transparent, ${isAssigned ? 'var(--card-bg-assigned, #fafafa)' : 'var(--card-bg, #ffffff)'} 40%)` }}
               onPointerDown={e => e.stopPropagation()}
             >
+              {isAssigned && (
+                <Tooltip text="Unassign">
+                  <button
+                    onClick={e => { e.stopPropagation(); onUnassign(todo.id); }}
+                    aria-label={`Remove ${todo.title} from its day`}
+                    className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition"
+                  >
+                    <svg aria-hidden="true" className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M10 14l4 4m0-4l-4 4" />
+                    </svg>
+                  </button>
+                </Tooltip>
+              )}
               <Tooltip text="Edit">
                 <button
                   onClick={e => { e.stopPropagation(); onEdit(todo); }}
@@ -251,7 +279,7 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
   );
 });
 
-export default function TodoCard({ todo, isAssigned, index, onComplete, onEdit, onDelete }) {
+export default function TodoCard({ todo, isAssigned, index, draggableId, isGhost = false, onComplete, onEdit, onDelete, onUnassign }) {
   const [checked, setChecked] = useState(false);
 
   function handleComplete(e) {
@@ -262,7 +290,7 @@ export default function TodoCard({ todo, isAssigned, index, onComplete, onEdit, 
   }
 
   return (
-    <Draggable draggableId={isAssigned ? `sidebar-${todo.id}` : String(todo.id)} index={index}>
+    <Draggable draggableId={draggableId ?? sidebarDraggableId(todo)} index={index} isDragDisabled={isGhost}>
       {(provided, snapshot) => (
         <TodoCardBody
           provided={provided}
@@ -270,9 +298,11 @@ export default function TodoCard({ todo, isAssigned, index, onComplete, onEdit, 
           todo={todo}
           isAssigned={isAssigned}
           checked={checked}
+          isGhost={isGhost}
           onComplete={handleComplete}
           onEdit={onEdit}
           onDelete={onDelete}
+          onUnassign={onUnassign}
         />
       )}
     </Draggable>

@@ -161,6 +161,20 @@ db.exec(`
     quote_id INTEGER NOT NULL REFERENCES quotes(id) ON DELETE CASCADE,
     PRIMARY KEY (user_id, day)
   );
+
+  -- A horizontal rule the user drops into a day column to mark a caesura.
+  -- planner_order shares ONE dense sequence per day with todos.planner_order:
+  -- the client renumbers both kinds 0..n-1 after every drag, so a divider and
+  -- a todo never hold the same slot and neither table can be reordered alone.
+  --
+  -- AR-15: user data, exported by routes/backup.js.
+  CREATE TABLE IF NOT EXISTS day_dividers (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    date          TEXT    NOT NULL,
+    planner_order INTEGER,
+    created_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+  );
 `);
 
 // Migrate: add planner_order column if missing
@@ -356,6 +370,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_todos_user_archived  ON todos(user_id, archived);
   CREATE INDEX IF NOT EXISTS idx_todos_user_completed ON todos(user_id, completed, completed_at);
   CREATE INDEX IF NOT EXISTS idx_todos_list_id        ON todos(list_id);
+  CREATE INDEX IF NOT EXISTS idx_day_dividers_user_date ON day_dividers(user_id, date);
 `);
 
 // Built-in quotes, after every table exists. Idempotent and cheap (one

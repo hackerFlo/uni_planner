@@ -5,7 +5,7 @@ const ICON_COLORS = {
   purple: 'bg-indigo-50 dark:bg-indigo-950 text-indigo-500',
   green:  'bg-emerald-50 dark:bg-emerald-950 text-emerald-500',
   amber:  'bg-amber-50 dark:bg-amber-950 text-amber-500',
-  blue:   'bg-sky-50 text-sky-500',
+  blue:   'bg-sky-50 dark:bg-sky-950 text-sky-500',
   rose:   'bg-rose-50 dark:bg-rose-950 text-rose-500',
 };
 
@@ -107,7 +107,7 @@ export default function WhatsNewModal({ entries, onClose }) {
                     <span className="text-[10px] text-zinc-300 dark:text-zinc-600">·</span>
                     <span className="text-[10px] text-zinc-400 dark:text-zinc-500">{formatDate(entry.date)}</span>
                     {ei === 0 && (
-                      <span className="ml-1 text-[9px] font-semibold bg-indigo-100 text-indigo-500 rounded-full px-1.5 py-0.5 uppercase tracking-wide">Latest</span>
+                      <span className="ml-1 text-[9px] font-semibold bg-indigo-100 dark:bg-indigo-900 text-indigo-500 dark:text-indigo-300 rounded-full px-1.5 py-0.5 uppercase tracking-wide">Latest</span>
                     )}
                   </div>
                 )}

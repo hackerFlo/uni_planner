@@ -65,6 +65,7 @@ const todoRoutes = require('./routes/todos');
 const listRoutes = require('./routes/lists');
 const backupRoutes = require('./routes/backup');
 const dayNoteRoutes = require('./routes/dayNotes');
+const dayDividerRoutes = require('./routes/dayDividers');
 const examRoutes = require('./routes/exams');
 const holidayRoutes = require('./routes/holidays');
 const quoteRoutes = require('./routes/quotes');
@@ -104,6 +105,7 @@ app.use('/api/todos', todoLimiter, todoRoutes);
 app.use('/api/lists', todoLimiter, listRoutes);
 app.use('/api/backup', backupLimiter, backupRoutes);
 app.use('/api/day-notes', todoLimiter, dayNoteRoutes);
+app.use('/api/day-dividers', todoLimiter, dayDividerRoutes);
 app.use('/api/exams', todoLimiter, examRoutes);
 // A cold cache issues four upstream fetches in a burst (year-1/0/+1 on first
 // planner load, plus the country list when Settings opens), so it shares the

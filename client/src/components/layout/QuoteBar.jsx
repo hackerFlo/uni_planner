@@ -95,8 +95,17 @@ export default function QuoteBar() {
 
   return (
     <div
+      // An absolutely centred box can only be as wide as twice its distance to
+      // the nearer edge, and the right-hand cluster is the wider of the two: at
+      // its longest -- the exam pill with a truncated title, the two icon
+      // buttons, the header padding -- it measures just under 19.5rem, so 39rem
+      // is what both sides have to be given. On a wide window that is far more
+      // room than the percentages allowed, which is what cut long quotes off.
+      // max() keeps the old percentage as a floor on narrower windows, where the
+      // calc would be the tighter of the two. A quote short enough to fit is
+      // sized by its own text either way, so none of this reaches one.
       className="group/quote hidden md:flex items-center gap-2 absolute left-1/2 -translate-x-1/2
-                 max-w-[38%] lg:max-w-[46%] px-2 py-1 rounded-full"
+                 max-w-[38%] lg:max-w-[max(46%,calc(100%-39rem))] px-2 py-1 rounded-full"
     >
       <span className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-400">
         <QuoteMarkIcon />

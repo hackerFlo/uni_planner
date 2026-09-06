@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useIsMobile from '../hooks/useIsMobile';
 import { DragDropContext } from '@hello-pangea/dnd';
-import { useTodos } from '../hooks/useTodos';
+import { usePlannerBoard } from '../hooks/usePlannerBoard';
 import { useDayNotes } from '../hooks/useDayNotes';
 import { useShakeUndo } from '../hooks/useShakeUndo';
 import { useWhatsNew } from '../hooks/useWhatsNew';
@@ -20,7 +20,9 @@ import { useCompletedTodos } from '../hooks/useCompletedTodos';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 import { buildSidebar } from '../utils/sidebar';
-import { planCrossDayDrop, planSameDayReorder } from '../utils/plannerMutations';
+import { planCrossDayDrop, planSameDayReorder, todosForDay } from '../utils/plannerMutations';
+import { isDividerId } from '../utils/plannerItems';
+import { CopyDragProvider } from '../context/CopyDragContext';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const SIDEBAR_MIN_PX = 200;
@@ -43,7 +45,11 @@ function loadRevealedDays() {
   }
 }
 
+// Maps a draggable id back to the key its item is stored under. Todos are
+// numbers (prefixed `sidebar-` when the same todo is dragged from the sidebar);
+// dividers keep their namespaced string id, which is already that key.
 function getRealId(draggableId) {
+  if (isDividerId(draggableId)) return draggableId;
   if (typeof draggableId === 'string' && draggableId.startsWith('sidebar-')) {
     return Number(draggableId.slice('sidebar-'.length));
   }
@@ -51,13 +57,17 @@ function getRealId(draggableId) {
 }
 
 export default function PlannerPage() {
-  const { todos, loading, initialLoading, fetchTodos, createTodo, updateTodo, deleteTodo, assignDay, reorderDay, moveTodoToDay } = useTodos();
+  const { todos, dividers, items, loading, initialLoading, fetchTodos, createTodo, updateTodo, deleteTodo,
+    assignDay, reorderDayItems, moveItemToDay, copyItemToDay, addDivider, removeDivider } = usePlannerBoard();
   const { canUndo, undo } = useUndo();
   const { notes, setNote } = useDayNotes();
   const { lists } = useLists();
   const whatsNew = useWhatsNew();
   const todayIso = useToday();
-  const [activeTodo, setActiveTodo] = useState(null);
+  const [activeItem, setActiveItem] = useState(null);
+  // The draggable id of the card being copied, or null for an ordinary move.
+  // Both surfaces render an inert stand-in for the original next to it.
+  const [copyGhostId, setCopyGhostId] = useState(null);
   const [formState, setFormState] = useState(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [weekOffset, setWeekOffset] = useState(0);
@@ -68,14 +78,37 @@ export default function PlannerPage() {
   const isMobile = useIsMobile();
   const sidebarScrollRef = useRef(null);
   const shrunkCardRef = useRef(null);
-  const todosRef = useRef(todos);
-  useEffect(() => { todosRef.current = todos; }, [todos]);
+  const itemsRef = useRef(items);
+  useEffect(() => { itemsRef.current = items; }, [items]);
+  // Alt/Option turns a drag into a copy. Kept in a ref rather than state so the
+  // key never costs a render, and read once, at pickup; @hello-pangea/dnd binds
+  // its own window keydown during a drag, so capture phase guarantees this one
+  // sees the event first.
+  const altHeldRef = useRef(false);
+  // The same decision, in a ref, because handleDragEnd must read the value the
+  // drag started with rather than whichever render it closed over.
+  const copyGhostRef = useRef(null);
   const scrollTimerRef = useRef(null);
   const resizeStartRef = useRef({ x: 0, width: 0 });
 
   useShakeUndo(canUndo, undo);
 
   useEffect(() => { fetchTodos(); }, [fetchTodos]);
+
+  useEffect(() => {
+    const sync = (e) => { altHeldRef.current = e.altKey; };
+    // Alt-tabbing away never delivers the keyup, which would otherwise leave
+    // every later drag stuck in copy mode.
+    const clear = () => { altHeldRef.current = false; };
+    window.addEventListener('keydown', sync, true);
+    window.addEventListener('keyup', sync, true);
+    window.addEventListener('blur', clear);
+    return () => {
+      window.removeEventListener('keydown', sync, true);
+      window.removeEventListener('keyup', sync, true);
+      window.removeEventListener('blur', clear);
+    };
+  }, []);
 
   useEffect(() => {
     function onKeyDown(e) {
@@ -122,10 +155,10 @@ export default function PlannerPage() {
   async function handleCreate(data) {
     const todo = await createTodo(data);
     if (todo?.day_assigned) {
-      const existing = todosRef.current
-        .filter(t => t.day_assigned === todo.day_assigned && t.id !== todo.id)
-        .sort((a, b) => (a.planner_order ?? Infinity) - (b.planner_order ?? Infinity));
-      await reorderDay([...existing, todo]);
+      // Over the day's items, not just its todos: renumbering one kind alone
+      // would collapse the shared ordinal run and strand every divider.
+      const existing = todosForDay(itemsRef.current, todo.day_assigned, { excludeId: todo.id });
+      await reorderDayItems([...existing, todo]);
     }
     return todo;
   }
@@ -139,14 +172,22 @@ export default function PlannerPage() {
   }
 
   function handleDragStart({ draggableId }) {
-    const realId = getRealId(draggableId);
-    setActiveTodo(todoIdMap.get(realId) ?? null);
+    setActiveItem(itemIdMap.get(getRealId(draggableId)) ?? null);
   }
 
-  // On mobile only: narrow the dragged sidebar card to the day-column width before dnd
-  // captures dimensions, so its centre of gravity tracks the finger and every column (not
-  // just the edges) can be dropped on. Restored in handleDragEnd. Desktop is untouched.
+  // Everything that has to be true before @hello-pangea/dnd measures the board.
+  // It calls this inside a flushSync of its own, so a state change made here is
+  // in the DOM, and in those measurements, before the drag begins.
   function handleBeforeCapture({ draggableId }) {
+    // Whether this drag copies is settled here and not looked at again: the
+    // stand-in holding the original's place has to be laid out with everything
+    // else, so the modifier cannot still be changing its mind at the drop.
+    copyGhostRef.current = altHeldRef.current ? draggableId : null;
+    setCopyGhostId(copyGhostRef.current);
+
+    // On mobile only: narrow the dragged sidebar card to the day-column width, so its
+    // centre of gravity tracks the finger and every column (not just the edges) can be
+    // dropped on. Restored in handleDragEnd. Desktop is untouched.
     if (!isMobile) return;
     const el = document.querySelector(`[data-rfd-draggable-id="${draggableId}"]`);
     if (!el || !sidebarScrollRef.current?.contains(el)) return;
@@ -162,30 +203,48 @@ export default function PlannerPage() {
 
   function handleDragEnd({ source, destination, draggableId }) {
     restoreShrunkCard();
-    setActiveTodo(null);
+    const wantsCopy = copyGhostRef.current !== null;
+    setActiveItem(null);
+    setCopyGhostId(null);
+    copyGhostRef.current = null;
     if (!destination) return;
 
     const realId = getRealId(draggableId);
     const srcId = source.droppableId;
     const dstId = destination.droppableId;
 
-    if (srcId === dstId && source.index === destination.index) return;
     if (!DATE_RE.test(dstId)) return;
 
-    if (DATE_RE.test(srcId) && srcId === dstId) {
-      const next = planSameDayReorder(todos, { day: srcId, from: source.index, to: destination.index });
-      if (next) reorderDay(next);
+    const item = itemIdMap.get(realId);
+    if (!item) return;
+
+    // Option+drag duplicates -- a divider as readily as a card, and onto the day
+    // it came from as readily as another, which is the only way to say "twice
+    // today". The drop index needs no adjusting: the stand-in occupied the
+    // original's slot all through the drag, so the list the index counts through
+    // is already the list the copy is landing in.
+    if (wantsCopy) {
+      const dayItems = todosForDay(items, dstId);
+      copyItemToDay(item, dstId, dayItems, Math.min(destination.index, dayItems.length));
       return;
     }
 
-    // One call, not assignDay().then(reorderDay): the two writes have to land in
+    if (srcId === dstId && source.index === destination.index) return;
+
+    if (DATE_RE.test(srcId) && srcId === dstId) {
+      const next = planSameDayReorder(items, { day: srcId, from: source.index, to: destination.index });
+      if (next) reorderDayItems(next);
+      return;
+    }
+
+    // One call, not assignDay().then(reorder): the two writes have to land in
     // the undo store as a single entry or Ctrl+Z restores the order and leaves
     // the card on the day it was dragged to.
-    const next = planCrossDayDrop(todos, { todoId: realId, toDay: dstId, index: destination.index });
-    if (next) moveTodoToDay(realId, dstId, next);
+    const next = planCrossDayDrop(items, { todoId: realId, toDay: dstId, index: destination.index });
+    if (next) moveItemToDay(item, dstId, next);
   }
 
-  const todoIdMap = useMemo(() => new Map(todos.map(t => [t.id, t])), [todos]);
+  const itemIdMap = useMemo(() => new Map(items.map(i => [i.id, i])), [items]);
 
   const plannerTodos = useMemo(() => todos.filter(t => t.day_assigned), [todos]);
 
@@ -252,11 +311,13 @@ export default function PlannerPage() {
 
       <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
         <DragDropContext onBeforeCapture={handleBeforeCapture} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+        <CopyDragProvider value={!!copyGhostId}>
 
           {/* Weekly planner */}
           <main className="h-1/2 md:h-auto md:flex-1 flex-shrink-0 overflow-hidden order-1 md:order-2">
             <WeeklyPlanner
               todos={plannerTodos}
+              dividers={dividers}
               loading={initialLoading}
               weekOffset={weekOffset}
               weekDates={weekDates}
@@ -265,7 +326,8 @@ export default function PlannerPage() {
               revealedDays={revealedDays}
               onToggleCompleted={toggleCompleted}
               onUncomplete={uncompleteTodo}
-              isDragging={!!activeTodo}
+              isDragging={!!activeItem}
+              copyGhostId={copyGhostId}
               notes={notes}
               onNoteChange={setNote}
               onUnassign={id => assignDay(id, null)}
@@ -273,6 +335,8 @@ export default function PlannerPage() {
               onEdit={todo => setFormState({ mode: 'edit', todo })}
               onDelete={deleteTodo}
               onAdd={date => setFormState({ mode: 'create', defaults: { day_assigned: date } })}
+              onAddDivider={addDivider}
+              onDeleteDivider={removeDivider}
             />
           </main>
 
@@ -307,6 +371,11 @@ export default function PlannerPage() {
                     onEdit={todo => setFormState({ mode: 'edit', todo })}
                     onComplete={completeTodo}
                     onDelete={id => deleteTodo(id)}
+                    onUnassign={id => assignDay(id, null)}
+                    copyGhostId={copyGhostId}
+                    // A divider belongs to a day, so the sidebar visibly
+                    // refuses it rather than accepting a drop that does nothing.
+                    isDropDisabled={activeItem?.kind === 'divider'}
                   />
                 ))}
               </div>
@@ -350,6 +419,7 @@ export default function PlannerPage() {
             )}
           </div>
 
+        </CopyDragProvider>
         </DragDropContext>
       </div>
 

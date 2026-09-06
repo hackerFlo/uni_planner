@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useState } from 'react';
 import { Draggable } from '@hello-pangea/dnd';
 import LinkText from '../ui/LinkText';
 import RichText from '../ui/RichText';
@@ -7,6 +7,8 @@ import ConfirmPopover from '../ui/ConfirmPopover';
 import { useLists } from '../../context/ListsContext';
 import { LIST_PALETTE } from '../../constants/listPalette';
 import { useAnyModalOpen } from '../../context/ModalContext';
+import { useCopyDrag } from '../../context/CopyDragContext';
+import { useDragTilt } from '../../hooks/useDragTilt';
 
 const COMPLETION_DELAY_MS = 500;
 
@@ -16,55 +18,15 @@ function isRecurring(todo) {
 
 function fmtTime(t) { return t ? t.replace(' min', 'm') : t; }
 
-const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, onComplete, onUnassign, onEdit, onDelete }) {
+const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, isGhost, onComplete, onUnassign, onEdit, onDelete }) {
   const anyModalOpen = useAnyModalOpen();
+  const isCopying = useCopyDrag() && snapshot.isDragging;
   const { getList } = useLists();
   const list = getList(todo.list_id);
   const palette = LIST_PALETTE[list?.color] ?? LIST_PALETTE.slate;
   const listName = list?.name ?? '';
 
-  const [rotation, setRotation] = useState(0);
-  const prevXRef = useRef(null);
-  const decayRef = useRef(null);
-
-  useEffect(() => {
-    if (!snapshot.isDragging) {
-      setRotation(0);
-      prevXRef.current = null;
-      return;
-    }
-    let rafId = null;
-    let pendingX = null;
-    function handleMove(e) {
-      pendingX = e.clientX;
-      if (rafId !== null) return;
-      rafId = requestAnimationFrame(() => {
-        rafId = null;
-        if (prevXRef.current !== null) {
-          const dx = pendingX - prevXRef.current;
-          setRotation(Math.max(-12, Math.min(12, dx * 1.5)));
-          clearTimeout(decayRef.current);
-          decayRef.current = setTimeout(() => setRotation(0), 80);
-        }
-        prevXRef.current = pendingX;
-      });
-    }
-    function handleUp() {
-      setRotation(0);
-      prevXRef.current = null;
-      if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
-      window.removeEventListener('pointermove', handleMove);
-      window.removeEventListener('pointerup', handleUp);
-    }
-    window.addEventListener('pointermove', handleMove);
-    window.addEventListener('pointerup', handleUp);
-    return () => {
-      window.removeEventListener('pointermove', handleMove);
-      window.removeEventListener('pointerup', handleUp);
-      clearTimeout(decayRef.current);
-      if (rafId !== null) cancelAnimationFrame(rafId);
-    };
-  }, [snapshot.isDragging]);
+  const rotation = useDragTilt(snapshot.isDragging);
 
   return (
     <div
@@ -82,9 +44,15 @@ const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, onC
           : provided.draggableProps.style?.transition,
         opacity: checked ? 0.4 : 1,
       }}
-      className="group bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-lg p-2.5 shadow-sm hover:shadow-md transition-shadow select-none min-w-0 w-full relative cursor-grab active:cursor-grabbing"
+      className={`group bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-lg p-2.5 shadow-sm hover:shadow-md transition-shadow select-none min-w-0 w-full relative cursor-grab active:cursor-grabbing${isGhost ? ' pointer-events-none' : ''}`}
+      aria-hidden={isGhost || undefined}
     >
       <div className="flex items-center gap-2 mb-1.5">
+        {isCopying && (
+          <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full uppercase tracking-wide bg-indigo-100 text-indigo-600 dark:bg-indigo-900 dark:text-indigo-200">
+            Copy
+          </span>
+        )}
         <Tooltip text="Mark complete">
         <button
           onPointerDown={e => e.stopPropagation()}
@@ -201,7 +169,7 @@ const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, onC
   );
 });
 
-export default function AssignedCard({ todo, index, onUnassign, onComplete, onEdit, onDelete }) {
+export default function AssignedCard({ todo, index, draggableId, isGhost = false, onUnassign, onComplete, onEdit, onDelete }) {
   const [checked, setChecked] = useState(false);
 
   function handleComplete(e) {
@@ -211,14 +179,18 @@ export default function AssignedCard({ todo, index, onUnassign, onComplete, onEd
     setTimeout(() => onComplete(todo), COMPLETION_DELAY_MS);
   }
 
+  // `draggableId` is an override, not a default: while a copy-drag runs the
+  // board renders a second, inert stand-in for this card, and dnd will only
+  // accept it under an id of its own.
   return (
-    <Draggable draggableId={String(todo.id)} index={index}>
+    <Draggable draggableId={draggableId ?? String(todo.id)} index={index} isDragDisabled={isGhost}>
       {(provided, snapshot) => (
         <CardBody
           provided={provided}
           snapshot={snapshot}
           todo={todo}
           checked={checked}
+          isGhost={isGhost}
           onComplete={handleComplete}
           onUnassign={onUnassign}
           onEdit={onEdit}

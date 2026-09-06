@@ -20,3 +20,11 @@ export function buildSidebar(items) {
   const assigned = items.filter(t => t.day_assigned).sort(byDayAsc);
   return [...unassigned, ...assigned];
 }
+
+// The sidebar shows the same todo whether or not it is assigned to a day, so an
+// assigned one needs an id of its own: the day column is already rendering a
+// Draggable under the raw id, and @hello-pangea/dnd requires them to be unique
+// board-wide.
+export function sidebarDraggableId(todo) {
+  return todo.day_assigned ? `sidebar-${todo.id}` : String(todo.id);
+}
