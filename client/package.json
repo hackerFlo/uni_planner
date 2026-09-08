@@ -20,7 +20,7 @@
     "react": "^18.2.0",
     "react-aria-components": "^1.17.0",
     "react-dom": "^18.2.0",
-    "react-router-dom": "^6.22.3"
+    "react-router-dom": "^7.18.2"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",
