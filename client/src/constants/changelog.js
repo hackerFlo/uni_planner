@@ -4,11 +4,30 @@
 // This way every Watchtower deploy maps to exactly one version.
 // Versioning: X.Y — increment Y for regular updates, bump X (reset Y to 0) for big releases.
 // Add a new entry to CHANGELOG (newest first) on first push of a window; append to top entry otherwise.
-export const CURRENT_VERSION = '4.0';
+export const CURRENT_VERSION = '4.1';
 
 // icon: 'purple' | 'green' | 'amber' | 'blue' | 'rose'
 // Each feature needs: icon, name, desc, and a 24×24 SVG path string (stroke icons).
 export const CHANGELOG = [
+  {
+    version: '4.1',
+    date: '2026-09-08',
+    title: 'Two small things that were saying the wrong thing',
+    features: [
+      {
+        icon: 'blue',
+        name: 'Escape twice throws the draft away',
+        desc: 'Closing an item form with something typed into it asks "Discard your changes?" first. Pressing Escape again used to dismiss that question and put you back in the form, so the same key meant close and then meant do not close. It now answers the question instead: the first Escape asks, the second discards. Keep editing is still there for backing out.',
+        svgPath: 'M9 9l6 6m0-6l-6 6M4 6h16a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V7a1 1 0 011-1z',
+      },
+      {
+        icon: 'green',
+        name: 'The week scrollbar is a phone thing now',
+        desc: 'The bar under the seven columns shows up on a phone screen only, where the week is a swipe carousel and the thumb is the one sign that there is more of it past the edge. On a desktop the week is paged with Prev and Next and a trackpad swipes the columns directly, so the bar was a line under the board earning nothing.',
+        svgPath: 'M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z',
+      },
+    ],
+  },
   {
     version: '4.0',
     date: '2026-09-06',

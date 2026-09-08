@@ -4,6 +4,12 @@ import { thumbGeometry, scrollLeftForThumbLeft } from '../../utils/weekScroll';
 // A visible, permanent scrollbar for the week row. It sits below the scroll
 // container rather than inside it: the container hides both native bars (see
 // weekScroll.js) and a second scrollable element would break dnd auto-scroll.
+//
+// Phone only. On a pointer device the seven columns are paged with Prev/Next
+// and a trackpad swipes the row directly, so the bar was one more thing in a
+// header that is already busy. Below md the row is a snap carousel
+// (`md:snap-none` in WeeklyPlanner) and a thumb is the only sign the week
+// continues past the edge -- which is the same breakpoint, so the two agree.
 
 export default function WeekScrollbar({ scrollRef }) {
   const [metrics, setMetrics] = useState({ scrollLeft: 0, clientWidth: 0, scrollWidth: 0 });
@@ -93,7 +99,7 @@ export default function WeekScrollbar({ scrollRef }) {
   if (!visible) return null;
 
   return (
-    <div className="mt-2 flex-shrink-0">
+    <div className="mt-2 flex-shrink-0 md:hidden">
       <div
         ref={setTrack}
         role="scrollbar"

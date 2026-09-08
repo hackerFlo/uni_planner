@@ -497,9 +497,11 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
       }}
       onKeyDown={e => {
         if (e.key !== 'Escape' || emojiState) return;
-        // With the prompt up, Escape backs out of the prompt rather than
-        // confirming the thing it is asking about.
-        if (confirmDiscard) setConfirmDiscard(false);
+        // Escape means close, and it keeps meaning that: the second press
+        // answers the prompt the first one raised. Backing out is what the
+        // Keep editing button is for -- a repeated Escape reads as "yes, I
+        // meant it", not as a request to return to the form.
+        if (confirmDiscard) onClose();
         else requestClose();
       }}
     >
