@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
-import { api } from '../../api/client';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { quoteApi, capturedRequest } from '../../api/settingsMutations';
+import { useUndo } from '../../context/UndoContext';
 import { userMessage } from '../../api/errors';
 import { usePreferences } from '../../context/PreferencesContext';
 import { useToast } from '../../context/ToastContext';
@@ -36,6 +37,9 @@ export default function QuoteBar() {
   const { preferences, update } = usePreferences();
   const today = useToday();
   const toast = useToast();
+  const undo = useUndo();
+  const [version, setVersion] = useState(null);
+  const dislikeAttempt = useRef(capturedRequest(quoteApi.dislike));
   const [quote, setQuote] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -44,47 +48,34 @@ export default function QuoteBar() {
   const snoozed = preferences.quotesSnoozedOn === today;
   const enabled = preferences.showQuotes && !snoozed;
 
+  const refresh = useCallback(async () => {
+    const result = await quoteApi.daily(today);
+    setQuote(result.quote ?? null);
+    setVersion(result.version);
+  }, [today]);
+
   useEffect(() => {
     if (!enabled) { setQuote(null); return; }
     let cancelled = false;
-    // Keyed on `today`, so the quote also rolls over at midnight on a tab that
-    // was left open, not only on a reload.
-    api.get(`/api/quotes/today?date=${today}`)
-      .then(({ quote: q }) => { if (!cancelled) setQuote(q ?? null); })
-      // Silent: a missing quote is decoration, and a toast here would fire on
-      // every page load whenever the endpoint is unhappy.
-      .catch(() => { if (!cancelled) setQuote(null); });
+    quoteApi.daily(today)
+      .then(result => { if (!cancelled) { setQuote(result.quote ?? null); setVersion(result.version); } })
+      .catch(() => { if (!cancelled) { setQuote(null); setVersion(null); } });
     return () => { cancelled = true; };
   }, [enabled, today]);
 
-  const restore = useCallback(async (id) => {
-    try {
-      const { quote: back } = await api.post(`/api/quotes/${id}/restore?date=${today}`);
-      setQuote(back ?? null);
-    } catch (err) {
-      toast?.error(`Could not restore the quote. ${userMessage(err)}`, { ref: err.requestId ?? null });
-    }
-  }, [today, toast]);
-
   async function handleDislike() {
-    if (!quote || busy) return;
-    const hidden = quote;
+    if (!quote || busy || !version) return;
     setBusy(true);
     try {
-      const { quote: next } = await api.post(`/api/quotes/${hidden.id}/dislike?date=${today}`);
-      setQuote(next ?? null);
-      // Longer than the 4s default: this is the only chance to reverse a
-      // permanent hide without going through Settings, and four seconds is not
-      // enough to read the message and decide.
-      toast?.success('Quote hidden. It will not be shown again.', {
-        action: { label: 'Undo', onClick: () => restore(hidden.id) },
-        duration: 12000,
-      });
+      const receipt = await dislikeAttempt.current.run({ id: quote.id, date: today }, version);
+      if (receipt.replayed) await refresh();
+      else { setQuote(receipt.quote ?? null); setVersion(receipt.currentVersion); }
+      undo?.recordOperation(receipt, refresh);
+      toast?.success('Quote hidden. It will not be shown again.', { duration: 12000 });
     } catch (err) {
       toast?.error(`Could not hide the quote. ${userMessage(err)}`, { ref: err.requestId ?? null });
-    } finally {
-      setBusy(false);
-    }
+      if (err.status === 409) await refresh().catch(() => setVersion(null));
+    } finally { setBusy(false); }
   }
 
   function handleSnooze() {

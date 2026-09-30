@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { usePreferences } from '../../context/PreferencesContext';
-import { THEMES, DENSITIES } from '../../utils/preferences';
+import { THEMES, DENSITIES, AGENT_ACTIVITY_ICONS } from '../../utils/preferences';
 import { api } from '../../api/client';
 import { FALLBACK_HOLIDAY_COUNTRIES, HOLIDAY_SUBDIVISIONS } from '../../constants/regions';
+import AgentActivityIcon from '../ui/AgentActivityIcon';
 
 const THEME_LABELS = { system: 'System', light: 'Light', dark: 'Dark' };
 const DENSITY_LABELS = { comfortable: 'Comfortable', compact: 'Compact' };
+const AGENT_ACTIVITY_ICON_LABELS = { fuzzy: 'Fuzzy', ring: 'Ring', robot: 'Robot' };
 
 // A country the live list does not contain would silently drop out of the
 // select while the stored preference still names it, so the dropdown would show
@@ -37,7 +39,7 @@ function useHolidayCountries(selectedCode) {
   return withSelected(countries, selectedCode);
 }
 
-function SegmentedControl({ label, options, value, labels, onChange, name }) {
+function SegmentedControl({ label, options, value, labels, onChange, name, renderIcon }) {
   return (
     <fieldset>
       <legend className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1.5">{label}</legend>
@@ -58,7 +60,10 @@ function SegmentedControl({ label, options, value, labels, onChange, name }) {
               checked={value === option}
               onChange={() => onChange(option)}
             />
-            {labels[option]}
+            <span className="inline-flex items-center justify-center gap-1.5">
+              {renderIcon?.(option)}
+              {labels[option]}
+            </span>
           </label>
         ))}
       </div>
@@ -92,6 +97,23 @@ export default function AppearanceSection() {
         value={preferences.density}
         onChange={density => update({ density })}
       />
+
+      <SegmentedControl
+        label="Agent activity icon"
+        name="agent-activity-icon"
+        options={AGENT_ACTIVITY_ICONS}
+        labels={AGENT_ACTIVITY_ICON_LABELS}
+        value={preferences.agentActivityIcon}
+        onChange={agentActivityIcon => update({ agentActivityIcon })}
+        renderIcon={variant => (
+          <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full ${variant === 'robot' ? 'bg-indigo-100 text-indigo-600 ring-1 ring-indigo-200 dark:bg-indigo-900/70 dark:text-indigo-200 dark:ring-indigo-700' : variant === 'fuzzy' ? 'bg-indigo-50 ring-1 ring-indigo-200 dark:bg-indigo-950 dark:ring-indigo-700' : ''}`}>
+            <AgentActivityIcon variant={variant} />
+          </span>
+        )}
+      />
+      <p className="text-[11px] text-zinc-400 dark:text-zinc-500 leading-relaxed -mt-2">
+        Choose the icon shown on tasks the assistant creates or reschedules.
+      </p>
 
       <label className="flex items-center gap-3 cursor-pointer">
         <div className="relative">

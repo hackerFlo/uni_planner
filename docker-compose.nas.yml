@@ -28,6 +28,15 @@ services:
       ALLOW_REGISTER: ${ALLOW_REGISTER:-}
       LOG_LEVEL: ${LOG_LEVEL:-}
       LOG_FORMAT: ${LOG_FORMAT:-}
+      MCP_ENABLED: ${MCP_ENABLED:-false}
+      MCP_WRITES_ENABLED: ${MCP_WRITES_ENABLED:-false}
+      MCP_HOST: ${MCP_HOST:-mcp-disabled.invalid}
+      MCP_PUBLIC_URL: ${MCP_PUBLIC_URL:-}
+      WEB_PUBLIC_ORIGIN: ${WEB_PUBLIC_ORIGIN:-}
+      CF_ACCESS_ISSUER: ${CF_ACCESS_ISSUER:-}
+      CF_ACCESS_MCP_AUD: ${CF_ACCESS_MCP_AUD:-}
+      CF_ACCESS_WEB_AUD: ${CF_ACCESS_WEB_AUD:-}
+      MCP_ALLOWED_ORIGINS: ${MCP_ALLOWED_ORIGINS:-}
       # Settings > App Updates. Unset either one and that section says it is not
       # configured rather than failing. GITHUB_REPO carries no default here on
       # purpose: which repository a deployment tracks is environment, not source.
@@ -48,6 +57,8 @@ services:
           memory: 64M
 
   client:
+    environment:
+      MCP_HOST: ${MCP_HOST:-mcp-disabled.invalid}
     image: ghcr.io/hackerflo/uni-planner-client:latest
     restart: unless-stopped
     # Without this the default json-file driver grows without bound AND the

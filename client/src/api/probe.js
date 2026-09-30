@@ -1,4 +1,4 @@
-import { KINDS } from './errors';
+import { KINDS } from './errors.js';
 
 const PROBE_TIMEOUT_MS = 5000;
 let inFlight = null;

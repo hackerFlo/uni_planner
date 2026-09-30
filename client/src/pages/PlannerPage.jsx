@@ -22,6 +22,13 @@ import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 import { buildSidebar } from '../utils/sidebar';
 import { planCrossDayDrop, planSameDayReorder, todosForDay } from '../utils/plannerMutations';
 import { isDividerId } from '../utils/plannerItems';
+import { PlannerDraft } from '../hooks/plannerDraft';
+import usePlannerRevision from '../hooks/usePlannerRevision';
+import { useAnyModalOpen } from '../context/ModalContext';
+import { useExams } from '../context/ExamsContext';
+import { usePreferences } from '../context/PreferencesContext';
+import { useToast } from '../context/ToastContext';
+import { userMessage } from '../api/errors';
 import { CopyDragProvider } from '../context/CopyDragContext';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -57,11 +64,19 @@ function getRealId(draggableId) {
 }
 
 export default function PlannerPage() {
-  const { todos, dividers, items, loading, initialLoading, fetchTodos, createTodo, updateTodo, deleteTodo,
-    assignDay, reorderDayItems, moveItemToDay, copyItemToDay, addDivider, removeDivider } = usePlannerBoard();
+  const relatedRefresh = useRef(null);
+  const refreshRelated = useCallback(options => relatedRefresh.current?.(options) ?? Promise.resolve(true), []);
+  const { todos, dividers, items, loading, initialLoading, fetchTodos, createTodo, updateTodo, deleteTodo, dismissAgentActivity,
+    captureVersion, fetchBoard, assignDay, reorderDayItems, moveItemToDay, copyItemToDay, addDivider, removeDivider } = usePlannerBoard({ refreshRelated });
   const { canUndo, undo } = useUndo();
-  const { notes, setNote } = useDayNotes();
-  const { lists } = useLists();
+  const { notes, setNote, fetchNotes, version: notesVersion } = useDayNotes();
+  const { lists, fetchLists } = useLists();
+  const { fetchExams } = useExams();
+  const { refreshPreferences } = usePreferences();
+  const anyModalOpen = useAnyModalOpen();
+  const toast = useToast();
+  const [editingText, setEditingText] = useState(false);
+  const dragControls = useRef(null);
   const whatsNew = useWhatsNew();
   const todayIso = useToday();
   const [activeItem, setActiveItem] = useState(null);
@@ -78,8 +93,6 @@ export default function PlannerPage() {
   const isMobile = useIsMobile();
   const sidebarScrollRef = useRef(null);
   const shrunkCardRef = useRef(null);
-  const itemsRef = useRef(items);
-  useEffect(() => { itemsRef.current = items; }, [items]);
   // Alt/Option turns a drag into a copy. Kept in a ref rather than state so the
   // key never costs a render, and read once, at pickup; @hello-pangea/dnd binds
   // its own window keydown during a drag, so capture phase guarantees this one
@@ -93,7 +106,16 @@ export default function PlannerPage() {
 
   useShakeUndo(canUndo, undo);
 
-  useEffect(() => { fetchTodos(); }, [fetchTodos]);
+  useEffect(() => {
+    const syncFocus = () => setEditingText(Boolean(document.activeElement?.matches('input,textarea,[contenteditable="true"]')));
+    document.addEventListener('focusin', syncFocus);
+    document.addEventListener('focusout', syncFocus);
+    return () => { document.removeEventListener('focusin', syncFocus); document.removeEventListener('focusout', syncFocus); };
+  }, []);
+  function openForm(state) {
+    try { setFormState({ ...state, draft: new PlannerDraft(captureVersion()) }); }
+    catch (error) { toast?.error(userMessage(error)); }
+  }
 
   useEffect(() => {
     const sync = (e) => { altHeldRef.current = e.altKey; };
@@ -152,15 +174,8 @@ export default function PlannerPage() {
     };
   }, [isResizing]);
 
-  async function handleCreate(data) {
-    const todo = await createTodo(data);
-    if (todo?.day_assigned) {
-      // Over the day's items, not just its todos: renumbering one kind alone
-      // would collapse the shared ordinal run and strand every divider.
-      const existing = todosForDay(itemsRef.current, todo.day_assigned, { excludeId: todo.id });
-      await reorderDayItems([...existing, todo]);
-    }
-    return todo;
+  function handleCreate(data) {
+    return createTodo(data, formState.draft.controls({ action: 'create', data }));
   }
 
   function startResize(e) {
@@ -172,6 +187,7 @@ export default function PlannerPage() {
   }
 
   function handleDragStart({ draggableId }) {
+    dragControls.current = { expectedVersion: captureVersion(), idempotencyKey: crypto.randomUUID() };
     setActiveItem(itemIdMap.get(getRealId(draggableId)) ?? null);
   }
 
@@ -225,7 +241,7 @@ export default function PlannerPage() {
     // is already the list the copy is landing in.
     if (wantsCopy) {
       const dayItems = todosForDay(items, dstId);
-      copyItemToDay(item, dstId, dayItems, Math.min(destination.index, dayItems.length));
+      copyItemToDay(item, dstId, dayItems, Math.min(destination.index, dayItems.length), dragControls.current);
       return;
     }
 
@@ -233,7 +249,7 @@ export default function PlannerPage() {
 
     if (DATE_RE.test(srcId) && srcId === dstId) {
       const next = planSameDayReorder(items, { day: srcId, from: source.index, to: destination.index });
-      if (next) reorderDayItems(next);
+      if (next) reorderDayItems(next, dragControls.current);
       return;
     }
 
@@ -241,7 +257,7 @@ export default function PlannerPage() {
     // the undo store as a single entry or Ctrl+Z restores the order and leaves
     // the card on the day it was dragged to.
     const next = planCrossDayDrop(items, { todoId: realId, toDay: dstId, index: destination.index });
-    if (next) moveItemToDay(item, dstId, next);
+    if (next) moveItemToDay(item, dstId, next, dragControls.current);
   }
 
   const itemIdMap = useMemo(() => new Map(items.map(i => [i.id, i])), [items]);
@@ -266,8 +282,38 @@ export default function PlannerPage() {
     // changes what belongs here.
   }, [todos, lists]);
 
-  const { byDate: completedByDate, refresh: refreshCompleted } =
+  const { byDate: completedByDate, refresh: refreshCompleted, version: completedVersion } =
     useCompletedTodos(weekDates, revealedDays.size > 0);
+  relatedRefresh.current = refreshCompleted;
+
+  const refreshAll = useCallback(async (_version, options) => {
+    const applied = await Promise.all([fetchBoard(options), fetchLists(options), fetchExams(options), fetchNotes(options),
+      refreshCompleted(options), refreshPreferences(options)]);
+    if (applied.some(result => result === false)) throw new Error('Planner refresh deferred');
+  }, [fetchBoard, fetchLists, fetchExams, fetchNotes, refreshCompleted, refreshPreferences]);
+  const syncPaused = anyModalOpen || Boolean(formState) || Boolean(activeItem) || editingText;
+  const revisionSync = usePlannerRevision({ onChange: refreshAll, paused: syncPaused });
+  const refreshedDay = useRef(todayIso);
+  useEffect(() => {
+    if (syncPaused || refreshedDay.current === todayIso) return;
+    const controller = new AbortController();
+    let retry;
+    async function refreshDay() {
+      if (document.visibilityState === 'hidden' || controller.signal.aborted) return;
+      try {
+        await refreshAll(null, { signal: controller.signal });
+        if (!controller.signal.aborted) refreshedDay.current = todayIso;
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          console.warn('[planner] midnight refresh deferred:', error.kind || error.name);
+          retry = setTimeout(refreshDay, 5000);
+        }
+      }
+    }
+    refreshDay();
+    document.addEventListener('visibilitychange', refreshDay);
+    return () => { controller.abort(); clearTimeout(retry); document.removeEventListener('visibilitychange', refreshDay); };
+  }, [todayIso, syncPaused, refreshAll]);
 
   function toggleCompleted(date) {
     setRevealedDays(prev => {
@@ -285,15 +331,14 @@ export default function PlannerPage() {
   // Completing an item moves it out of the live board and into the completed
   // list, so both have to be refreshed for the card to reappear below the fold.
   function completeTodo(todo) {
-    return updateTodo(todo.id, { completed: 1, archived: 1 }).then(refreshCompleted);
+    return updateTodo(todo.id, { completed: 1, archived: 1 });
   }
 
   // The inverse of the checkbox that filed it away. Both surfaces have to be
   // refreshed: the item leaves the completed list and rejoins the live board on
   // the same day it was assigned to, which `completed = 0` does not disturb.
   function uncompleteTodo(todo) {
-    return updateTodo(todo.id, { completed: 0, archived: 0 })
-      .then(() => Promise.all([fetchTodos(), refreshCompleted()]));
+    return updateTodo(todo.id, { completed: 0, archived: 0 }, { expectedVersion: completedVersion });
   }
 
   // An installed PWA has no browser pull-to-refresh; this restores it and pulls
@@ -307,6 +352,7 @@ export default function PlannerPage() {
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-white dark:bg-zinc-900">
       <PullToRefreshIndicator distance={pullDistancePx} refreshing={pullRefreshing} />
+      {revisionSync.error && <p role="status" className="text-xs px-4 py-1 text-amber-700">Planner sync is paused or retrying. {userMessage(revisionSync.error)}</p>}
       <Navbar onArchiveToggle={() => setArchiveOpen(v => !v)} archiveOpen={archiveOpen} fetchTodos={fetchTodos} onOpenWhatsNew={whatsNew.openManually} />
 
       <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
@@ -329,12 +375,13 @@ export default function PlannerPage() {
               isDragging={!!activeItem}
               copyGhostId={copyGhostId}
               notes={notes}
-              onNoteChange={setNote}
+              onNoteChange={(date, value) => setNote(date, value, { expectedVersion: notesVersion })}
               onUnassign={id => assignDay(id, null)}
               onComplete={completeTodo}
-              onEdit={todo => setFormState({ mode: 'edit', todo })}
+              onDismissAgentActivity={dismissAgentActivity}
+              onEdit={todo => openForm({ mode: 'edit', todo })}
               onDelete={deleteTodo}
-              onAdd={date => setFormState({ mode: 'create', defaults: { day_assigned: date } })}
+              onAdd={date => openForm({ mode: 'create', defaults: { day_assigned: date } })}
               onAddDivider={addDivider}
               onDeleteDivider={removeDivider}
             />
@@ -367,9 +414,10 @@ export default function PlannerPage() {
                     list={list}
                     todos={sidebarByList[list.id] ?? []}
                     loading={loading}
-                    onAdd={() => setFormState({ mode: 'create', defaults: { list_id: list.id } })}
-                    onEdit={todo => setFormState({ mode: 'edit', todo })}
+                    onAdd={() => openForm({ mode: 'create', defaults: { list_id: list.id } })}
+                    onEdit={todo => openForm({ mode: 'edit', todo })}
                     onComplete={completeTodo}
+                    onDismissAgentActivity={dismissAgentActivity}
                     onDelete={id => deleteTodo(id)}
                     onUnassign={id => assignDay(id, null)}
                     copyGhostId={copyGhostId}
@@ -430,17 +478,17 @@ export default function PlannerPage() {
           defaults={formState.defaults}
           onClose={() => setFormState(null)}
           onCreate={handleCreate}
-          onUpdate={(id, data) => updateTodo(id, data)}
-          onComplete={completeTodo}
-          onDelete={deleteTodo}
+          onUpdate={(id, data) => updateTodo(id, data, formState.draft.controls({ action: 'update', id, data }))}
+          onComplete={todo => updateTodo(todo.id, { completed: true, archived: true }, formState.draft.controls({ action: 'complete', id: todo.id }))}
+          onDelete={(id, scope) => deleteTodo(id, scope, formState.draft.controls({ action: 'delete', id, scope }))}
         />
       )}
 
       {archiveOpen && (
         <ArchiveDrawer
           onClose={() => setArchiveOpen(false)}
-          onRestore={(id) => updateTodo(id, { archived: 0, completed: 0 }).then(fetchTodos)}
-          onDelete={deleteTodo}
+          onRestore={(id, controls) => updateTodo(id, { archived: 0, completed: 0 }, controls).then(() => fetchTodos())}
+          onDelete={(id, controls) => deleteTodo(id, 'single', controls)}
         />
       )}
 

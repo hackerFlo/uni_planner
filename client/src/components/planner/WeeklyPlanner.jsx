@@ -8,7 +8,7 @@ import { toIso } from '../../utils/dates';
 
 const WEEK_LABEL = { '-1': 'Last Week', '0': 'This Week', '1': 'Next Week' };
 
-export default function WeeklyPlanner({ todos, dividers, loading = false, weekOffset, weekDates, onWeekOffsetChange, completedByDate, revealedDays, onToggleCompleted, onUncomplete, isDragging, copyGhostId, notes, onNoteChange, onUnassign, onComplete, onEdit, onDelete, onAdd, onAddDivider, onDeleteDivider }) {
+export default function WeeklyPlanner({ todos, dividers, loading = false, weekOffset, weekDates, onWeekOffsetChange, completedByDate, revealedDays, onToggleCompleted, onUncomplete, isDragging, copyGhostId, notes, onNoteChange, onUnassign, onComplete, onEdit, onDelete, onAdd, onAddDivider, onDeleteDivider, onDismissAgentActivity }) {
   const holidays = useHolidays();
   const { lists } = useLists();
   const { upcomingExams } = useExams();
@@ -133,6 +133,7 @@ export default function WeeklyPlanner({ todos, dividers, loading = false, weekOf
               onAdd={onAdd}
               onAddDivider={onAddDivider}
               onDeleteDivider={onDeleteDivider}
+              onDismissAgentActivity={onDismissAgentActivity}
             />
           ))}
         </div>

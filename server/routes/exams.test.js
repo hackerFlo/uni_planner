@@ -21,6 +21,7 @@ const db = require('../db');
 const { createSession } = require('../sessions');
 const { jsonBodyParser } = require('../middleware/bodyParser');
 const examRoutes = require('./exams');
+const { createExamService } = require('../services/exams');
 
 function makeUser(email) {
   const id = db.prepare('INSERT INTO users (email, password_hash) VALUES (?, ?)').run(email, 'x').lastInsertRowid;
@@ -143,6 +144,12 @@ test.describe('PATCH /api/exams/:id', () => {
   test('reports an id that belongs to nobody as not found', async () => {
     assert.equal((await call(alice, 'PATCH', '/999999', { title: 'Nope' })).status, 404);
   });
+
+  test('rejects partially numeric exam ids without altering the real exam', async () => {
+    const before = rowById(aliceLate);
+    assert.equal((await call(alice, 'PATCH', `/${aliceLate}suffix`, { title: 'Nope' })).status, 400);
+    assert.deepEqual(rowById(aliceLate), before);
+  });
 });
 
 test.describe('DELETE /api/exams/:id', () => {
@@ -167,4 +174,29 @@ test.describe('DELETE /api/exams/:id', () => {
   test('requires a session', async () => {
     assert.equal((await call(null, 'DELETE', `/${aliceLate}`)).status, 401);
   });
+});
+
+test('website and direct shared-service exam workflows produce equivalent owned state', async () => {
+  const webUser = makeUser('exams-web-equivalence@example.com');
+  const agentUser = makeUser('exams-agent-equivalence@example.com');
+  const service = createExamService(db);
+  const context = { userId: agentUser.id, actor: 'mcp' };
+  const args = { title: ' Exam ', exam_date: '2028-02-29' };
+  const web = (await call(webUser, 'POST', '/', args)).body.exam;
+  const agent = service.create(context, args);
+  const patch = { title: 'Updated', exam_date: '2028-03-01' };
+  await call(webUser, 'PATCH', `/${web.id}`, patch);
+  service.update(context, { ...patch, id: agent.id });
+  const normalize = rows => rows.map(({ id: _id, ...row }) => row);
+  assert.deepEqual(normalize((await call(webUser, 'GET', '/')).body.exams), normalize(service.list(context)));
+  await call(webUser, 'DELETE', `/${web.id}`);
+  service.remove(context, { id: agent.id });
+  assert.deepEqual((await call(webUser, 'GET', '/')).body.exams, service.list(context));
+});
+
+test('revoked website sessions cannot create exams', async () => {
+  const user = makeUser('exams-revoked-session@example.com');
+  db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
+  assert.equal((await call(user, 'POST', '/', { title: 'Nope', exam_date: '2028-02-29' })).status, 401);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM exams WHERE user_id = ?').get(user.id).n, 0);
 });

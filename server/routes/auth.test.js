@@ -173,6 +173,26 @@ test.describe('PATCH /me', () => {
 });
 
 test.describe('PATCH /notification-settings', () => {
+  test('rejects truthy strings and unknown settings fields', async () => {
+    const user = makeUser('strict-notification-settings@example.com');
+    for (const body of [{ notify_enabled: 'false' }, { notify_enabled: true, user_id: 999 }]) {
+      assert.equal((await patch('/api/auth/notification-settings', { token: tokenFor(user), body })).status, 400);
+    }
+    assert.equal(db.prepare('SELECT notify_enabled FROM users WHERE id=?').get(user.id).notify_enabled, 0);
+  });
+
+  test('requires mutation preconditions when agent writes are enabled', async () => {
+    const user = makeUser('versioned-notification-settings@example.com');
+    const saved = process.env.MCP_WRITES_ENABLED;
+    process.env.MCP_WRITES_ENABLED = 'true';
+    try {
+      assert.equal((await patch('/api/auth/notification-settings', { token: tokenFor(user), body: { notify_time: '08:00' } })).status, 409);
+      assert.equal((await post('/api/auth/test-email', { token: tokenFor(user), body: {} })).status, 409);
+    } finally {
+      if (saved === undefined) delete process.env.MCP_WRITES_ENABLED;
+      else process.env.MCP_WRITES_ENABLED = saved;
+    }
+  });
   // notify_email is handed to nodemailer as a recipient, so a bare length check
   // is not enough: a CRLF lets a caller append their own mail headers, and a
   // non-address is only discovered later, inside the scheduler, where the

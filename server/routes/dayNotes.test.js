@@ -21,6 +21,7 @@ const db = require('../db');
 const { createSession } = require('../sessions');
 const { jsonBodyParser } = require('../middleware/bodyParser');
 const dayNoteRoutes = require('./dayNotes');
+const { createDayNoteService } = require('../services/dayNotes');
 
 function makeUser(email) {
   const id = db.prepare('INSERT INTO users (email, password_hash) VALUES (?, ?)').run(email, 'x').lastInsertRowid;
@@ -141,6 +142,17 @@ test.describe('PUT /api/day-notes/:date', () => {
     assert.equal((await call(alice, 'PUT', '/tomorrow', { note: 'nope' })).status, 400);
   });
 
+  test('rejects impossible calendar dates without writing notes', async () => {
+    for (const date of ['2026-02-29', '2026-02-30', '2026-13-01', '2026-04-31']) {
+      assert.equal((await call(alice, 'PUT', `/${date}`, { note: 'nope' })).status, 400);
+      assert.equal(storedNote(alice, date), undefined);
+    }
+  });
+
+  test('accepts leap days when the year really is a leap year', async () => {
+    assert.equal((await call(alice, 'PUT', '/2028-02-29', { note: 'Leap day' })).status, 200);
+  });
+
   test('requires a session', async () => {
     assert.equal((await call(null, 'PUT', `/${SHARED_DATE}`, { note: 'nope' })).status, 401);
   });
@@ -148,4 +160,25 @@ test.describe('PUT /api/day-notes/:date', () => {
   test('and that rejected write did not land', () => {
     assert.equal(storedNote(alice, SHARED_DATE), 'Alice: lab report submitted');
   });
+});
+
+test('website and shared-service note workflows produce equivalent owned state', async () => {
+  const webUser = makeUser('notes-web-equivalence@example.com');
+  const agentUser = makeUser('notes-agent-equivalence@example.com');
+  const service = createDayNoteService(db);
+  const context = { userId: agentUser.id, actor: 'mcp' };
+  for (const note of [' First ', 'x'.repeat(250), '', 'Final']) {
+    const response = await call(webUser, 'PUT', '/2028-02-29', { note });
+    const { version, ...result } = response.body;
+    assert.deepEqual(result, service.set(context, { date: '2028-02-29', note }));
+    assert.match(version.epoch, /^[a-f0-9]{32}$/);
+  }
+  assert.deepEqual((await call(webUser, 'GET', '/')).body.notes, service.list(context));
+});
+
+test('revoked website sessions cannot mutate notes', async () => {
+  const user = makeUser('notes-revoked-session@example.com');
+  db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
+  assert.equal((await call(user, 'PUT', '/2028-02-29', { note: 'Nope' })).status, 401);
+  assert.equal(storedNote(user, '2028-02-29'), undefined);
 });

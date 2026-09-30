@@ -1,35 +1,19 @@
 const express = require('express');
 const db = require('../db');
 const requireAuth = require('../middleware/auth');
-const { sanitizeDayNote } = require('../middleware/validate');
-
+const domainError = require('../middleware/domainError');
+const { createDayNoteService } = require('../services/dayNotes');
+const service = createDayNoteService(db);
+const operations = require('../services/operations').createOperations(db);
+const { webMutation } = require('../domain/webMutation');
 const router = express.Router();
 router.use(requireAuth);
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-
-router.get('/', (req, res) => {
-  const notes = db.prepare('SELECT date, note FROM day_notes WHERE user_id = ? ORDER BY date ASC').all(req.user.id);
-  res.json({ notes });
-});
-
+const context = req => ({ userId: req.user.id, actor: 'web' });
+router.get('/', (req, res) => res.json({ notes: service.list(context(req)), version: operations.version(context(req)) }));
 router.put('/:date', (req, res) => {
-  const { date } = req.params;
-  if (!DATE_RE.test(date)) return res.status(400).json({ error: 'Invalid date format (expected YYYY-MM-DD)' });
-
-  const note = sanitizeDayNote(req.body.note ?? '');
-
-  if (note === '') {
-    db.prepare('DELETE FROM day_notes WHERE user_id = ? AND date = ?').run(req.user.id, date);
-  } else {
-    db.prepare(
-      `INSERT INTO day_notes (user_id, date, note, updated_at)
-       VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-       ON CONFLICT(user_id, date) DO UPDATE SET note = excluded.note, updated_at = excluded.updated_at`
-    ).run(req.user.id, date, note);
-  }
-
-  res.json({ date, note });
+  const args = { ...req.body, date: req.params.date, note: req.body.note ?? '' };
+  res.json(webMutation(operations, req, 'set_day_note', args, () => service.set(context(req), args)));
 });
-
+router.use(domainError);
 module.exports = router;

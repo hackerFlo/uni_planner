@@ -5,7 +5,7 @@ import { LIST_PALETTE } from '../../constants/listPalette';
 import { sidebarDraggableId } from '../../utils/sidebar';
 import { withCopyGhost } from '../../utils/copyDrag';
 
-export default function TodoList({ list, todos, loading, onAdd, onEdit, onComplete, onDelete, onUnassign, copyGhostId = null, isDropDisabled = false }) {
+export default function TodoList({ list, todos, loading, onAdd, onEdit, onComplete, onDelete, onUnassign, onDismissAgentActivity, copyGhostId = null, isDropDisabled = false }) {
   const palette = LIST_PALETTE[list.color] ?? LIST_PALETTE.slate;
 
   return (
@@ -67,6 +67,7 @@ export default function TodoList({ list, todos, loading, onAdd, onEdit, onComple
                 onEdit={onEdit}
                 onDelete={onDelete}
                 onUnassign={onUnassign}
+                onDismissAgentActivity={onDismissAgentActivity}
               />
             ))}
             {provided.placeholder}

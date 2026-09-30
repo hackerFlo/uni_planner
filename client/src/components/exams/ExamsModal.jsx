@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { getLocalTimeZone, today } from '@internationalized/date';
 import { useRegisterModal } from '../../context/ModalContext';
 import { useExams } from '../../context/ExamsContext';
+import { PlannerDraft } from '../../hooks/plannerDraft';
+import { useToast } from '../../context/ToastContext';
+import { userMessage } from '../../api/errors';
 import Tooltip from '../ui/Tooltip';
 import DatePickerInput from '../ui/DatePickerInput';
 import EmojiPicker from '../ui/EmojiPicker';
@@ -96,6 +99,7 @@ function EditRow({ titleRef, draft, setDraft, saving, onConfirm, onCancel, onDel
         <Tooltip text="Delete">
           <button
             onClick={onDelete}
+            disabled={saving}
             aria-label="Delete exam"
             className="w-[30px] h-[30px] flex items-center justify-center rounded-lg bg-rose-50 dark:bg-rose-950 hover:bg-rose-100 dark:hover:bg-rose-900 text-rose-500 flex-shrink-0 transition"
           >
@@ -111,7 +115,9 @@ function EditRow({ titleRef, draft, setDraft, saving, onConfirm, onCancel, onDel
 
 function ExamsModalContent() {
   useRegisterModal();
-  const { upcomingExams, closeModal, addExam, updateExam, deleteExam } = useExams();
+  const { upcomingExams, closeModal, addExam, updateExam, deleteExam, captureVersion } = useExams();
+  const toast = useToast();
+  const draftOperation = useRef(null);
   const [editingId, setEditingId] = useState(null);
   const [draft, setDraft] = useState({ title: '', exam_date: '' });
   const [saving, setSaving] = useState(false);
@@ -140,42 +146,56 @@ function ExamsModalContent() {
   }, [editingId]);
 
   function startAdd() {
-    if (editingId !== null) return;
+    if (editingId !== null || !captureVersion()) return;
+    draftOperation.current = new PlannerDraft(captureVersion());
     setDraft({ title: '', exam_date: todayIso() });
     setEditingId('new');
   }
 
   function startEdit(exam) {
     if (editingId !== null) return;
+    draftOperation.current = new PlannerDraft(captureVersion());
     setDraft({ title: exam.title, exam_date: exam.exam_date });
     setEditingId(exam.id);
   }
 
   function cancelEdit() {
+    if (saving) return;
+    draftOperation.current = null;
     setEditingId(null);
     setDraft({ title: '', exam_date: '' });
   }
 
   async function confirmEdit() {
     const title = draft.title.trim();
-    if (!title || !draft.exam_date) return;
+    if (saving || !title || !draft.exam_date || !draftOperation.current) return;
+    const controls = draftOperation.current.controls({ action: editingId === 'new' ? 'create' : 'update', title, exam_date: draft.exam_date });
     setSaving(true);
     try {
       if (editingId === 'new') {
-        await addExam(title, draft.exam_date);
+        await addExam(title, draft.exam_date, controls);
       } else {
-        await updateExam(editingId, { title, exam_date: draft.exam_date });
+        await updateExam(editingId, { title, exam_date: draft.exam_date }, controls);
       }
+      draftOperation.current = null;
       setEditingId(null);
       setDraft({ title: '', exam_date: '' });
+    } catch (error) {
+      toast?.error(`Could not save exam. ${userMessage(error)}`, { ref: error.requestId ?? null });
     } finally {
       setSaving(false);
     }
   }
 
   async function confirmDelete(id) {
-    await deleteExam(id);
-    setEditingId(null);
+    if (saving || !draftOperation.current) return;
+    setSaving(true);
+    try {
+      await deleteExam(id, draftOperation.current.controls({ action: 'delete', id }));
+      draftOperation.current = null;
+      setEditingId(null);
+    } catch (error) { toast?.error(`Could not delete exam. ${userMessage(error)}`, { ref: error.requestId ?? null }); }
+    finally { setSaving(false); }
   }
 
   return (
@@ -305,6 +325,7 @@ function ExamsModalContent() {
           </span>
           <button
             onClick={startAdd}
+            disabled={!captureVersion() || saving}
             className="inline-flex items-center gap-1.5 bg-indigo-500 hover:bg-indigo-600 active:scale-[0.97] text-white rounded-lg px-4 py-2 text-xs font-semibold transition"
           >
             <svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

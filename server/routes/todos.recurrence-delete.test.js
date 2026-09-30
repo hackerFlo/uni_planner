@@ -185,3 +185,19 @@ test.describe('PATCH /api/todos/:id removedIds', () => {
     assert.deepEqual(body.removedIds.filter(id => materializedIds.includes(id)), []);
   });
 });
+
+test('saving unchanged effective recurrence on a child preserves every series identity', async () => {
+  const { template, children } = await createDailySeries(alice, aliceList, 'Unchanged rule');
+  const pivot = children[0];
+  const ids = sorted([template.id, ...children.map(child => child.id)]);
+  const response = await call(alice, 'PATCH', `/api/todos/${pivot.id}`, {
+    title: 'Renamed series', ...DAILY,
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body.removedIds, []);
+  assert.equal(response.body.todo.recurrence_parent_id, template.id);
+  assert.deepEqual(sorted([template.id, ...idsInDb(template.id)]), ids);
+  const titles = db.prepare('SELECT DISTINCT title FROM todos WHERE user_id=? AND (id=? OR recurrence_parent_id=?)')
+    .all(alice.id, template.id, template.id);
+  assert.deepEqual(titles, [{ title: 'Renamed series' }]);
+});

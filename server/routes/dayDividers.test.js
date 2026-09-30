@@ -204,12 +204,13 @@ test.describe('PATCH /api/day-dividers/reorder', () => {
     assert.equal(body.ok, true);
   });
 
-  test('skips an entry with a non-numeric id and applies the rest', async () => {
+  test('rejects a malformed batch before applying any other entry', async () => {
     const id = seedDivider(alice, REORDER_DATE, 2);
-    await call(alice, 'PATCH', '/reorder', {
+    const response = await call(alice, 'PATCH', '/reorder', {
       items: [{ id: 'not-an-id', planner_order: 9 }, { id, planner_order: 7 }],
     });
-    assert.equal(storedDivider(id).planner_order, 7);
+    assert.equal(response.status, 400);
+    assert.equal(storedDivider(id).planner_order, 2);
   });
 
   test('rejects a body whose items is not an array', async () => {
@@ -219,6 +220,18 @@ test.describe('PATCH /api/day-dividers/reorder', () => {
   test('requires a session', async () => {
     assert.equal((await call(null, 'PATCH', '/reorder', { items: [] })).status, 401);
   });
+});
+
+test('moving a divider to a full day fails without changing its source day', async () => {
+  const source = seedDivider(alice, MOVE_FROM_DATE, 0);
+  assert.equal((await call(alice, 'PATCH', `/${source}`, { date: CAP_DATE })).status, 400);
+  assert.equal(storedDivider(source).date, MOVE_FROM_DATE);
+});
+
+test('divider mutations reject partially numeric route ids', async () => {
+  assert.equal((await call(alice, 'PATCH', `/${aliceShared}suffix`, { date: MOVE_TO_DATE })).status, 400);
+  assert.equal((await call(alice, 'DELETE', `/${aliceShared}suffix`)).status, 400);
+  assert.equal(storedDivider(aliceShared).date, SHARED_DATE);
 });
 
 test.describe('DELETE /api/day-dividers/:id', () => {

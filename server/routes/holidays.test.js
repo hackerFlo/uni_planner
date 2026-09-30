@@ -38,8 +38,8 @@ globalThis.fetch = async (url, options) => {
   return upstreamReply(href);
 };
 
-const jsonReply = (body) => ({ ok: true, status: 200, json: async () => body });
-const errorReply = (status) => ({ ok: false, status, json: async () => ({}) });
+const jsonReply = (body) => new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } });
+const errorReply = (status) => new Response('{}', { status, headers: { 'Content-Type': 'application/json' } });
 
 // ---------------------------------------------------------------------------
 // Fixtures. Shaped exactly like the live API, weekend dates included on purpose.
@@ -237,12 +237,12 @@ test.describe('GET /api/holidays year boundary', () => {
   });
 
   test('accepts the first year the upstream supports', async () => {
-    upstreamReply = () => jsonReply(DE_2026);
+    upstreamReply = () => jsonReply([{ ...NATIONWIDE_WEEKDAY, date: '1975-01-01' }]);
     assert.equal((await holidaysFor('DE', 1975)).status, 200);
   });
 
   test('accepts the last year the upstream supports', async () => {
-    upstreamReply = () => jsonReply(DE_2026);
+    upstreamReply = () => jsonReply([{ ...NATIONWIDE_WEEKDAY, date: '2100-01-01' }]);
     assert.equal((await holidaysFor('DE', 2100)).status, 200);
   });
 });

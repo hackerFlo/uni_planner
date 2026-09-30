@@ -33,10 +33,10 @@ concurrency:
 
 jobs:
   # Separate jobs rather than one matrix, because the two packages genuinely
-  # need different runtimes and different commands -- a matrix would need an
+  # need different commands -- a matrix would need an
   # `if:` on nearly every step, which is a matrix in name only.
   server-test:
-    name: server tests (node 20)
+    name: server tests (node 22)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -46,9 +46,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          # Matches server/Dockerfile's `node:20-alpine`. Testing on the version
+          # Matches server/Dockerfile's `node:22-alpine`. Testing on the version
           # that actually ships is the whole point.
-          node-version: '20'
+          node-version: '22'
           cache: npm
           cache-dependency-path: server/package-lock.json
 
@@ -69,13 +69,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          # NOT 20, unlike every other job here. client/package.json's test
-          # script is `node --test "src/**/*.test.js"`, and glob expansion by
-          # the test runner only exists from Node 22 -- Node 20.19.5 treats the
-          # pattern as a literal path, prints "Could not find .../src/**/*.test.js"
-          # and exits 1. That failure says nothing about the code. Node 20 is
-          # only a runtime concern for the server; the client ships as static
-          # files, so the version that runs its tests is free to be newer.
+          # Matches both Docker builds; Node 22 also supports test-file globs.
           node-version: '22'
           cache: npm
           cache-dependency-path: client/package-lock.json
@@ -87,7 +81,7 @@ jobs:
         run: npm test
 
   client-build:
-    name: client build (node 20)
+    name: client build (node 22)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -99,7 +93,7 @@ jobs:
         with:
           # Matches client/Dockerfile's builder stage, so a build that passes
           # here is the build that produces the shipped bundle.
-          node-version: '20'
+          node-version: '22'
           cache: npm
           cache-dependency-path: client/package-lock.json
 
@@ -135,7 +129,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
           cache-dependency-path: ${{ matrix.package }}/package-lock.json
 
@@ -166,7 +160,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
           cache-dependency-path: ${{ matrix.package }}/package-lock.json
 

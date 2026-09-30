@@ -363,6 +363,10 @@ if (currentTodoCols.includes('list_type')) {
   log.info('db migrated', { change: 'list_type -> list_id (lists table created)' });
 }
 
+const activityColumns = db.prepare('PRAGMA table_info(todos)').all().map(column => column.name);
+if (!activityColumns.includes('agent_activity_at')) db.exec('ALTER TABLE todos ADD COLUMN agent_activity_at TEXT');
+if (!activityColumns.includes('agent_activity_action')) db.exec("ALTER TABLE todos ADD COLUMN agent_activity_action TEXT CHECK(agent_activity_action IN ('created','moved') OR agent_activity_action IS NULL)");
+
 // Indexes last: they reference columns (completed_at, list_id) that the
 // migrations above add, so creating them earlier crashes a fresh database.
 db.exec(`
@@ -377,5 +381,10 @@ db.exec(`
 // transaction, ON CONFLICT DO NOTHING), so it runs on every open -- including
 // in tests, which is what lets a route test find a populated library.
 require('./quotesSeed').seedBuiltInQuotes(db);
+require('./mcp/migrations').migrateMcp(db);
+require('./domain/preferencesMigration').migratePreferences(db);
+require('./domain/migrations').migrateDomain(db);
+require('./domain/notificationsMigration').migrateNotifications(db);
+require('./domain/exportsMigration').migrateExports(db);
 
 module.exports = db;

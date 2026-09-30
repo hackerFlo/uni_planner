@@ -1,3 +1,4 @@
+import { PlannerDraft } from '../../hooks/plannerDraft';
 import { useState, useRef, useEffect } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { useLists } from '../../context/ListsContext';
@@ -35,7 +36,7 @@ function ColorPicker({ value, onChange, onClose }) {
   );
 }
 
-function DeleteDialog({ list, otherLists, onConfirm, onCancel }) {
+function DeleteDialog({ list, otherLists, onConfirm, onCancel, saving }) {
   useRegisterModal();
   const [moveTo, setMoveTo] = useState(otherLists[0]?.id ?? '');
 
@@ -71,6 +72,7 @@ function DeleteDialog({ list, otherLists, onConfirm, onCancel }) {
           <button
             type="button"
             onClick={() => onConfirm(moveTo || null)}
+            disabled={saving}
             className="flex-1 text-xs font-medium text-white bg-red-500 hover:bg-red-600 py-2 rounded-lg transition"
           >
             Delete
@@ -83,13 +85,16 @@ function DeleteDialog({ list, otherLists, onConfirm, onCancel }) {
 
 function ListRow({ list, index, canDelete, onDelete }) {
   const toast = useToast();
-  const { updateList } = useLists();
+  const { updateList, captureVersion } = useLists();
+  const nameDraft = useRef(null);
+  const colorDraft = useRef(null);
   const [name, setName] = useState(list.name);
   const [showPicker, setShowPicker] = useState(false);
   const [saving, setSaving] = useState(false);
   const pickerRef = useRef(null);
   const nameRef = useRef(null);
   const { emojiState, handleChange, handleEmojiSelect, closeEmojiPicker } = useEmojiInput(name, setName, nameRef);
+  useEffect(() => { if (!nameDraft.current) setName(list.name); }, [list.name]);
 
   useEffect(() => {
     if (!showPicker) return;
@@ -101,20 +106,29 @@ function ListRow({ list, index, canDelete, onDelete }) {
   }, [showPicker]);
 
   async function saveName() {
+    if (saving || !nameDraft.current) return;
     const trimmed = name.trim();
-    if (!trimmed || trimmed === list.name) { setName(list.name); return; }
+    if (!trimmed || trimmed === list.name) { nameDraft.current = null; setName(list.name); return; }
     setSaving(true);
-    try { await updateList(list.id, { name: trimmed }); }
+    try {
+      await updateList(list.id, { name: trimmed }, nameDraft.current.controls({ name: trimmed }));
+      nameDraft.current = null;
+      setName(trimmed);
+    }
     catch (err) {
-      setName(list.name);
       toast?.error(`Could not rename the list. ${userMessage(err)}`, { ref: err.requestId ?? null });
     }
     finally { setSaving(false); }
   }
 
   async function handleColorChange(color) {
-    if (color === list.color) return;
-    await updateList(list.id, { color });
+    if (saving || color === list.color || !colorDraft.current) return;
+    setSaving(true);
+    try {
+      await updateList(list.id, { color }, colorDraft.current.controls({ color }));
+      colorDraft.current = null;
+    } catch (error) { toast?.error(`Could not change list color. ${userMessage(error)}`, { ref: error.requestId ?? null }); }
+    finally { setSaving(false); }
   }
 
   return (
@@ -141,7 +155,8 @@ function ListRow({ list, index, canDelete, onDelete }) {
           <div className="relative flex-shrink-0" ref={pickerRef}>
             <button
               type="button"
-              onClick={() => setShowPicker(v => !v)}
+              onClick={() => { if (!colorDraft.current) colorDraft.current = new PlannerDraft(captureVersion()); setShowPicker(v => !v); }}
+              disabled={saving}
               className="flex items-center justify-center w-5 h-5 rounded-full hover:ring-2 hover:ring-zinc-300 dark:hover:ring-zinc-600 transition"
             >
               <ColorDot color={list.color} />
@@ -161,12 +176,13 @@ function ListRow({ list, index, canDelete, onDelete }) {
               ref={nameRef}
               type="text"
               value={name}
+              onFocus={() => { if (!nameDraft.current) nameDraft.current = new PlannerDraft(captureVersion()); }}
               onChange={handleChange}
               onBlur={() => setTimeout(saveName, 150)}
               onKeyDown={e => {
                 if (emojiState) return;
                 if (e.key === 'Enter') { e.target.blur(); }
-                if (e.key === 'Escape') { setName(list.name); e.target.blur(); }
+                if (e.key === 'Escape') { nameDraft.current = null; setName(list.name); e.target.blur(); }
               }}
               maxLength={40}
               disabled={saving}
@@ -197,7 +213,13 @@ function ListRow({ list, index, canDelete, onDelete }) {
 }
 
 export default function ListsSection({ fetchTodos }) {
-  const { lists, createList, reorderLists, deleteList } = useLists();
+  const { lists, createList, reorderLists, deleteList, captureVersion } = useLists();
+  const toast = useToast();
+  const ready = Boolean(captureVersion());
+  const createDraft = useRef(null);
+  const deleteDraft = useRef(null);
+  const dragDraft = useRef(null);
+  const [deleting, setDeleting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [newName, setNewName] = useState('');
   const [newColor, setNewColor] = useState('indigo');
@@ -219,46 +241,52 @@ export default function ListsSection({ fetchTodos }) {
 
   function handleDragEnd({ source, destination }) {
     if (!destination || source.index === destination.index) return;
-    const reordered = [...lists];
+    if (!dragDraft.current) return;
+    const reordered = [...dragDraft.current.lists];
     const [moved] = reordered.splice(source.index, 1);
     reordered.splice(destination.index, 0, moved);
-    reorderLists(reordered.map(l => l.id));
+    const order = reordered.map(l => l.id);
+    reorderLists(order, dragDraft.current.operation.controls({ order }));
+    dragDraft.current = null;
   }
 
   async function handleCreate(e) {
     e.preventDefault();
     const trimmed = newName.trim();
-    if (!trimmed) return;
+    if (creating || !trimmed) return;
+    if (!createDraft.current) createDraft.current = new PlannerDraft(captureVersion());
     setCreateError('');
     setCreating(true);
     try {
-      await createList(trimmed, newColor);
+      await createList(trimmed, newColor, createDraft.current.controls({ name: trimmed, color: newColor }));
+      createDraft.current = null;
       setNewName('');
       setNewColor('indigo');
     } catch (err) {
-      setCreateError(err.message || 'Failed to create list');
+      setCreateError(userMessage(err));
     } finally {
       setCreating(false);
     }
   }
 
   async function handleDeleteConfirm(moveToId) {
-    if (!deleteTarget) return;
+    if (!deleteTarget || deleting || !deleteDraft.current) return;
+    setDeleting(true);
     try {
-      await deleteList(deleteTarget.id, moveToId);
-      fetchTodos?.();
-    } catch {
-      // error is self-evident; dialog closes regardless
-    } finally {
+      await deleteList(deleteTarget.id, moveToId, deleteDraft.current.controls({ id: deleteTarget.id, moveTo: moveToId }));
+      deleteDraft.current = null;
       setDeleteTarget(null);
-    }
+      try { await fetchTodos?.(); }
+      catch (error) { toast?.error(`Could not refresh planner. ${userMessage(error)}`); }
+    } catch (error) { toast?.error(`Could not delete list. ${userMessage(error)}`, { ref: error.requestId ?? null }); }
+    finally { setDeleting(false); }
   }
 
   return (
     <div className="space-y-3">
       <h3 className="text-xs font-semibold text-zinc-600 dark:text-zinc-300 uppercase tracking-widest">Lists</h3>
 
-      <DragDropContext onDragEnd={handleDragEnd}>
+      <DragDropContext onDragStart={() => { dragDraft.current = { lists: [...lists], operation: new PlannerDraft(captureVersion()) }; }} onDragEnd={handleDragEnd}>
         <Droppable droppableId="settings-lists">
           {provided => (
             <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-2">
@@ -268,7 +296,7 @@ export default function ListsSection({ fetchTodos }) {
                   list={list}
                   index={index}
                   canDelete={lists.length > 1}
-                  onDelete={() => setDeleteTarget(list)}
+                  onDelete={() => { deleteDraft.current = new PlannerDraft(captureVersion()); setDeleteTarget(list); }}
                 />
               ))}
               {provided.placeholder}
@@ -282,7 +310,8 @@ export default function ListsSection({ fetchTodos }) {
         <div className="relative flex-shrink-0" ref={newPickerRef}>
           <button
             type="button"
-            onClick={() => setShowNewPicker(v => !v)}
+            onClick={() => { if (!createDraft.current) createDraft.current = new PlannerDraft(captureVersion()); setShowNewPicker(v => !v); }}
+            disabled={!ready || creating}
             className="flex items-center justify-center w-5 h-5 rounded-full hover:ring-2 hover:ring-zinc-300 dark:hover:ring-zinc-600 transition"
           >
             <ColorDot color={newColor} />
@@ -300,6 +329,8 @@ export default function ListsSection({ fetchTodos }) {
             ref={newNameRef}
             type="text"
             value={newName}
+            disabled={!ready || creating}
+            onFocus={() => { if (!createDraft.current) createDraft.current = new PlannerDraft(captureVersion()); }}
             onChange={handleNewNameChange}
             maxLength={40}
             placeholder="New list name…"
@@ -311,20 +342,21 @@ export default function ListsSection({ fetchTodos }) {
         </div>
         <button
           type="submit"
-          disabled={creating || !newName.trim()}
+          disabled={!ready || creating || !newName.trim()}
           className="flex-shrink-0 text-xs font-medium text-white bg-indigo-500 hover:bg-indigo-600 disabled:opacity-40 px-3 py-1.5 rounded-lg transition"
         >
           {creating ? '…' : 'Add'}
         </button>
       </form>
-      {createError && <p className="text-xs text-red-500">{createError}</p>}
+      {createError && <p role="alert" className="text-xs text-red-500">{createError}</p>}
 
       {deleteTarget && (
         <DeleteDialog
           list={deleteTarget}
           otherLists={lists.filter(l => l.id !== deleteTarget.id)}
           onConfirm={handleDeleteConfirm}
-          onCancel={() => setDeleteTarget(null)}
+          saving={deleting}
+          onCancel={() => { if (!deleting) { deleteDraft.current = null; setDeleteTarget(null); } }}
         />
       )}
     </div>

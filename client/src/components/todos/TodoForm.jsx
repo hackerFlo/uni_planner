@@ -79,17 +79,21 @@ function detectEmojiTrigger(value, cursorPos) {
   return { query, triggerStart: colonIdx };
 }
 
-function MobileActionButtons({ todo, dayAssigned, onComplete, onUpdate, onDelete, onClose }) {
+function MobileActionButtons({ todo, dayAssigned, onComplete, onUpdate, onDelete, onClose, onError }) {
   const isRecurring =
     todo?.recurrence_parent_id != null ||
     todo?.recurrence_interval_days != null ||
     todo?.recurrence_pattern != null;
 
+  async function run(action) {
+    try { await action(); onClose(); }
+    catch (error) { onError(error.message || 'Could not save task'); }
+  }
   return (
     <div className="flex gap-2">
       <button
         type="button"
-        onClick={() => { onComplete(todo); onClose(); }}
+        onClick={() => run(() => onComplete(todo))}
         aria-label="Mark done and close"
         className="flex-1 py-3 text-sm font-medium rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-600 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition flex items-center justify-center"
       >
@@ -100,7 +104,7 @@ function MobileActionButtons({ todo, dayAssigned, onComplete, onUpdate, onDelete
       {dayAssigned && (
         <button
           type="button"
-          onClick={() => { onUpdate(todo.id, { day_assigned: null }); onClose(); }}
+          onClick={() => run(() => onUpdate(todo.id, { day_assigned: null }))}
           aria-label="Move back to the task list"
           className="flex-1 py-3 text-sm font-medium rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition flex items-center justify-center"
         >
@@ -117,8 +121,7 @@ function MobileActionButtons({ todo, dayAssigned, onComplete, onUpdate, onDelete
             { label: 'Delete all items', tone: 'danger' },
           ]}
           onSelect={label => {
-            onDelete(todo.id, label === 'Delete all items' ? 'all' : 'single');
-            onClose();
+            run(() => onDelete(todo.id, label === 'Delete all items' ? 'all' : 'single'));
           }}
         >
           <button
@@ -135,7 +138,7 @@ function MobileActionButtons({ todo, dayAssigned, onComplete, onUpdate, onDelete
       ) : (
         <button
           type="button"
-          onClick={() => { if (window.confirm('Delete this task?')) { onDelete(todo.id); onClose(); } }}
+          onClick={() => { if (window.confirm('Delete this task?')) run(() => onDelete(todo.id)) }}
           aria-label="Delete this item"
           className="flex-1 py-3 text-sm font-medium rounded-lg bg-red-50 dark:bg-red-950 text-red-600 hover:bg-red-100 dark:hover:bg-red-900 transition flex items-center justify-center"
         >
@@ -471,9 +474,8 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
       if (mode === 'edit') {
         await onUpdate(todo.id, data);
       } else {
-        const created = await onCreate(data);
+        const created = await onCreate({ ...data, completed: completeNow });
         if (completeNow && created) {
-          await onComplete(created);
           toast?.success('Added and marked complete.');
         }
       }
@@ -720,6 +722,7 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
               todo={todo}
               dayAssigned={dayAssigned}
               onComplete={onComplete}
+              onError={setError}
               onUpdate={onUpdate}
               onDelete={onDelete}
               onClose={onClose}

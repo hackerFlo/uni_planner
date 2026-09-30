@@ -48,6 +48,7 @@ addTodo(alice, aliceList, { title: 'Done, no day',  day: null,         completed
 addTodo(bob,   bobList,   { title: "Bob's work",    day: '2026-08-19', completed: 1, archived: 1 });
 
 const app = express();
+app.use(express.json());
 app.use(cookieParser());
 app.use('/api/todos', todoRoutes);
 const server = app.listen(0);
@@ -118,4 +119,18 @@ test.describe('GET /api/todos/completed', () => {
     const res = await fetch(`${base}/api/todos/completed?${WEEK}`);
     assert.equal(res.status, 401);
   });
+});
+
+test('website dismissal clears an owned marker and rejects forged fields', async () => {
+  const id = addTodo(alice, aliceList, { title: 'Agent marker', day: null });
+  db.prepare('UPDATE todos SET agent_activity_at=?,agent_activity_action=? WHERE id=?')
+    .run('2026-09-30T09:00:00.000Z', 'created', id);
+  const url = `${base}/api/todos/${id}/dismiss-agent-activity`;
+  const headers = { Cookie: `token=${alice.token}`, 'Content-Type': 'application/json' };
+  const foreign = await fetch(url, { method: 'POST', headers: { ...headers, Cookie: `token=${bob.token}` }, body: '{}' });
+  assert.equal(foreign.status, 404);
+  const forged = await fetch(url, { method: 'POST', headers, body: JSON.stringify({ agent_activity_action: 'moved' }) });
+  assert.equal(forged.status, 400);
+  const dismissed = await fetch(url, { method: 'POST', headers, body: '{}' });
+  assert.equal((await dismissed.json()).todo.agent_activity_at, null);
 });

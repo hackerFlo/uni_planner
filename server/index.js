@@ -13,9 +13,11 @@ if (!JWT_SECRET || JWT_SECRET.length < 32) {
 let log;
 let LEVEL;
 let config;
+let mcpConfig;
 try {
   ({ log, LEVEL } = require('./logger'));
   config = require('./config');
+  mcpConfig = require('./mcp/config').parseMcpConfig();
 } catch (err) {
   // eslint-disable-next-line no-console -- the logger itself is what failed
   console.error(`[fatal] ${err.message} Refusing to start.`);
@@ -84,6 +86,7 @@ app.use(helmet());
 // nginx serves the SPA and proxies /api on the same origin, so CORS never
 // engages in this deployment. Mount it only when an origin is configured.
 if (CORS_ORIGIN) app.use(cors({ origin: CORS_ORIGIN, credentials: true }));
+require('./mcp/mount').mountMcp(app, mcpConfig, require('./db'));
 
 // Auth responses must never be cached, nor have their Set-Cookie stripped, by
 // an intermediary (Cloudflare, Access, any future CDN).
@@ -103,6 +106,8 @@ app.use('/api/health', healthRoutes); // public by design -- see routes/health.j
 app.use('/api/auth', authRoutes); // rate limiters are per-route in routes/auth.js
 app.use('/api/todos', todoLimiter, todoRoutes);
 app.use('/api/lists', todoLimiter, listRoutes);
+app.use('/api/planner', require('./routes/planner'));
+app.use('/api/preferences', todoLimiter, require('./routes/preferences').createPreferencesRouter(require('./db')));
 app.use('/api/backup', backupLimiter, backupRoutes);
 app.use('/api/day-notes', todoLimiter, dayNoteRoutes);
 app.use('/api/day-dividers', todoLimiter, dayDividerRoutes);

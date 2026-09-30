@@ -4,11 +4,36 @@
 // This way every Watchtower deploy maps to exactly one version.
 // Versioning: X.Y — increment Y for regular updates, bump X (reset Y to 0) for big releases.
 // Add a new entry to CHANGELOG (newest first) on first push of a window; append to top entry otherwise.
-export const CURRENT_VERSION = '4.1';
+export const CURRENT_VERSION = '5.0';
 
 // icon: 'purple' | 'green' | 'amber' | 'blue' | 'rose'
 // Each feature needs: icon, name, desc, and a 24×24 SVG path string (stroke icons).
 export const CHANGELOG = [
+  {
+    version: '5.0',
+    date: '2026-09-30',
+    title: 'Your planner, ready for an assistant',
+    features: [
+      {
+        icon: 'purple',
+        name: 'Connect an assistant to your planner',
+        desc: 'A new Settings section manages a revocable MCP connection. Once the server is configured and enabled, a connected assistant can work with planner tasks, lists, exams, notes, quotes, preferences, and more using the same account rules as the website.',
+        svgPath: 'M10 13a5 5 0 007.07 0l2-2a5 5 0 00-7.07-7.07l-1.15 1.14M14 11a5 5 0 00-7.07 0l-2 2a5 5 0 007.07 7.07l1.14-1.14',
+      },
+      {
+        icon: 'blue',
+        name: 'See when an assistant changed a task',
+        desc: 'Tasks created or rescheduled through MCP show a small marker beside the checkbox. Hover or focus it to see when the change happened. Editing the task yourself or clicking the marker clears it.',
+        svgPath: 'M12 3a9 9 0 100 18 9 9 0 000-18zM12 8v4l3 2',
+      },
+      {
+        icon: 'green',
+        name: 'Choose your assistant marker',
+        desc: 'Appearance settings offer three marker styles: fuzzy dots, a simple ring, or the original robot.',
+        svgPath: 'M12 3a9 9 0 100 18 9 9 0 000-18zM12 8a4 4 0 100 8 4 4 0 000-8z',
+      },
+    ],
+  },
   {
     version: '4.1',
     date: '2026-09-08',

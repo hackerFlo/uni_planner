@@ -32,6 +32,16 @@ test.describe('normalizePreferences', () => {
     assert.equal(normalizePreferences({ density: 'tiny' }).density, 'comfortable');
   });
 
+  test('defaults the agent activity icon to fuzzy and accepts configured styles', () => {
+    assert.equal(normalizePreferences({}).agentActivityIcon, 'fuzzy');
+    assert.equal(normalizePreferences({ agentActivityIcon: 'ring' }).agentActivityIcon, 'ring');
+    assert.equal(normalizePreferences({ agentActivityIcon: 'robot' }).agentActivityIcon, 'robot');
+  });
+
+  test('rejects an unknown agent activity icon', () => {
+    assert.equal(normalizePreferences({ agentActivityIcon: 'dots' }).agentActivityIcon, 'fuzzy');
+  });
+
   test('rejects a non-boolean reduceMotion', () => {
     assert.equal(normalizePreferences({ reduceMotion: 'yes' }).reduceMotion, false);
   });
@@ -143,7 +153,7 @@ test.describe('quote preferences', () => {
   });
 
   // A junk value must not be able to hide the bar for ever.
-  for (const bad of ['tomorrow', '20-08-2026', 42, true, {}, '2026-8-2']) {
+  for (const bad of ['tomorrow', '20-08-2026', 42, true, {}, '2026-8-2', '2026-02-30', '0000-01-01']) {
     test(`rejects ${JSON.stringify(bad)} as a snooze date`, () => {
       assert.equal(normalizePreferences({ quotesSnoozedOn: bad }).quotesSnoozedOn, null);
     });

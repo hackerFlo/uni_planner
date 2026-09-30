@@ -129,3 +129,36 @@ test.describe('materializeWindowForUser', () => {
     }
   });
 });
+
+test('scheduler candidate selection includes accounts whose only template is completed', () => {
+  reset();
+  makeTemplate({ archived: 1 });
+  const { listRecurringUsers } = require('./recurrence');
+  assert.ok(listRecurringUsers().some(user => user.id === userId));
+});
+
+test('weekend generation and injected recurrence service share the bounded date rules', () => {
+  reset();
+  const { createRecurrenceService, materializeForTemplate } = require('./recurrence');
+  const injected = createRecurrenceService(db);
+  const id = makeTemplate({ pattern: 'weekends' });
+  assert.equal(materializeForTemplate(id, 'UTC', userId), 4);
+  assert.equal(injected.materializeForTemplate(id, 'UTC', userId), 0);
+  assert.ok(injected.listRecurringUsers().some(user => user.id === userId));
+  assert.ok(instancesOf(id).every(day => [0, 6].includes(new Date(`${day}T12:00:00Z`).getUTCDay())));
+});
+
+test('missing, foreign and dateless templates cannot materialize another account data', () => {
+  reset();
+  const { materializeForTemplate } = require('./recurrence');
+  const id = makeTemplate();
+  assert.equal(materializeForTemplate(id, 'UTC', userId + 1), 0);
+  assert.equal(materializeForTemplate(id + 1000, 'UTC', userId), 0);
+  db.prepare('UPDATE todos SET day_assigned=NULL WHERE id=?').run(id);
+  assert.equal(materializeForTemplate(id, undefined, userId), 0);
+});
+
+test('calendar arithmetic preserves leap days and early four-digit years', () => {
+  assert.equal(addDays('2024-02-28', 1), '2024-02-29');
+  assert.equal(addDays('0001-01-01', 1), '0001-01-02');
+});

@@ -21,12 +21,23 @@ services:
       ALLOW_REGISTER: ${ALLOW_REGISTER:-}
       LOG_LEVEL: ${LOG_LEVEL:-}
       LOG_FORMAT: ${LOG_FORMAT:-}
+      MCP_ENABLED: ${MCP_ENABLED:-false}
+      MCP_WRITES_ENABLED: ${MCP_WRITES_ENABLED:-false}
+      MCP_HOST: ${MCP_HOST:-mcp-disabled.invalid}
+      MCP_PUBLIC_URL: ${MCP_PUBLIC_URL:-}
+      WEB_PUBLIC_ORIGIN: ${WEB_PUBLIC_ORIGIN:-}
+      CF_ACCESS_ISSUER: ${CF_ACCESS_ISSUER:-}
+      CF_ACCESS_MCP_AUD: ${CF_ACCESS_MCP_AUD:-}
+      CF_ACCESS_WEB_AUD: ${CF_ACCESS_WEB_AUD:-}
+      MCP_ALLOWED_ORIGINS: ${MCP_ALLOWED_ORIGINS:-}
     volumes:
       # Bind mount rather than a named volume, matching docker-compose.nas.yml.
       # Resolved against this file's directory. Gitignored.
       - ./data:/app/data
 
   client:
+    environment:
+      MCP_HOST: ${MCP_HOST:-mcp-disabled.invalid}
     build:
       context: ./client
       args:

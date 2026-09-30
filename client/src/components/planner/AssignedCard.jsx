@@ -9,6 +9,8 @@ import { LIST_PALETTE } from '../../constants/listPalette';
 import { useAnyModalOpen } from '../../context/ModalContext';
 import { useCopyDrag } from '../../context/CopyDragContext';
 import { useDragTilt } from '../../hooks/useDragTilt';
+import AgentActivityBadge from '../ui/AgentActivityBadge';
+import { formatAgentActivityLabel } from '../../utils/agentActivity';
 
 const COMPLETION_DELAY_MS = 500;
 
@@ -18,13 +20,14 @@ function isRecurring(todo) {
 
 function fmtTime(t) { return t ? t.replace(' min', 'm') : t; }
 
-const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, isGhost, onComplete, onUnassign, onEdit, onDelete }) {
+const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, isGhost, onComplete, onUnassign, onEdit, onDelete, onDismissAgentActivity }) {
   const anyModalOpen = useAnyModalOpen();
   const isCopying = useCopyDrag() && snapshot.isDragging;
   const { getList } = useLists();
   const list = getList(todo.list_id);
   const palette = LIST_PALETTE[list?.color] ?? LIST_PALETTE.slate;
   const listName = list?.name ?? '';
+  const hasAgentActivity = Boolean(formatAgentActivityLabel(todo.agent_activity_at, todo.agent_activity_action, { dayAssigned: todo.day_assigned }));
 
   const rotation = useDragTilt(snapshot.isDragging);
 
@@ -81,11 +84,11 @@ const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, isG
           </svg>
         </button>
         </Tooltip>
-        <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full uppercase tracking-wide ${palette.badge}`}>
+        <span className={`min-w-0 max-w-[40%] truncate text-[9px] font-medium px-1.5 py-0.5 rounded-full uppercase tracking-wide ${palette.badge}`}>
           {listName}
         </span>
         {todo.approx_time && (
-          <span className="text-[9px] font-medium text-zinc-400 dark:text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded-full truncate">
+          <span className="min-w-0 max-w-[25%] text-[9px] font-medium text-zinc-400 dark:text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded-full truncate">
             {fmtTime(todo.approx_time)}
           </span>
         )}
@@ -95,6 +98,11 @@ const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, isG
               <path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
             </svg>
           </Tooltip>
+        )}
+        {hasAgentActivity && (
+          <span className="ml-auto flex-shrink-0">
+            <AgentActivityBadge todo={todo} onDismissAgentActivity={onDismissAgentActivity} isGhost={isGhost} />
+          </span>
         )}
       </div>
 
@@ -169,7 +177,7 @@ const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, isG
   );
 });
 
-export default function AssignedCard({ todo, index, draggableId, isGhost = false, onUnassign, onComplete, onEdit, onDelete }) {
+export default function AssignedCard({ todo, index, draggableId, isGhost = false, onUnassign, onComplete, onEdit, onDelete, onDismissAgentActivity }) {
   const [checked, setChecked] = useState(false);
 
   function handleComplete(e) {
@@ -195,6 +203,7 @@ export default function AssignedCard({ todo, index, draggableId, isGhost = false
           onUnassign={onUnassign}
           onEdit={onEdit}
           onDelete={onDelete}
+          onDismissAgentActivity={onDismissAgentActivity}
         />
       )}
     </Draggable>

@@ -1,0 +1,57 @@
+# Website / MCP capability matrix
+
+Status: local implementation and hardening, 2026-09-27. MCP and writes default off. Tools below are implemented behind capability checks; this does **not** establish real-client, Cloudflare, or full release verification. Update tools, schemas, shared services, this matrix and affected tests whenever a website feature changes.
+
+Every mutation uses an owned shared service. Ordinary agent writes require a captured planner version and UUID retry key. Discovery reflects the account grant and write switch. Account/security, backup restoration, registration, server updates and generic SQL/shell/URL/REST tools are excluded.
+
+| Website capability | MCP tools | Local verification |
+|---|---|---|
+| Lists | `list_lists`, `create_list`, `update_list`, `reorder_lists`, `delete_list` | `services/lists.test.js`, `routes/lists.test.js`, `mcp/integration.test.js`: ownership, exact permutations, last-list protection, bounded pages, signed-client/website read equality |
+| Task reading/search | `get_task`, `list_tasks`, `search_tasks` | `services/todos.test.js`, `mcp/tools/planner.test.js`, `mcp/integration.test.js`: stored-only defaults, owner filters, sanitized descriptions, bounded pages, stale/foreign cursors |
+| Week and context | `get_planner_context`, `get_week` | `mcp/tools/planner.test.js`: Monday-based range, shared mixed ordering, completed section, notes/exams, timezone; bounded exam results expose continuation |
+| Task creation/content | `create_task`, `update_task` | `services/todos.test.js`, `routes/todos.*.test.js`, `mcp/tools/mutations.test.js`: sanitization, list ownership, content affects series; creation can atomically log completed work |
+| Recurrence | `set_task_recurrence` | `recurrence.test.js`, `services/todos.test.js`, `services/operations.test.js`: interval/pattern, unchanged rules, template/child changes, archived templates and bounded expansion |
+| Completion/archive | `set_task_completed`, `set_task_archived` | `services/todos.test.js`, `services/operations.test.js`: completion timestamp, archive coupling, reopen/restore |
+| Deletion | `delete_task` | Explicit single/all scope; `services/todos.test.js`, recurrence-delete route tests. Single deleted/moved occurrences may regenerate; descriptions disclose this |
+| Moving/copying/ordering | `move_planner_item`, `copy_planner_item`, `reorder_day` | `services/planner.test.js`, `mcp/integration.test.js`: mixed typed IDs, atomic normalization, copy removes recurrence/history, rollback; browser uses atomic routes |
+| Agent activity on task cards | Task reads expose `agent_activity_at` and `agent_activity_action`; `create_task`, `copy_planner_item`, `move_planner_item`, `dismiss_task_agent_activity` | Verified locally: todos/planner service tests cover attribution and clearing; operations tests cover ownership, retry and undo; MCP integration covers read parity, both dismissal interfaces, invalid inputs, cross-user denial and revocation; existing Access tests cover expiry. Migration and backup roundtrip tests pass. Client date-label tests and synthetic card preview cover labels, placement and dismissal. Real Tunnel/Access and client discovery refresh remain pending |
+| Dividers | `create_divider`, `delete_divider`, board tools | `services/planner.test.js`, `services/dayDividers.test.js`: twenty/day limit on create/move/copy, no backlog divider |
+| Day notes | `list_day_notes`, `set_day_note` | `services/dayNotes.test.js`, route tests, `mcp/integration.test.js`: real dates, trimming, bounded text, empty deletion |
+| Exams | `list_exams`, `create_exam`, `update_exam`, `delete_exam` | Service/route tests and `mcp/integration.test.js`: owned CRUD, date validation, website/MCP state comparison |
+| Holidays | `list_holiday_countries`, `get_holidays` | `services/holidays.test.js`, route tests: fixed upstream, bounded time/body, no redirects, validated cache, national/subdivision/weekend behavior. Real upstream/client interaction pending |
+| Quotes/CSV | `get_daily_quote`, `get_quote_stats`, `dislike_quote`, `restore_quote`, `restore_all_quotes`, `import_quotes_csv` | `quotes.test.js`, `services/quotes.test.js`, `routes/quotes.test.js`, peripheral tests: private uploads, pins/rotation, dislikes, receipt undo, CSV validation/deduplication |
+| Device preferences, including agent activity icon style | `list_preference_profiles`, `get_preferences`, `update_preferences`, `reset_preferences` | Service/route and MCP mutation schema tests: account/device separation, fuzzy/ring/robot validation, default/reset, website/shared-service equality, backup export/restore; client `preferencesSync.test.js` covers migration and stale-read guards. Version-9 backup includes profiles. Real Tunnel/Access and client discovery verification pending |
+| Notifications | `get_notification_settings`, `update_notification_settings`, `send_test_notification` | `services/notifications.test.js`, `routes/auth.test.js`, peripheral tests: encrypted saved recipient, timezone, quotas, durable pending/sent/failed/unknown attempts. No real email sent |
+| Undo | `undo_operation` | `domain/mutation.test.js`, `domain/journal.test.js`, `services/undo.test.js`, `mcp/integration.test.js`: exact owned records, thirty-second expiry, newer-edit rejection, idempotent replay and consumed inverse |
+| Backup export | `prepare_backup_export`, `read_backup_export_chunk` | `services/exports.test.js`, `routes/backup.test.js`, `mcp/integration.test.js`: frozen owner snapshot, checksum, bounded chunks, expiry/quota, profile restoration, no security state |
+| Open browser synchronization | Revision polling; no screen-control tool | Client `plannerRevision.test.js`, `plannerResource.test.js`, `plannerBoardSnapshot.test.js`, `plannerDraft.test.js`, `undoOperation.test.js`: abort/account guards, captured drafts, matched board versions, receipt undo. Visual interaction verification pending; automation runtime unavailable |
+| Connection management | Website-only enrollment/disable | Signed proof + live cookie + password + explicit permissions; `routes/agentConnections.test.js`, `mcp/links.test.js`, client API tests. Prior grants never gain new sensitive permissions automatically |
+
+Paths in the table are relative to `server/` unless marked client. Local tests cover shared behavior and selected full website/MCP workflows. They are not an exhaustive real-client equivalence certification for every feature and input combination.
+
+### Task activity markers
+
+The task-card marker records the latest qualifying MCP action: creating a task (including a copy) uses `agent_activity_action: "created"`; changing its assigned date, including assignment or unassignment, uses `"moved"`. `agent_activity_at` is the server-recorded UTC timestamp. These fields are server-managed, not accepted as task-write inputs. They identify activity through MCP; they do not establish whether a human prompted or approved the client action.
+
+Other MCP edits and same-date moves do not create a new marker. Website task edits clear the affected card's marker; incidental renumbering of neighboring cards does not change their markers. Clicking the card icon dismisses its marker persistently. MCP clients use `dismiss_task_agent_activity` with the owned task ID and ordinary mutation controls. Hover/focus text describes the action and its relative calendar day and local time. This is a latest-action indicator, not a complete activity history.
+
+Refresh client tool discovery after upgrading so the dismissal tool is available. The new feature is not covered by the historical test totals below until its verification results are recorded.
+
+## Remaining verification and limits
+
+- **Cloudflare/client gate BLOCKED:** no authorized deployment or real email-code login was performed. Verify Managed OAuth discovery/challenges, assertion claims, stable identity across applications, refresh/expiry/provider revocation, restart and two real isolated accounts.
+- Claude desktop and iOS, ChatGPT desktop/web and standalone ChatGPT iOS are all unverified. Standalone iOS availability is unconfirmed; desktop support must not be used as evidence of it.
+- Actual nginx parsing/proxy behavior, target Alpine/NAS native modules, MCP Inspector, proxy-hop/limiter load behavior and rollback drill remain pending. Structural/shell tests are supplementary.
+- Notification delivery is inherently ambiguous on SMTP timeout. Retained retries never resend automatically; email cannot be undone. Unattended execution depends on client behavior, permissions and grant lifetime.
+- Preferences, notification settings, bulk quote restoration/import, email sends and export preparation do not offer undo. Large planner changes may exceed recovery bounds; receipts explicitly report when undo is unavailable. An unrelated subsequent edit/materialization can invalidate undo because concurrency is account-wide.
+- Legacy unversioned website compatibility is allowed only while agent writes are off. Old partial board endpoints reject requests when agent writes are enabled. Remove compatibility in a reviewed release after old browser bundles are retired.
+- Full browser interaction is unverified: automation could not start its Node runtime. Complete browser/tunnel interaction and the remaining cross-feature parity/security review before enabling production writes.
+- Body/result ceilings do not bound all intermediate work: list fingerprints scan the account collection and exports build the full snapshot before the 5 MiB check. Process-local rate-limit counters reset on restart. Retention/cleanup and further account-size/load limits are detailed in the [security record](mcp-security.md).
+
+## Dated test evidence
+
+Baseline: 578 backend and 273 client tests passed before implementation. During integration, the complete backend suite passed 939 tests; later additions are tracked by the final verification run. The final backend hardening run passed 952 tests. The final browser suite passed 338 tests, including the initial-poll race and account/query snapshot regressions. Both lint runs have zero errors (three existing warnings in total); production build and service-worker verification pass. These results do not clear deployment or real-client gates.
+
+The official SDK integration suite uses real localhost HTTP, temporary SQLite, synthetic signed RS256 assertions, live account links and real cookie-authenticated routes. It tests write receipts, stale versions, undo, scoped export, limits and comparable task/board/note/exam workflows. Lighter injected-auth router tests supplement this evidence.
+
+Production writes require the external authentication/client gate, local shared behavior/concurrency completion, and deployment/security review. See [setup](mcp-setup.md) and [security](mcp-security.md).

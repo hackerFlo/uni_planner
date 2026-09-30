@@ -21,24 +21,37 @@ function NoteSlot({ note, isToday, exam, holiday, onSave }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const inputRef = useRef(null);
+  const saveRef = useRef(onSave);
+  const saving = useRef(false);
+  const committed = useRef(false);
   const { emojiState, handleChange, handleEmojiSelect, closeEmojiPicker } = useEmojiInput(draft, setDraft, inputRef);
 
   function startEdit() {
+    saveRef.current = onSave;
+    committed.current = false;
     setDraft(note ?? '');
     setEditing(true);
     setTimeout(() => inputRef.current?.focus(), 0);
   }
 
-  function commit() {
-    setEditing(false);
+  async function commit() {
+    if (saving.current || committed.current) return;
     const val = draft.trim();
-    if (val !== (note ?? '')) onSave(val);
+    saving.current = true;
+    try {
+      if (val !== (note ?? '')) await saveRef.current(val);
+      committed.current = true;
+      setEditing(false);
+    } catch {
+      // The note hook displays the request error; keep the draft available.
+      inputRef.current?.focus();
+    } finally { saving.current = false; }
   }
 
   function onKeyDown(e) {
     if (emojiState) return;
     if (e.key === 'Enter') { e.preventDefault(); commit(); }
-    if (e.key === 'Escape') { setEditing(false); setDraft(''); }
+    if (e.key === 'Escape') { committed.current = true; setEditing(false); setDraft(''); }
   }
 
   const accentText = isToday ? 'text-indigo-400' : exam ? 'text-rose-400' : holiday ? 'text-emerald-500' : 'text-zinc-400 dark:text-zinc-500';
@@ -126,7 +139,7 @@ function DaySkeleton() {
   );
 }
 
-export default function DayColumn({ date, items, copyGhostId = null, loading = false, completedTodos = [], showCompleted = false, onToggleCompleted, onUncomplete, holiday, exam, isDragging, note, onNoteChange, onUnassign, onComplete, onEdit, onDelete, onAdd, onAddDivider, onDeleteDivider }) {
+export default function DayColumn({ date, items, copyGhostId = null, loading = false, completedTodos = [], showCompleted = false, onToggleCompleted, onUncomplete, holiday, exam, isDragging, note, onNoteChange, onUnassign, onComplete, onEdit, onDelete, onAdd, onAddDivider, onDeleteDivider, onDismissAgentActivity }) {
   const todayIso = useToday();
   const dateObj = parseDateLocal(date);
   const isToday = date === todayIso;
@@ -246,6 +259,7 @@ export default function DayColumn({ date, items, copyGhostId = null, loading = f
                   onComplete={onComplete}
                   onEdit={onEdit}
                   onDelete={onDelete}
+                  onDismissAgentActivity={onDismissAgentActivity}
                 />
               )))}
               {provided.placeholder}

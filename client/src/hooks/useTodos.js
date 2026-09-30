@@ -1,229 +1,39 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useCallback } from 'react';
 import { api } from '../api/client';
-import { userMessage } from '../api/errors';
-import { useUndo } from '../context/UndoContext';
-import { useToast } from '../context/ToastContext';
-import { useAutoRefresh } from './useAutoRefresh';
-import {
-  assignDayLocal,
-  applyOrderItems,
-  composeReverts,
-  snapshotOrderItems,
-  toOrderItems,
-} from '../utils/plannerMutations';
+import { usePlannerResource } from './usePlannerResource';
 
-function mergeTodoUpdate(prev, todo, materialized, removedIds) {
-  const removed = new Set(removedIds);
-  const matMap = new Map(materialized.map(t => [t.id, t]));
-  let next = prev
-    .filter(t => !removed.has(t.id))
-    .map(t => matMap.has(t.id) ? matMap.get(t.id) : (t.id === todo.id ? todo : t));
-  const existingIds = new Set(next.map(t => t.id));
-  for (const m of materialized) if (!existingIds.has(m.id)) next.push(m);
-  if (!existingIds.has(todo.id)) next.push(todo);
-  return next.filter(t => !t.archived);
+const EMPTY = [];
+function taskPatch(data) {
+  const patch = { ...data };
+  for (const field of ['completed', 'archived']) {
+    if (patch[field] === 0 || patch[field] === 1) patch[field] = Boolean(patch[field]);
+  }
+  return patch;
 }
-
-export function useTodos() {
-  const [todos, setTodos] = useState([]);
-  const [loading, setLoading] = useState(false);
-  // Distinguishes "still fetching for the first time" from "fetched, and there
-  // is nothing here" -- seven empty columns look identical otherwise.
-  const [hasLoaded, setHasLoaded] = useState(false);
-  const { recordUndo } = useUndo();
-  const toast = useToast();
-
-  const todosRef = useRef(todos);
-
-  useEffect(() => { todosRef.current = todos; }, [todos]);
-
-  // The optimistic paths below roll the board back before they report: leaving
-  // the UI showing a change the server rejected is worse than showing an error.
-  const reportFailure = useCallback((what, err) => {
-    console.warn(`[useTodos] ${what}:`, err.kind, err.message);
-    toast?.error(`${what}. ${userMessage(err)}`, { ref: err.requestId ?? null });
-  }, [toast]);
-
-  const fetchTodos = useCallback(async () => {
-    setLoading(true);
+export function useTodos({ autoLoad = true } = {}) {
+  const resource = usePlannerResource('/api/todos', 'todos', { autoLoad });
+  const { mutate, refresh, captureVersion, reportFailure } = resource;
+  const createTodo = useCallback(async (data, controls, refreshAfter) => {
+    const result = await mutate(options => api.post('/api/todos', data, options), controls, refreshAfter);
+    return result.todo ?? result.data?.todo;
+  }, [mutate]);
+  const updateTodo = useCallback(async (id, data, controls, refreshAfter) => {
+    const result = await mutate(options => api.patch(`/api/todos/${id}`, taskPatch(data), options), controls, refreshAfter);
+    return result.todo ?? result.data?.todo;
+  }, [mutate]);
+  const deleteTodo = useCallback((id, scope = 'single', controls, refreshAfter) =>
+    mutate(options => api.delete(`/api/todos/${id}?scope=${encodeURIComponent(scope)}`, options), controls, refreshAfter), [mutate]);
+  const dismissAgentActivity = useCallback(async (id, controls, refreshAfter) => {
     try {
-      const { todos } = await api.get('/api/todos');
-      setTodos(todos);
-    } catch (err) {
-      // Keep whatever is on screen: this also runs on tab focus and at midnight,
-      // and blanking a populated planner because one refresh failed is worse.
-      console.warn('[useTodos] load failed:', err.kind, err.message);
-      toast?.error(userMessage(err), { ref: err.requestId ?? null });
-    } finally {
-      setLoading(false);
-      setHasLoaded(true);
+      await mutate(options => api.post(`/api/todos/${id}/dismiss-agent-activity`, {}, options), controls, refreshAfter);
+      return true;
+    } catch (error) {
+      reportFailure('Could not dismiss AI activity', error);
+      return false;
     }
-  }, [toast]);
-
-  useAutoRefresh(fetchTodos);
-
-  const createTodo = useCallback(async (data) => {
-    const { todo, materialized = [] } = await api.post('/api/todos', data);
-    setTodos(prev => [todo, ...materialized, ...prev]);
-    recordUndo(async () => {
-      await api.delete(`/api/todos/${todo.id}`);
-      const allIds = new Set([todo.id, ...materialized.map(t => t.id)]);
-      setTodos(prev => prev.filter(t => !allIds.has(t.id)));
-    });
-    return todo;
-  }, [recordUndo]);
-
-  const updateTodo = useCallback(async (id, data) => {
-    const prevTodo = todosRef.current.find(t => t.id === id);
-    const { todo, materialized = [], removedIds = [] } = await api.patch(`/api/todos/${id}`, data);
-    setTodos(prev => mergeTodoUpdate(prev, todo, materialized, removedIds));
-    if (prevTodo) {
-      const revertData = Object.fromEntries(Object.keys(data).map(k => [k, prevTodo[k] ?? null]));
-      recordUndo(async () => {
-        const { todo: reverted, materialized: rm = [], removedIds: rri = [] } = await api.patch(`/api/todos/${todo.id}`, revertData);
-        setTodos(prev => mergeTodoUpdate(prev, reverted, rm, rri));
-      });
-    }
-    return todo;
-  }, [recordUndo]);
-
-  const deleteTodo = useCallback(async (id, scope = 'single') => {
-    const prevTodo = todosRef.current.find(t => t.id === id);
-    await api.delete(`/api/todos/${id}?scope=${scope}`);
-    if (scope === 'all') {
-      const templateId = prevTodo?.recurrence_parent_id ?? id;
-      setTodos(prev => prev.filter(t => t.id !== templateId && t.recurrence_parent_id !== templateId));
-    } else {
-      setTodos(prev => prev.filter(t => t.id !== id));
-    }
-    if (prevTodo) {
-      const { id: _id, ...createData } = prevTodo;
-      recordUndo(async () => {
-        const { todo } = await api.post('/api/todos', createData);
-        setTodos(prev => [todo, ...prev]);
-      });
-    }
-  }, [recordUndo]);
-
-  const makeDayRevert = useCallback((id, day) => async () => {
-    setTodos(prev => assignDayLocal(prev, id, day));
-    const { todo } = await api.patch(`/api/todos/${id}`, { day_assigned: day });
-    setTodos(prev => prev.map(t => t.id === id ? todo : t));
-  }, []);
-
-  const makeOrderRevert = useCallback((items) => async () => {
-    setTodos(prev => applyOrderItems(prev, items));
-    await api.patch('/api/todos/reorder', { items });
-  }, []);
-
-  // Hands its revert back instead of recording it, so a caller that issues
-  // several writes can record them as one undo entry.
-  const applyAssignDay = useCallback(async (id, day) => {
-    const prevDay = todosRef.current.find(t => t.id === id)?.day_assigned ?? null;
-    setTodos(prev => assignDayLocal(prev, id, day));
-    try {
-      const { todo } = await api.patch(`/api/todos/${id}`, { day_assigned: day });
-      setTodos(prev => prev.map(t => t.id === id ? todo : t));
-      return { todo, revert: makeDayRevert(id, prevDay) };
-    } catch (err) {
-      setTodos(prev => assignDayLocal(prev, id, prevDay));
-      throw err;
-    }
-  }, [makeDayRevert]);
-
-  // Takes the two payloads already built, so a day holding both todos and
-  // divider lines can be renumbered from one dense run across both tables.
-  const applyTodoOrder = useCallback(async (items, prevItems) => {
-    if (items.length === 0) return { revert: null };
-    setTodos(prev => applyOrderItems(prev, items));
-    try {
-      await api.patch('/api/todos/reorder', { items });
-      return { revert: makeOrderRevert(prevItems) };
-    } catch (err) {
-      setTodos(prev => applyOrderItems(prev, prevItems));
-      throw err;
-    }
-  }, [makeOrderRevert]);
-
-  const applyReorder = useCallback((orderedTodos) => applyTodoOrder(
-    toOrderItems(orderedTodos),
-    snapshotOrderItems(todosRef.current, orderedTodos),
-  ), [applyTodoOrder]);
-
-  // Option+drag duplicates instead of moving. Recurrence fields are deliberately
-  // dropped: the gesture exists for chores that have to be done several times
-  // *without* being on a schedule, and cloning a template would materialize a
-  // whole second series.
-  const applyCopy = useCallback(async (source, day) => {
-    const { todo } = await api.post('/api/todos', {
-      title: source.title,
-      description: source.description,
-      list_id: source.list_id,
-      approx_time: source.approx_time,
-      day_assigned: day,
-    });
-    setTodos(prev => [todo, ...prev]);
-    return { todo, revert: async () => {
-      await api.delete(`/api/todos/${todo.id}`);
-      setTodos(prev => prev.filter(t => t.id !== todo.id));
-    } };
-  }, []);
-
-  const assignDay = useCallback(async (id, day) => {
-    try {
-      const { todo, revert } = await applyAssignDay(id, day);
-      recordUndo(revert);
-      return todo;
-    } catch (err) {
-      reportFailure('Could not move the item', err);
-      return null;
-    }
-  }, [applyAssignDay, recordUndo, reportFailure]);
-
-  const reorderDay = useCallback(async (orderedTodos) => {
-    try {
-      const { revert } = await applyReorder(orderedTodos);
-      recordUndo(revert);
-    } catch (err) {
-      reportFailure('Could not save the new order', err);
-    }
-  }, [applyReorder, recordUndo, reportFailure]);
-
-  // A cross-day drag is two writes. Recorded separately, the renumber overwrote
-  // the day move in the single-slot undo store and Ctrl+Z put the card back in
-  // its old position on the *new* day -- so they compose into one entry.
-  const moveTodoToDay = useCallback(async (id, day, orderedTodos) => {
-    let revertDay = null;
-    try {
-      const assigned = await applyAssignDay(id, day);
-      revertDay = assigned.revert;
-      const reordered = await applyReorder(orderedTodos);
-      recordUndo(composeReverts([revertDay, reordered.revert]));
-    } catch (err) {
-      // If the day move landed and only the renumber failed, that half is still
-      // on screen and still has to be undoable.
-      recordUndo(revertDay);
-      reportFailure('Could not move the item', err);
-    }
-  }, [applyAssignDay, applyReorder, recordUndo, reportFailure]);
-
-  return {
-    todos,
-    loading,
-    initialLoading: loading && !hasLoaded,
-    fetchTodos,
-    createTodo,
-    updateTodo,
-    deleteTodo,
-    assignDay,
-    reorderDay,
-    moveTodoToDay,
-    // Primitives for usePlannerBoard, which spans todos and dividers: each
-    // returns its revert instead of recording it so several writes compose
-    // into a single undo entry.
-    applyAssignDay,
-    applyTodoOrder,
-    applyCopy,
-    reportFailure,
-  };
+  }, [mutate, reportFailure]);
+  return { todos: resource.data ?? EMPTY, loading: resource.loading,
+    initialLoading: !resource.hasLoaded, version: resource.version, readSnapshotVersion: resource.readSnapshotVersion,
+    fetchTodos: refresh, createTodo, updateTodo, deleteTodo, dismissAgentActivity, captureVersion, reportFailure,
+    mutatePlanner: mutate };
 }

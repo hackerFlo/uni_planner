@@ -23,6 +23,8 @@ const db = require('../db');
 const { createSession } = require('../sessions');
 const { encryptEmail, decryptEmail } = require('../crypto');
 const backupRoutes = require('./backup');
+const { createLinkService } = require('../mcp/links');
+const links = createLinkService(db);
 
 function makeUser(email) {
   const id = db.prepare('INSERT INTO users (email, password_hash) VALUES (?, ?)').run(email, 'x').lastInsertRowid;
@@ -49,6 +51,8 @@ const listId = db.prepare('INSERT INTO lists (user_id, name, color, sort_order) 
 const templateId = db.prepare(
   'INSERT INTO todos (user_id, list_id, title, day_assigned, recurrence_pattern, created_at) VALUES (?, ?, ?, ?, ?, ?)'
 ).run(alice.id, listId, 'Lecture', '2026-08-03', 'weekdays', TEMPLATE_CREATED_AT).lastInsertRowid;
+db.prepare('UPDATE todos SET agent_activity_at=?,agent_activity_action=? WHERE id=?')
+  .run('2026-08-01T10:00:00.000Z', 'created', templateId);
 db.prepare(
   'INSERT INTO todos (user_id, list_id, title, day_assigned, recurrence_parent_id, created_at) VALUES (?, ?, ?, ?, ?, ?)'
 ).run(alice.id, listId, 'Lecture', '2026-08-04', templateId, '2026-08-04T00:00:00.000Z');
@@ -68,6 +72,7 @@ for (const slot of DIVIDER_SLOTS) {
 const app = express();
 app.use(cookieParser());
 app.use('/api/backup', backupRoutes);
+app.use((_error, _req, res, _next) => res.status(500).json({ error: 'Restore failed' }));
 const server = app.listen(0);
 const base = `http://127.0.0.1:${server.address().port}`;
 test.after(() => server.close());
@@ -102,6 +107,12 @@ test.describe('backup export', () => {
   test('carries the recurrence rule on the template', () => {
     const template = backup.todos.find(t => t.created_at === TEMPLATE_CREATED_AT);
     assert.equal(template.recurrence_pattern, 'weekdays');
+  });
+
+  test('carries the agent activity marker on the marked task', () => {
+    const template = backup.todos.find(t => t.created_at === TEMPLATE_CREATED_AT);
+    assert.deepEqual([template.agent_activity_action, template.agent_activity_at],
+      ['created', '2026-08-01T10:00:00.000Z']);
   });
 
   test('identifies each instance by its template, not by a local row id', () => {
@@ -158,6 +169,12 @@ test.describe('backup restore', () => {
       'SELECT recurrence_pattern FROM todos WHERE user_id = ? AND created_at = ?'
     ).get(bob.id, TEMPLATE_CREATED_AT);
     assert.equal(template.recurrence_pattern, 'weekdays');
+  });
+
+  test('restores the agent activity marker', () => {
+    const template = db.prepare('SELECT agent_activity_at,agent_activity_action FROM todos WHERE user_id=? AND created_at=?')
+      .get(bob.id, TEMPLATE_CREATED_AT);
+    assert.deepEqual(template, { agent_activity_at: '2026-08-01T10:00:00.000Z', agent_activity_action: 'created' });
   });
 
   // Without the relink the scheduler cannot see the restored instance and
@@ -283,7 +300,7 @@ test.describe('quotes in the backup', () => {
 
   test('bumped the export version so an older reader can tell', async () => {
     const out = await exportAs(alice);
-    assert.equal(out.version, 7);
+    assert.equal(out.version, 9);
   });
 });
 
@@ -389,5 +406,150 @@ test.describe('day dividers in a restored file', () => {
       { imported: result.dividersImported, skipped: result.dividersSkipped },
       { imported: MAX_DIVIDERS_PER_DAY, skipped: overflow },
     );
+  });
+});
+
+test.describe('backup authorization isolation', () => {
+  const issuer = 'https://backup-test.cloudflareaccess.com';
+  const identityFor = user => ({ issuer, subject: `synthetic-backup-${user.id}` });
+
+  test('restore revokes only the restoring account and retains its permanent identity binding', async () => {
+    const owner = makeUser('restore-grant-owner@example.com');
+    const other = makeUser('restore-grant-other@example.com');
+    links.enroll(owner.id, identityFor(owner), ['planner_read']);
+    links.enroll(other.id, identityFor(other), ['planner_read']);
+    const before = db.prepare('SELECT epoch FROM planner_versions WHERE user_id=?').get(owner.id).epoch;
+    const result = await restoreAs(owner, { todos: [], day_notes: [{ date: '2026-09-27', note: 'Restored note' }] });
+    assert.equal(result.notesImported, 1);
+    assert.notEqual(db.prepare('SELECT epoch FROM planner_versions WHERE user_id=?').get(owner.id).epoch, before);
+    assert.throws(() => links.resolve(identityFor(owner)), { code: 'LINK_REQUIRED' });
+    assert.equal(links.resolve(identityFor(other)).userId, other.id);
+    assert.throws(() => links.enroll(other.id, identityFor(owner), ['planner_read']), { code: 'CONFLICT' });
+  });
+
+  test('portable export omits agent authorization and forged authorization fields are never imported', async () => {
+    const owner = makeUser('export-grant-owner@example.com');
+    const destination = makeUser('restore-forged-grant@example.com');
+    links.enroll(owner.id, identityFor(owner), ['planner_read']);
+    const payload = await exportAs(owner);
+    assert.equal(Object.hasOwn(payload, 'agent_links'), false);
+    assert.equal(JSON.stringify(payload).includes(identityFor(owner).subject), false);
+    const result = await restoreAs(destination, { ...payload, agent_links: [{ user_id: destination.id,
+      ...identityFor(owner), token_version: 0, capabilities: ['planner_read'], revoked_at: null }] });
+    assert.equal(result.imported, 0);
+    assert.equal(links.status(destination.id).linked, false);
+    assert.equal(links.resolve(identityFor(owner)).userId, owner.id);
+  });
+
+  test('restore rollback preserves authorization and rolls back its new manifest lists', async () => {
+    const owner = makeUser('restore-rollback-grant@example.com');
+    links.enroll(owner.id, identityFor(owner), ['planner_read']);
+    db.exec(`CREATE TEMP TRIGGER fail_restore_note BEFORE INSERT ON day_notes
+      WHEN NEW.note = 'synthetic-rollback' BEGIN SELECT RAISE(ABORT, 'synthetic failure'); END`);
+    try {
+      const result = await restoreAs(owner, { todos: [], lists: [{ name: 'Rolled back list', color: 'teal' }],
+        day_notes: [{ date: '2026-09-27', note: 'synthetic-rollback' }] });
+      assert.equal(result.error, 'Restore failed');
+      assert.equal(links.resolve(identityFor(owner)).userId, owner.id);
+      assert.equal(db.prepare('SELECT count(*) AS n FROM lists WHERE user_id = ?').get(owner.id).n, 0);
+    } finally { db.exec('DROP TRIGGER fail_restore_note'); }
+  });
+
+  test('failure to revoke the grant rolls back restored planner data', async () => {
+    const owner = makeUser('restore-revoke-failure@example.com');
+    links.enroll(owner.id, identityFor(owner), ['planner_read']);
+    db.exec(`CREATE TEMP TRIGGER fail_grant_revoke BEFORE UPDATE OF revoked_at ON agent_links
+      BEGIN SELECT RAISE(ABORT, 'synthetic revocation failure'); END`);
+    try {
+      const result = await restoreAs(owner, { todos: [], day_notes: [{ date: '2026-09-27', note: 'Must roll back' }] });
+      assert.equal(result.error, 'Restore failed');
+      assert.equal(db.prepare('SELECT count(*) AS n FROM day_notes WHERE user_id = ?').get(owner.id).n, 0);
+      assert.equal(links.resolve(identityFor(owner)).userId, owner.id);
+    } finally { db.exec('DROP TRIGGER fail_grant_revoke'); }
+  });
+});
+
+test.describe('preference profile backup version 9', () => {
+  const { randomUUID } = require('node:crypto');
+  const { createPreferenceService, DEFAULT_PREFERENCES } = require('../services/preferences');
+  const profiles = createPreferenceService(db);
+  const ctx = user => ({ userId: user.id });
+
+  test('exports only owned normalized profiles and restores foreign UUIDs under fresh IDs', async () => {
+    const source = makeUser('profile-source@example.com');
+    const destination = makeUser('profile-destination@example.com');
+    const own = profiles.create(ctx(source), { id: randomUUID(), label: 'Laptop', settings: { theme: 'dark', agentActivityIcon: 'ring', holidaySubdivision: '' } });
+    profiles.update(ctx(source), { id: own.id, patch: { density: 'compact' } });
+    const snapshot = await exportAs(source);
+    assert.equal(snapshot.version, 9);
+    assert.deepEqual(snapshot.preference_profiles, [profiles.get(ctx(source), { id: own.id })]);
+    const result = await restoreAs(destination, snapshot);
+    assert.equal(result.profilesImported, 1);
+    const restored = (await exportAs(destination)).preference_profiles;
+    assert.equal(restored.length, 1);
+    assert.notEqual(restored[0].id, own.id);
+    assert.deepEqual(restored[0].settings, { ...DEFAULT_PREFERENCES, theme: 'dark', agentActivityIcon: 'ring', density: 'compact', holidaySubdivision: null });
+    assert.equal(restored[0].label, 'Laptop');
+    assert.deepEqual(profiles.get(ctx(source), { id: own.id }), snapshot.preference_profiles[0]);
+  });
+
+  test('restores the owner UUID by updating label and settings while advancing its local revision', async () => {
+    const owner = makeUser('profile-owner@example.com');
+    const profile = profiles.create(ctx(owner), { id: randomUUID(), label: 'Before', settings: { theme: 'light' } });
+    const snapshot = await exportAs(owner);
+    snapshot.preference_profiles[0].label = 'Restored';
+    snapshot.preference_profiles[0].settings.theme = 'dark';
+    const result = await restoreAs(owner, snapshot);
+    assert.equal(result.profilesUpdated, 1);
+    const updated = profiles.get(ctx(owner), { id: profile.id });
+    assert.equal(updated.label, 'Restored');
+    assert.equal(updated.settings.theme, 'dark');
+    assert.equal(updated.revision, profile.revision + 1);
+    assert.equal(updated.created_at, profile.created_at);
+    assert.equal((await exportAs(owner)).preference_profiles.length, 1);
+  });
+
+  test('invalid profile settings, ownership fields, duplicates and oversized arrays fail atomically', async () => {
+    const owner = makeUser('profile-invalid@example.com');
+    const profile = profiles.create(ctx(owner), { id: randomUUID(), label: 'Original', settings: {} });
+    const before = await exportAs(owner);
+    const versionBefore = db.prepare('SELECT epoch,revision FROM planner_versions WHERE user_id=?').get(owner.id);
+    const invalid = [
+      [{ ...profile, user_id: alice.id }], [{ ...profile, settings: { theme: 'invalid' } }],
+      [{ ...profile, settings: { showQuotes: 'true' } }], [{ ...profile, settings: { agentActivityIcon: 'square' } }],
+      [{ ...profile, label: 'Bad\u0000label' }],
+      [{ ...profile, settings: { quotesSnoozedOn: '2026-02-30' } }], [{ ...profile, revision: -1 }],
+      [{ ...profile, created_at: 'not-a-date' }], [profile, profile],
+      Array.from({ length: 51 }, () => ({ ...profile, id: randomUUID() })), null,
+    ];
+    for (const value of invalid) {
+      const response = await fetch(`${base}/api/backup/restore`, { method: 'POST',
+        headers: { Cookie: `token=${owner.token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ todos: [{ title: 'Must roll back', list_name: 'New list' }], preference_profiles: value }) });
+      assert.equal(response.status, 400);
+      assert.deepEqual((await exportAs(owner)).preference_profiles, before.preference_profiles);
+      assert.equal(db.prepare('SELECT count(*) AS n FROM todos WHERE user_id=?').get(owner.id).n, 0);
+      assert.deepEqual(db.prepare('SELECT epoch,revision FROM planner_versions WHERE user_id=?').get(owner.id), versionBefore);
+    }
+  });
+
+  test('profile limit counts existing rows and old backups preserve existing profiles', async () => {
+    const owner = makeUser('profile-cap@example.com');
+    for (let i = 0; i < 50; i++) profiles.create(ctx(owner), { id: randomUUID(), label: `Profile ${i}`, settings: {} });
+    const before = (await exportAs(owner)).preference_profiles;
+    const result = await restoreAs(owner, { todos: [], preference_profiles: [{ ...before[0], id: randomUUID() }] });
+    assert.equal(result.error, 'Invalid backup preference profiles');
+    assert.deepEqual((await exportAs(owner)).preference_profiles, before);
+    const legacy = await restoreAs(owner, { version: 6, todos: [] });
+    assert.equal(legacy.imported, 0);
+    assert.deepEqual((await exportAs(owner)).preference_profiles, before);
+  });
+
+  test('a fresh UUID round-trips profile metadata without importing account fields', async () => {
+    const owner = makeUser('profile-fresh@example.com');
+    const profile = { id: randomUUID(), label: 'Imported', settings: { theme: 'dark' }, revision: 7,
+      created_at: '2026-09-01T00:00:00.000Z', updated_at: '2026-09-02T00:00:00.000Z' };
+    assert.equal((await restoreAs(owner, { todos: [], preference_profiles: [profile] })).profilesImported, 1);
+    assert.deepEqual((await exportAs(owner)).preference_profiles, [{ ...profile, settings: { ...DEFAULT_PREFERENCES, theme: 'dark' } }]);
   });
 });

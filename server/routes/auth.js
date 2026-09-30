@@ -6,24 +6,16 @@ const { log } = require('../logger');
 const requireAuth = require('../middleware/auth');
 const { asyncHandler } = require('../middleware/asyncHandler');
 
-// notify_email is handed to nodemailer as a recipient, so it needs to be a real
-// address and nothing more. The control character check is the load-bearing
-// half: a CR or LF would end the To: header and let the rest of the value
-// become headers of the caller's choosing. Deliberately stricter than RFC 5322
-// -- quoted local parts and address literals are valid there and are not worth
-// accepting for a self-notification field.
-const NOTIFY_EMAIL_RE = /^[^\s@]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/;
-
-function isNotifiableEmail(value) {
-  if (typeof value !== 'string' || value.length > 254) return false;
-  // eslint-disable-next-line no-control-regex -- matching them is the point
-  if (/[\x00-\x1f\x7f]/.test(value)) return false; // CR, LF, NUL, tab -- header injection
-  return NOTIFY_EMAIL_RE.test(value);
-}
 const { validateIdentifier } = require('../middleware/validate');
-const { encryptEmail, decryptEmail } = require('../crypto');
-const { sendDailySummary } = require('../mailer');
-const { localDayBoundsUtc } = require('../time');
+const { randomUUID } = require('node:crypto');
+const { createNotificationService, notificationSchemas } = require('../services/notifications');
+const { createMutationService } = require('../domain/mutation');
+const { requestControls } = require('../domain/webMutation');
+const { DomainError } = require('../domain/errors');
+const { parse } = require('../domain/schemas');
+const domainError = require('../middleware/domainError');
+const notifications = createNotificationService(db);
+const notificationMutations = createMutationService(db);
 const { SESSION_COOKIE_NAME, sessionCookieOptions, clearSessionCookieOptions } = require('../config');
 const { authLimiter, sessionLimiter } = require('../middleware/rateLimiter');
 const {
@@ -186,132 +178,42 @@ router.patch('/me', authLimiter, requireAuth, asyncHandler(async (req, res) => {
   res.json({ user: { id: req.user.id, email, created_at: user.created_at } });
 }));
 
-router.get('/notification-settings', sessionLimiter, requireAuth, (req, res) => {
-  const user = db.prepare(
-    'SELECT notify_enabled, notify_time, notify_email_enc, notify_tz FROM users WHERE id = ?'
-  ).get(req.user.id);
-  let notify_email = '';
-  if (user.notify_email_enc) {
-    try { notify_email = decryptEmail(user.notify_email_enc); } catch (err) { (req.log || log).warn('notification email decrypt failed', { userId: req.user.id, err }); }
+const notificationContext = req => ({ userId: req.user.id, actor: 'web' });
+function notificationControls(req) {
+  const controls = requestControls(req);
+  if (!controls && process.env.MCP_WRITES_ENABLED === 'true') {
+    throw new DomainError('CONFLICT', 'Reload the planner before editing', 409);
   }
-  res.json({
-    notify_enabled: !!user.notify_enabled,
-    notify_time: user.notify_time || '22:00',
-    notify_email,
-    notify_tz: user.notify_tz || 'UTC',
-  });
+  return controls;
+}
+
+router.get('/notification-settings', sessionLimiter, requireAuth, (req, res) => {
+  res.json({ ...notifications.settings(notificationContext(req)), version: notificationMutations.version(notificationContext(req)) });
 });
 
 router.patch('/notification-settings', sessionLimiter, requireAuth, (req, res) => {
-  const { notify_enabled, notify_time, notify_email, notify_tz } = req.body;
-  const updates = {};
-
-  if (notify_enabled !== undefined) {
-    updates.notify_enabled = notify_enabled ? 1 : 0;
+  const context = notificationContext(req);
+  const controls = notificationControls(req);
+  const input = parse(notificationSchemas.update, req.body);
+  if (!controls) {
+    notifications.update(context, input);
+    return res.json({ ok: true });
   }
-  if (notify_time !== undefined) {
-    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(notify_time)) {
-      return res.status(400).json({ error: 'Invalid time format, expected HH:MM' });
-    }
-    updates.notify_time = notify_time;
-  }
-  if (notify_tz !== undefined) {
-    if (typeof notify_tz !== 'string' || notify_tz.length > 64 || !/^[A-Za-z_]+(?:\/[A-Za-z_+\-0-9]+){0,2}$/.test(notify_tz)) {
-      return res.status(400).json({ error: 'Invalid timezone' });
-    }
-    try {
-      new Intl.DateTimeFormat('en', { timeZone: notify_tz });
-    } catch {
-      return res.status(400).json({ error: 'Unknown timezone' });
-    }
-    updates.notify_tz = notify_tz;
-  }
-  if (notify_email !== undefined) {
-    if (notify_email === '') {
-      updates.notify_email_enc = null;
-    } else {
-      if (!isNotifiableEmail(notify_email)) {
-        return res.status(400).json({ error: 'Enter a valid email address' });
-      }
-      try {
-        updates.notify_email_enc = encryptEmail(notify_email);
-      } catch (err) {
-        // One message covers a missing key, a rotated key and a corrupt
-        // ciphertext, so without this line the cause is unrecoverable. The
-        // address itself is never logged (S-5); the logger redacts anyway.
-        (req.log || log).error('notification email encrypt failed', { userId: req.user.id, err });
-        return res.status(500).json({ error: 'Encryption not configured' });
-      }
-    }
-  }
-
-  if (!Object.keys(updates).length) {
-    return res.status(400).json({ error: 'Nothing to update' });
-  }
-
-  const set = Object.keys(updates).map(k => `${k} = ?`).join(', ');
-  db.prepare(`UPDATE users SET ${set} WHERE id = ?`).run(...Object.values(updates), req.user.id);
-  res.json({ ok: true });
+  const result = notificationMutations.run(context, 'update_notification_settings', input, controls,
+    () => ({ data: notifications.update(context, input), changed: true }));
+  res.json({ ok: true, ...result, version: result.currentVersion });
 });
 
 router.post('/test-email', authLimiter, requireAuth, asyncHandler(async (req, res) => {
-  const user = db.prepare('SELECT notify_email_enc, email, notify_tz FROM users WHERE id = ?').get(req.user.id);
-  if (!user || !user.notify_email_enc) {
-    return res.status(400).json({ error: 'No notification email saved. Save your settings first.' });
+  const context = notificationContext(req);
+  const controls = notificationControls(req);
+  if (!req.body || Array.isArray(req.body) || Object.keys(req.body).length) {
+    throw new DomainError('VALIDATION_ERROR', 'Test email uses only the saved notification recipient');
   }
-
-  let toEmail;
-  try {
-    toEmail = decryptEmail(user.notify_email_enc);
-  } catch (err) {
-    (req.log || log).error('notification email decrypt failed', { userId: req.user.id, err });
-    return res.status(500).json({ error: 'Encryption not configured on server.' });
-  }
-
-  const tz = user.notify_tz || 'UTC';
-  const now = new Date();
-  const today = new Intl.DateTimeFormat('en-CA', {
-    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(now);
-  const { startIso, endIso } = localDayBoundsUtc(today, tz);
-  const tomorrowDate = new Date(today + 'T12:00:00Z');
-  tomorrowDate.setUTCDate(tomorrowDate.getUTCDate() + 1);
-  const tomorrow = new Intl.DateTimeFormat('en-CA', {
-    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(tomorrowDate);
-
-  const completedTodos = db.prepare(
-    `SELECT t.title, t.approx_time, l.name AS list_name, l.color AS list_color
-     FROM todos t JOIN lists l ON l.id = t.list_id
-     WHERE t.user_id = ? AND t.completed = 1
-       AND t.completed_at >= ? AND t.completed_at < ?`
-  ).all(req.user.id, startIso, endIso);
-
-  const uncompletedTodos = db.prepare(
-    `SELECT t.title, t.approx_time, l.name AS list_name, l.color AS list_color
-     FROM todos t JOIN lists l ON l.id = t.list_id
-     WHERE t.user_id = ? AND t.day_assigned = ? AND t.completed = 0 AND t.archived = 0`
-  ).all(req.user.id, today);
-
-  const tomorrowTodos = db.prepare(
-    `SELECT t.title, t.approx_time, l.name AS list_name, l.color AS list_color
-     FROM todos t JOIN lists l ON l.id = t.list_id
-     WHERE t.user_id = ? AND t.day_assigned = ? AND t.archived = 0
-     ORDER BY t.planner_order ASC`
-  ).all(req.user.id, tomorrow);
-
-  const userName = (user.email || '').split('@')[0] || 'there';
-  const dateStr = now.toLocaleDateString('en-GB', { timeZone: tz, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-  const tomorrowStr = tomorrowDate.toLocaleDateString('en-GB', { timeZone: tz, weekday: 'long', day: 'numeric', month: 'long' });
-
-  try {
-    const hour = parseInt(new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: 'numeric', hour12: false }).format(now), 10);
-    await sendDailySummary(toEmail, { completedTodos, uncompletedTodos, tomorrowTodos, dateStr, tomorrowStr, userName, hour });
-    res.json({ ok: true, sentTo: toEmail });
-  } catch (err) {
-    (req.log || log).error('test email send failed', { userId: req.user.id, err });
-    res.status(500).json({ error: 'Failed to send test email. Check server email configuration.' });
-  }
+  const input = controls || { expectedVersion: notificationMutations.version(context), idempotencyKey: randomUUID() };
+  const result = await notifications.sendTest(context, input);
+  res.json(result);
 }));
 
+router.use(['/notification-settings', '/test-email'], domainError);
 module.exports = router;

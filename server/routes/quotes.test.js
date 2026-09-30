@@ -35,10 +35,10 @@ const server = app.listen(0);
 const base = `http://127.0.0.1:${server.address().port}`;
 test.after(() => server.close());
 
-const call = (method, url, { token, body } = {}) => fetch(`${base}${url}`, {
+const call = (method, url, { token, body, headers = {} } = {}) => fetch(`${base}${url}`, {
   method,
   headers: {
-    'Content-Type': 'application/json',
+    'Content-Type': 'application/json', ...headers,
     ...(token ? { Cookie: `${SESSION_COOKIE_NAME}=${token}` } : {}),
   },
   ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -192,4 +192,53 @@ test.describe('GET /stats', () => {
     assert.equal(stats.uploaded, 0);
     assert.ok(stats.total >= 191);
   });
+});
+
+
+test('quote mutations replay receipts, reject stale drafts and undo using the shared journal', async () => {
+  const { randomUUID } = require('node:crypto');
+  const { createOperations } = require('../services/operations');
+  const operations = createOperations(db);
+  const user = makeUser('versioned-quotes@example.com');
+  const initial = await (await call('GET', `/api/quotes/today?date=${DAY}`, { token: user.token })).json();
+  assert.ok(initial.version?.epoch);
+  const headers = { 'X-Planner-Epoch': initial.version.epoch, 'X-Planner-Revision': String(initial.version.revision), 'Idempotency-Key': randomUUID() };
+  const url = `/api/quotes/${initial.quote.id}/dislike?date=${DAY}`;
+  const result = await (await call('POST', url, { token: user.token, headers, body: {} })).json();
+  assert.equal(result.undoAvailable, true);
+  assert.equal(result.resultVersion.revision, initial.version.revision + 1);
+  const replay = await (await call('POST', url, { token: user.token, headers, body: {} })).json();
+  assert.equal(replay.replayed, true);
+  assert.equal(replay.operationId, result.operationId);
+  assert.equal((await call('POST', url, { token: user.token, headers: { ...headers, 'Idempotency-Key': randomUUID() } })).status, 409);
+  const context = { userId: user.id, actor: 'web' };
+  operations.undo(context, result.operationId, { expectedVersion: result.resultVersion, idempotencyKey: randomUUID() });
+  const restored = await (await call('GET', `/api/quotes/today?date=${DAY}`, { token: user.token })).json();
+  assert.equal(restored.quote.id, initial.quote.id);
+  assert.equal((await (await call('GET', '/api/quotes/stats', { token: user.token })).json()).version.revision, restored.version.revision);
+});
+
+test('quote writes require preconditions when agent writes are enabled and reject ownership fields', async () => {
+  const user = makeUser('controlled-quotes@example.com');
+  process.env.MCP_WRITES_ENABLED = 'true';
+  try {
+    assert.equal((await call('POST', '/api/quotes/restore-all', { token: user.token, body: {} })).status, 409);
+  } finally { delete process.env.MCP_WRITES_ENABLED; }
+  assert.equal((await call('POST', '/api/quotes/restore-all', { token: user.token, body: { user_id: user.id + 1 } })).status, 400);
+});
+
+test('CSV import uses bounded receipts and an unchanged retry does not import twice', async () => {
+  const { randomUUID } = require('node:crypto');
+  const user = makeUser('import-receipt@example.com');
+  const { version } = await (await call('GET', '/api/quotes/stats', { token: user.token })).json();
+  const headers = { 'X-Planner-Epoch': version.epoch, 'X-Planner-Revision': String(version.revision), 'Idempotency-Key': randomUUID() };
+  const body = { csv: 'Quote,Author\nReceipt import,Author' };
+  const first = await (await call('POST', '/api/quotes/import', { token: user.token, headers, body })).json();
+  const retry = await (await call('POST', '/api/quotes/import', { token: user.token, headers, body })).json();
+  assert.equal(first.added, 1);
+  assert.equal(first.undoAvailable, false);
+  assert.equal(retry.replayed, true);
+  assert.equal(retry.added, 1);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM quotes WHERE user_id=?').get(user.id).n, 1);
+  assert.deepEqual(retry.resultVersion, first.resultVersion);
 });

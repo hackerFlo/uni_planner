@@ -203,3 +203,12 @@ test.describe('importCsv', () => {
     assert.ok(res.errors.length > 0);
   });
 });
+
+test('a stale cross-owner day pin never reveals a private uploaded quote', () => {
+  shrinkLibraryTo(0);
+  const owner = makeUser('pin-owner@example.com');
+  const other = makeUser('pin-other@example.com');
+  const id = db.prepare('INSERT INTO quotes(user_id,text,author) VALUES(?,?,?)').run(owner, 'Private canary', 'Owner').lastInsertRowid;
+  db.prepare('INSERT INTO quote_day(user_id,day,quote_id) VALUES(?,?,?)').run(other, '2026-09-27', id);
+  assert.equal(q.quoteForDay(other, '2026-09-27'), null);
+});

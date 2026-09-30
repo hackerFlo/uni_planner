@@ -1,9 +1,16 @@
 const express = require('express');
+const { randomUUID } = require('node:crypto');
+const { z } = require('zod');
+const { DomainError } = require('../domain/errors');
+const domainError = require('../middleware/domainError');
+const { preferenceSchemas, DEFAULT_PREFERENCES } = require('../services/preferences');
 const router = express.Router();
 const db = require('../db');
 const { log } = require('../logger');
-const { encryptEmail, decryptEmail } = require('../crypto');
+const { encryptEmail } = require('../crypto');
 const requireAuth = require('../middleware/auth');
+const { createLinkService } = require('../mcp/links');
+const agentLinks = createLinkService(db);
 const {
   validateDayAssigned,
   validateRecurrenceInterval,
@@ -56,93 +63,9 @@ const todoKey = (title, listName, createdAt) => `${title}|${listName?.toLowerCas
 // the daily mail simply never arrives. Plaintext here discloses nothing new,
 // because GET /api/auth/notification-settings already returns exactly this
 // value to exactly this authenticated owner, and the file goes only to them.
-function exportSettings(req) {
-  const row = db.prepare(
-    'SELECT notify_enabled, notify_time, notify_email_enc, notify_tz FROM users WHERE id = ?'
-  ).get(req.user.id);
-  let notifyEmail = '';
-  if (row?.notify_email_enc) {
-    try {
-      notifyEmail = decryptEmail(row.notify_email_enc);
-    } catch (err) {
-      // A key rotated away costs the address, never the rest of the backup.
-      (req.log || log).warn('backup export: notification email unreadable', { userId: req.user.id, err });
-    }
-  }
-  return {
-    notify_enabled: !!row?.notify_enabled,
-    notify_time: row?.notify_time || '22:00',
-    notify_email: notifyEmail,
-    notify_tz: row?.notify_tz || 'UTC',
-  };
-}
-
 router.get('/', requireAuth, (req, res) => {
-  const lists = db.prepare(
-    'SELECT id, name, color, sort_order FROM lists WHERE user_id = ? ORDER BY sort_order ASC'
-  ).all(req.user.id);
-
-  // The template's own identity travels with each generated instance, because
-  // recurrence_parent_id is a local row id and means nothing after a restore.
-  const todos = db.prepare(
-    `SELECT t.title, t.description, l.name AS list_name, t.completed, t.archived,
-            t.day_assigned, t.approx_time, t.planner_order, t.completed_at, t.created_at,
-            t.recurrence_interval_days, t.recurrence_pattern,
-            parent.title      AS recurrence_parent_title,
-            parent.created_at AS recurrence_parent_created_at,
-            pl.name           AS recurrence_parent_list_name
-       FROM todos t
-       JOIN lists l ON l.id = t.list_id
-       LEFT JOIN todos parent ON parent.id = t.recurrence_parent_id AND parent.user_id = t.user_id
-       LEFT JOIN lists pl     ON pl.id = parent.list_id            AND pl.user_id = t.user_id
-      WHERE t.user_id = ?`
-  ).all(req.user.id);
-
-  const exams = db.prepare(
-    'SELECT title, exam_date, created_at FROM exams WHERE user_id = ?'
-  ).all(req.user.id);
-
-  const dayNotes = db.prepare(
-    'SELECT date, note, updated_at FROM day_notes WHERE user_id = ? ORDER BY date ASC'
-  ).all(req.user.id);
-
-  // AR-15: user data, and no row id travels -- a divider is identified by the
-  // day it sits on and its slot in that day's shared todo/divider sequence.
-  const dayDividers = db.prepare(
-    'SELECT date, planner_order, created_at FROM day_dividers WHERE user_id = ? ORDER BY date ASC, planner_order ASC'
-  ).all(req.user.id);
-
-  // AR-15. Only the two halves that are genuinely this user's:
-  //  - quotes they uploaded. The 191 built-ins are re-seeded from the CSV
-  //    shipped in the image on every boot, so exporting them would add ~25 kB
-  //    to every backup to restore rows that are already there.
-  //  - which quotes they have hidden. Carried by quote text, never by row id:
-  //    ids are local and a restored built-in has a different one (see the
-  //    todoKey comment above for the same reasoning).
-  // Deliberately NOT exported: quote_day and quote_state.shown_cycle. That is
-  // rotation bookkeeping which self-heals on the next pick, and restoring
-  // another machine's idea of "already seen" would mean nothing.
-  const quotes = db.prepare(
-    'SELECT text, author, wikipedia, source, created_at FROM quotes WHERE user_id = ?'
-  ).all(req.user.id);
-
-  const quoteDislikes = db.prepare(
-    `SELECT q.text FROM quote_state s JOIN quotes q ON q.id = s.quote_id
-      WHERE s.user_id = ? AND s.disliked = 1`
-  ).all(req.user.id).map(r => r.text);
-
-  res.json({
-    version: 7,
-    exported_at: new Date().toISOString(),
-    lists: lists.map(l => ({ name: l.name, color: l.color, sort_order: l.sort_order })),
-    todos,
-    exams,
-    day_notes: dayNotes,
-    day_dividers: dayDividers,
-    quotes,
-    quote_dislikes: quoteDislikes,
-    settings: exportSettings(req),
-  });
+  const snapshot = db.transaction(() => require('../services/backupSnapshot').buildSnapshot(db, req.user.id, req.log || log))();
+  res.json(snapshot);
 });
 
 const NOTIFY_TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -200,6 +123,50 @@ function restoreSettings(raw, rlog, userId) {
   return true;
 }
 
+const backupProfilesSchema = z.array(preferenceSchemas.create.extend({
+  revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER - 1),
+  created_at: z.iso.datetime(), updated_at: z.iso.datetime(),
+})).max(50).refine(rows => new Set(rows.map(row => row.id)).size === rows.length).optional();
+
+function parseBackupProfiles(raw) {
+  const parsed = backupProfilesSchema.safeParse(raw);
+  if (!parsed.success) throw new DomainError('VALIDATION_ERROR', 'Invalid backup preference profiles');
+  return parsed.data || [];
+}
+
+function restoreProfile(userId, profile, existing) {
+  const settings = JSON.stringify({ ...DEFAULT_PREFERENCES, ...profile.settings });
+  if (existing) {
+    if (existing.label !== profile.label || existing.settings !== settings) {
+      db.prepare(`UPDATE preference_profiles SET label=?,settings=?,revision=revision+1,
+        updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE user_id=? AND id=?`)
+        .run(profile.label, settings, userId, profile.id);
+    }
+    return 'updated';
+  }
+  const insert = db.prepare(`INSERT INTO preference_profiles(id,user_id,label,settings,revision,created_at,updated_at)
+    VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING`);
+  const values = [userId, profile.label, settings, profile.revision, profile.created_at, profile.updated_at];
+  // A UUID belonging to another account must never be overwritten or exposed.
+  if (!insert.run(profile.id, ...values).changes) insert.run(randomUUID(), ...values);
+  return 'imported';
+}
+
+function restoreProfiles(userId, profiles) {
+  const owned = db.prepare('SELECT id,label,settings FROM preference_profiles WHERE user_id=?').all(userId);
+  const byId = new Map(owned.map(row => [row.id, row]));
+  if (owned.length + profiles.filter(profile => !byId.has(profile.id)).length > 50) {
+    throw new DomainError('VALIDATION_ERROR', 'Invalid backup preference profiles');
+  }
+  const counts = { profilesImported: 0, profilesUpdated: 0 };
+  for (const profile of profiles) {
+    const action = restoreProfile(userId, profile, byId.get(profile.id));
+    if (action === 'imported') counts.profilesImported++;
+    else counts.profilesUpdated++;
+  }
+  return counts;
+}
+
 router.post('/restore', requireAuth, backupJsonParser, (req, res) => {
   const {
     todos, lists: backupLists, exams: backupExams,
@@ -208,6 +175,7 @@ router.post('/restore', requireAuth, backupJsonParser, (req, res) => {
     quotes: backupQuotes, quote_dislikes: backupDislikes,
   } = req.body;
   if (!Array.isArray(todos)) return res.status(400).json({ error: 'Invalid backup file' });
+  const backupProfiles = parseBackupProfiles(req.body.preference_profiles);
 
   // Build a name→id map for existing user lists
   const existingLists = db.prepare(
@@ -231,15 +199,6 @@ router.post('/restore', requireAuth, backupJsonParser, (req, res) => {
     const result = insertList.run(req.user.id, name, safeColor, getMaxOrder());
     listNameToId.set(key, result.lastInsertRowid);
     return result.lastInsertRowid;
-  }
-
-  // Pre-create lists from backup manifest (version 2)
-  if (Array.isArray(backupLists)) {
-    for (const l of backupLists) {
-      if (typeof l.name === 'string' && l.name.trim().length > 0) {
-        ensureList(l.name.trim().slice(0, 40), l.color);
-      }
-    }
   }
 
   // Determine list_name for each todo row
@@ -269,8 +228,8 @@ router.post('/restore', requireAuth, backupJsonParser, (req, res) => {
   const existingExamSet = new Set(existingExams.map(e => `${e.title}|${e.exam_date}`));
 
   const insert = db.prepare(`
-    INSERT INTO todos (user_id, title, description, list_id, completed, archived, day_assigned, approx_time, planner_order, completed_at, created_at, updated_at, recurrence_interval_days, recurrence_pattern)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO todos (user_id, title, description, list_id, completed, archived, day_assigned, approx_time, planner_order, completed_at, created_at, updated_at, recurrence_interval_days, recurrence_pattern, agent_activity_at, agent_activity_action)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const linkToTemplate = db.prepare(
@@ -304,8 +263,20 @@ router.post('/restore', requireAuth, backupJsonParser, (req, res) => {
   let dislikesImported = 0;
   let dislikesSkipped = 0;
   let settingsRestored = false;
+  let profileCounts;
 
   const run = db.transaction(() => {
+    profileCounts = restoreProfiles(req.user.id, backupProfiles);
+    // Authorization is not portable backup content. Keep the binding but
+    // require fresh consent after restore, atomically with all restored data.
+    agentLinks.revoke(req.user.id);
+    if (Array.isArray(backupLists)) {
+      for (const l of backupLists) {
+        if (typeof l.name === 'string' && l.name.trim().length > 0) {
+          ensureList(l.name.trim().slice(0, 40), l.color);
+        }
+      }
+    }
     const importedIds = new Map();
     const pendingLinks = [];
 
@@ -342,6 +313,8 @@ router.post('/restore', requireAuth, backupJsonParser, (req, res) => {
         now,
         interval === false ? null : interval,
         pattern === false ? null : pattern,
+        ['created', 'moved'].includes(t.agent_activity_action) ? cleanIsoDatetime(t.agent_activity_at) : null,
+        cleanIsoDatetime(t.agent_activity_at) && ['created', 'moved'].includes(t.agent_activity_action) ? t.agent_activity_action : null,
       );
       importedIds.set(key, result.lastInsertRowid);
       if (t.recurrence_parent_created_at) {
@@ -473,14 +446,16 @@ router.post('/restore', requireAuth, backupJsonParser, (req, res) => {
     }
 
     settingsRestored = restoreSettings(backupSettings, req.log || log, req.user.id);
+    require('../domain/mutation').createMutationService(db).reset({ userId: req.user.id, actor: 'web' });
   });
 
   run();
   res.json({
     imported, skipped, examsImported, examsSkipped,
     notesImported, notesSkipped, dividersImported, dividersSkipped, settingsRestored,
-    quotesImported, quotesSkipped, dislikesImported, dislikesSkipped,
+    quotesImported, quotesSkipped, dislikesImported, dislikesSkipped, ...profileCounts,
   });
 });
 
+router.use(domainError);
 module.exports = router;

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
-import { api } from '../../api/client';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { quoteApi, capturedRequest } from '../../api/settingsMutations';
+import { useUndo } from '../../context/UndoContext';
 import { userMessage } from '../../api/errors';
 import { usePreferences } from '../../context/PreferencesContext';
 import { useToday } from '../../context/TimeContext';
@@ -8,6 +9,11 @@ export default function QuotesSection() {
   const { preferences, update } = usePreferences();
   const today = useToday();
   const [stats, setStats] = useState(null);
+  const [version, setVersion] = useState(null);
+  const [restoring, setRestoring] = useState(false);
+  const undo = useUndo();
+  const importAttempt = useRef(capturedRequest(quoteApi.importCsv));
+  const restoreAttempt = useRef(capturedRequest(quoteApi.restoreAll));
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState('');
   const [importResult, setImportResult] = useState(null);
@@ -16,46 +22,53 @@ export default function QuotesSection() {
 
   const loadStats = useCallback(async () => {
     try {
-      const { stats: s } = await api.get('/api/quotes/stats');
-      setStats(s);
+      const data = await quoteApi.stats();
+      setStats(data.stats);
+      setVersion(data.version);
     } catch {
       // The counts are informational; failing to read them must not break the
       // toggle sitting above them.
       setStats(null);
+      setVersion(null);
     }
   }, []);
 
   useEffect(() => { loadStats(); }, [loadStats]);
 
-  async function handleImport(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  async function importCsv(csv) {
     setImportError('');
     setImportResult(null);
     setImporting(true);
     try {
-      // file.text() rather than a FileReader, matching the backup restore
-      // handler. The API client always JSON-stringifies its body, so the CSV
-      // travels as a field rather than a raw text/csv body.
-      const csv = await file.text();
-      const result = await api.post('/api/quotes/import', { csv });
-      setImportResult(result);
-      setStats(result.stats ?? null);
-    } catch (err) {
-      setImportError(userMessage(err));
-    } finally {
-      setImporting(false);
-      e.target.value = ''; // lets the same file be picked again
-    }
+      const receipt = await importAttempt.current.run({ csv }, version);
+      setImportResult(receipt);
+      if (receipt.replayed) await loadStats();
+      else { setStats(receipt.stats ?? null); setVersion(receipt.currentVersion); }
+      undo?.recordOperation(receipt, loadStats);
+    } catch (error) { setImportError(userMessage(error)); }
+    finally { setImporting(false); }
+  }
+
+  async function handleImport(event) {
+    const file = event.target.files?.[0];
+    if (!file || importing || restoring) return;
+    setImporting(true);
+    try { await importCsv(await file.text()); }
+    catch (error) { setImportError(userMessage(error)); }
+    finally { event.target.value = ''; setImporting(false); }
   }
 
   async function handleRestoreAll() {
+    if (restoring || importing || !version) return;
+    setRestoring(true);
+    setImportError('');
     try {
-      const { stats: s } = await api.post('/api/quotes/restore-all');
-      setStats(s);
-    } catch (err) {
-      setImportError(userMessage(err));
-    }
+      const receipt = await restoreAttempt.current.run({}, version);
+      if (receipt.replayed) await loadStats();
+      else { setStats(receipt.stats); setVersion(receipt.currentVersion); }
+      undo?.recordOperation(receipt, loadStats);
+    } catch (error) { setImportError(userMessage(error)); }
+    finally { setRestoring(false); }
   }
 
   return (
@@ -106,6 +119,7 @@ export default function QuotesSection() {
             <button
               type="button"
               onClick={handleRestoreAll}
+              disabled={restoring || importing || !version || importAttempt.current.pending}
               className="w-full text-xs font-medium border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 py-2 rounded-lg transition"
             >
               Restore {stats.disliked} hidden quote{stats.disliked === 1 ? '' : 's'}
@@ -121,11 +135,21 @@ export default function QuotesSection() {
           <span className="font-mono">Author</span> columns; <span className="font-mono">Wikipedia</span> and{' '}
           <span className="font-mono">Source</span> are optional. Quotes already in the library are skipped.
         </p>
-        <label className={`flex items-center justify-center w-full py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 text-xs text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition cursor-pointer ${importing ? 'opacity-50 pointer-events-none' : ''}`}>
+        <label className={`flex items-center justify-center w-full py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 text-xs text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition cursor-pointer ${importing || restoring || !version || importAttempt.current.pending ? 'opacity-50 pointer-events-none' : ''}`}>
           {importing ? 'Importing…' : 'Choose CSV file…'}
-          <input type="file" accept=".csv,text/csv" className="sr-only" onChange={handleImport} disabled={importing} />
+          <input type="file" accept=".csv,text/csv" className="sr-only" onChange={handleImport} disabled={importing || restoring || !version || importAttempt.current.pending || restoreAttempt.current.pending} />
         </label>
         {importError && <p className="text-xs text-red-500">{importError}</p>}
+        {importAttempt.current.pending && (
+          <button type="button" disabled={importing || restoring} onClick={() => importCsv('')} className="text-xs underline">
+            Retry previous import
+          </button>
+        )}
+        {(!version || importError) && !importAttempt.current.pending && !restoreAttempt.current.pending && (
+          <button type="button" disabled={importing || restoring} onClick={() => { setImportError(''); loadStats(); }} className="text-xs underline">
+            Reload current quote settings
+          </button>
+        )}
         {importResult && (
           <p className="text-xs text-emerald-600">
             Added {importResult.added}, skipped {importResult.skipped}

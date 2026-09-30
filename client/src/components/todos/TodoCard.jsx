@@ -9,6 +9,8 @@ import { LIST_PALETTE } from '../../constants/listPalette';
 import { useAnyModalOpen } from '../../context/ModalContext';
 import { useCopyDrag } from '../../context/CopyDragContext';
 import { sidebarDraggableId } from '../../utils/sidebar';
+import AgentActivityBadge from '../ui/AgentActivityBadge';
+import { formatAgentActivityLabel } from '../../utils/agentActivity';
 
 const COMPLETION_DELAY_MS = 500;
 
@@ -26,7 +28,7 @@ function dayLabel(iso) {
   return DAY_NAMES[new Date(y, m - 1, d).getDay()];
 }
 
-const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAssigned, checked, isGhost, onComplete, onEdit, onDelete, onUnassign }) {
+const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAssigned, checked, isGhost, onComplete, onEdit, onDelete, onUnassign, onDismissAgentActivity }) {
   const anyModalOpen = useAnyModalOpen();
   const isCopying = useCopyDrag() && snapshot.isDragging;
   const hideOnHover = anyModalOpen ? '' : 'group-hover:invisible group-focus-within:invisible';
@@ -34,6 +36,7 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
   const list = getList(todo.list_id);
   const palette = LIST_PALETTE[list?.color] ?? LIST_PALETTE.slate;
   const listName = list?.name ?? '';
+  const hasAgentActivity = Boolean(formatAgentActivityLabel(todo.agent_activity_at, todo.agent_activity_action, { dayAssigned: todo.day_assigned }));
 
   const [rotation, setRotation] = useState(0);
   const prevXRef = useRef(null);
@@ -194,6 +197,11 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
                   </span>
                 )}
               </div>
+              {hasAgentActivity && (
+                <span className="ml-auto flex-shrink-0">
+                  <AgentActivityBadge todo={todo} onDismissAgentActivity={onDismissAgentActivity} isGhost={isGhost} />
+                </span>
+              )}
             </div>
             {todo.description && (
               <RichText text={todo.description} className="text-xs text-zinc-400 dark:text-zinc-500 mt-0.5 line-clamp-2 block" />
@@ -205,7 +213,7 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
               keyboard. Opacity keeps them focusable and group-focus-within reveals
               them. The bar is absolutely positioned, so nothing shifts. */}
           <div
-              className={`absolute right-0 top-0 items-center gap-1 pl-8 transition-opacity ${
+              className={`absolute ${hasAgentActivity && !isGhost ? 'right-7' : 'right-0'} top-0 items-center gap-1 pl-8 transition-opacity ${
                 anyModalOpen
                   ? 'hidden'
                   : 'flex opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto'
@@ -279,7 +287,7 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
   );
 });
 
-export default function TodoCard({ todo, isAssigned, index, draggableId, isGhost = false, onComplete, onEdit, onDelete, onUnassign }) {
+export default function TodoCard({ todo, isAssigned, index, draggableId, isGhost = false, onComplete, onEdit, onDelete, onUnassign, onDismissAgentActivity }) {
   const [checked, setChecked] = useState(false);
 
   function handleComplete(e) {
@@ -303,6 +311,7 @@ export default function TodoCard({ todo, isAssigned, index, draggableId, isGhost
           onEdit={onEdit}
           onDelete={onDelete}
           onUnassign={onUnassign}
+          onDismissAgentActivity={onDismissAgentActivity}
         />
       )}
     </Draggable>

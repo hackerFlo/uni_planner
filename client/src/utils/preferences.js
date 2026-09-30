@@ -1,11 +1,12 @@
-// User-facing preferences, stored locally rather than server-side: they describe
-// this device (a phone wants a denser board than a desktop) and none of them are
-// worth a round trip or a migration.
+// Device preferences retain a local appearance cache. Authenticated profiles
+// use an account-specific namespace; the original key is only the guest/legacy
+// migration source and never receives cloud preferences.
 
 export const PREFS_KEY = 'uniPlanner.preferences';
 
 export const THEMES = ['system', 'light', 'dark'];
 export const DENSITIES = ['comfortable', 'compact'];
+export const AGENT_ACTIVITY_ICONS = ['fuzzy', 'ring', 'robot'];
 
 export const DEFAULT_PREFERENCES = {
   theme: 'system',
@@ -15,6 +16,7 @@ export const DEFAULT_PREFERENCES = {
   holidaySubdivision: 'DE-BY',
   showHolidays: true,
   showQuotes: true,
+  agentActivityIcon: 'fuzzy',
   // The DAY the quote was snoozed, not an expiry timestamp. "Is it snoozed?" is
   // then just a comparison against today, so it self-clears at 00:00 with no
   // timer, and survives a reload or a laptop asleep across midnight.
@@ -32,7 +34,9 @@ function normalizeSubdivision(value) {
 // Anything that is not a plain YYYY-MM-DD becomes null, i.e. "not snoozed".
 // A junk value must never be able to hide the quote bar permanently.
 function normalizeSnoozedOn(value) {
-  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) || value.startsWith('0000-')) return null;
+  const date = new Date(`${value}T12:00:00Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value ? value : null;
 }
 
 // A stored blob can be anything a previous version wrote, or hand-edited junk.
@@ -58,6 +62,7 @@ export function normalizePreferences(raw) {
       ? input.showHolidays : DEFAULT_PREFERENCES.showHolidays,
     showQuotes: typeof input.showQuotes === 'boolean'
       ? input.showQuotes : DEFAULT_PREFERENCES.showQuotes,
+    agentActivityIcon: pick('agentActivityIcon', AGENT_ACTIVITY_ICONS),
     quotesSnoozedOn: normalizeSnoozedOn(input.quotesSnoozedOn),
   };
 }
@@ -85,4 +90,42 @@ export function savePreferences(prefs, storage = globalThis.localStorage) {
 export function resolveTheme(theme, prefersDark) {
   if (theme === 'dark' || theme === 'light') return theme;
   return prefersDark ? 'dark' : 'light';
+}
+
+const profileMemory = new Map();
+const PROFILE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function preferenceProfileKey(accountId) {
+  if (!Number.isSafeInteger(accountId) || accountId < 1) throw new TypeError('Invalid preference account');
+  return `${PREFS_KEY}.account.${accountId}`;
+}
+
+function normalizeMarker(value) {
+  if (!value || !PROFILE_ID.test(value.id) || typeof value.initialized !== 'boolean') return null;
+  return { id: value.id, initialized: value.initialized, settings: normalizePreferences(value.settings) };
+}
+
+export function loadPreferenceProfile(accountId, storage) {
+  const key = preferenceProfileKey(accountId);
+  try {
+    const saved = normalizeMarker(JSON.parse((storage ?? globalThis.localStorage)?.getItem(key) ?? 'null'));
+    if (saved) { profileMemory.set(key, saved); return saved; }
+  } catch {
+    // A blocked/corrupt cache must not discard a profile already known in this session.
+  }
+  return profileMemory.get(key) ?? null;
+}
+
+export function savePreferenceProfile(accountId, marker, storage) {
+  const key = preferenceProfileKey(accountId);
+  const normalized = normalizeMarker(marker);
+  if (!normalized) return false;
+  profileMemory.set(key, normalized);
+  try {
+    (storage ?? globalThis.localStorage)?.setItem(key, JSON.stringify(normalized));
+    return true;
+  } catch {
+    // Keep the same random profile for this session even if persistent storage fails.
+    return false;
+  }
 }

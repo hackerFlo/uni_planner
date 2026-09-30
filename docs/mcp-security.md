@@ -1,0 +1,101 @@
+# MCP security record
+
+Status: local implementation and hardening, 2026-09-27. Planner reads/writes, undo, preferences, notifications and export are implemented with capability checks. This engineering evidence record is not certification or a claim of complete security or deployment-verified parity. MCP and writes default off; no real Cloudflare or target-client connection has been verified.
+
+## Trust boundaries
+
+The intended path is client → public HTTPS → dedicated Cloudflare Access Managed OAuth application → encrypted Cloudflare Tunnel → nginx → Express → owned SQLite data. Cloudflare owns OAuth authorization. The origin receives and validates a signed Access assertion; it does not accept the client's opaque OAuth token as a website session or forward it to another service.
+
+Website authentication remains a separate cookie/live-session boundary. Connection management is website-only and requires proof of both identities. No administrative MCP tools, arbitrary SQL/shell/URL execution or generic REST bridge exists.
+
+Public HTTPS and Tunnel encryption do not imply TLS on every hop. The present Docker/nginx-to-backend and final local tunnel hop are HTTP. They must remain inside the same trusted isolated host/network boundary, with no published backend port. An untrusted network between those components requires authenticated TLS before release. Host matching supplements assertion verification; it is not proof of traversing Cloudflare.
+
+Managed OAuth interoperability, actual assertion claims and stable subjects across the two Access applications remain external assumptions. Local fixtures deliberately use synthetic keys and identities. No email-based account matching is permitted. Email-code login is not claimed to be phishing-resistant MFA.
+
+## Implemented controls and local evidence
+
+| Boundary | Implemented behavior | Evidence |
+|---|---|---|
+| Configuration | Off by default; explicit booleans; enabled configuration requires HTTPS origins, exact MCP path, Cloudflare team issuer and distinct audiences/hostnames; safe errors | `server/mcp/config.test.js` |
+| Assertion verification | `jose`, RS256, fixed issuer/JWKS destination, selected audience, required expiry/issue time/subject/type, bounded subject/header, duplicate assertion rejection, 30-second tolerance, service-token rejection | `server/mcp/access.test.js`; signed full flow in `server/mcp/integration.test.js` |
+| JWKS | Fixed configured `/cdn-cgi/access/certs`; 5-second timeout, 30-second cooldown, 10-minute cache; request-controlled `jku`/`x5u` ignored | Remote JWKS cases in `server/mcp/access.test.js`: cache, rotation, unavailable/redirected/stalled upstream |
+| Linking | Live website cookie, website-audience assertion, current bcrypt password, explicit consent to `planner_read` plus individually selected `planner_write`, `notifications` and `export`; Origin, JSON and XMLHttpRequest header; async proof rechecked before enrollment | `server/routes/agentConnections.test.js` |
+| Binding and revocation | Unique user and `(issuer, subject)` binding retained after revoke; every request resolves live link and credential version; deletion/version change denied; re-enrollment cannot transfer identity | `server/mcp/links.test.js`, `migrations.test.js`, `integration.test.js` |
+| Revocation availability | Local disable requires website session and CSRF protection, not a current Access assertion/JWKS request or enabled MCP flag; preserve configured website Origin | `server/routes/agentConnections.test.js` |
+| Tenant isolation | Shared owned services; account identity comes only from the live link, never tool input; owner/filter/version-bound cursors and owner-scoped receipts, undo and export artifacts | `server/services/*.test.js`, `server/domain/*.test.js`, `server/mcp/pagination.test.js`; selected real REST/MCP equality and two-owner cases in `server/mcp/integration.test.js` |
+| Transport | Official SDK, fresh server/transport per request, stateless JSON responses, no web-cookie/session-ID fallback, exact Host/Origin boundary, authenticate before bounded parsing | `server/mcp/router.test.js`, production mount checks in `integration.test.js` |
+| Resource limits | Uncompressed JSON only, no batches; 32 KiB ordinary body, 1 MiB quote-import envelope; default page 50/max 100 and 256 KiB serialized tool result; 15-second response deadline; 60/minute/IP before auth, 120/minute/account after auth, 30 mutations/minute/account and 10 bulk calls/hour/account | `server/mcp/limits.test.js`, `router.test.js`, `integration.test.js` and pagination tests. Bulk covers CSV import and export preparation. Real proxy/load and deadline behavior remain unverified. |
+| Tool exposure | Discovery reflects current scopes/write switch; live authorization repeats at tool execution, mutation transaction/replay and after asynchronous work. Optional materialization/quote selection need writes; export has its own scope and works with writes off. Side-effect annotations distinguish maintenance and external calls | `server/mcp/integration.test.js`, `tools/planner.test.js`, `tools/peripherals.test.js`, `tools/mutations.test.js`; streaming-body revocation regression in `securityReview.test.js` |
+| Concurrency and retries | Shared versioned transactions, strict schemas, canonical payload hashes and owned retry receipts; stale writes fail; replay reports historical and current versions without reapplying an undone operation | `server/domain/mutation.test.js`, `server/services/operations.test.js`; real website/MCP integration |
+| Recovery | Typed owned before/after rows, thirty-second undo, version conflict on intervening edits, consumed inverse and idempotent undo retry; oversized inverses produce explicit unavailable-undo receipts | `server/domain/journal.test.js`, `server/services/undo.test.js`, `server/mcp/integration.test.js` |
+| External calls | Fixed holiday provider, no redirects, bounded response/time; test notification uses only saved recipient, durable attempt states and live authorization before send | `server/services/holidays.test.js`, `server/services/notifications.test.js`. No real SMTP delivery or production upstream path verified |
+| Export/preferences | Shared version-8 owner backup includes device profiles; private frozen chunks, checksum, expiry/quota; no restore tool or public artifact URL | `server/services/exports.test.js`, `server/services/preferences.test.js`, `server/routes/backup.test.js` |
+| Logs and errors | Fixed actions/internal account ID/outcome/request correlation; generic assertion/parser errors; no raw tokens, submitted body or planner text | Credential/content canary capture in `server/mcp/integration.test.js`; client helper error tests |
+| Website UI helper | Same-origin cookies, JSON/CSRF header, manual redirects, no-store, existing error classification, explicit scope selection; fresh password/consent form and all-client revoke wording | `client/src/api/agentConnections.test.js`; full browser interaction and tunnel verification pending |
+| Deployment | Dedicated host restricted to exact raw `/mcp` path, no SPA/API access on that host, no location-level security-header override, bounded uncached proxying; validated template hostname | `server/mcp/deployment.test.js` structural/shell tests. Actual nginx/container/Tunnel verification pending. |
+
+The integration suite uses a real local HTTP listener, temporary SQLite, signed synthetic RS256 assertions, real link resolution and the official MCP client. `router.test.js` uses injected authentication fixtures to isolate transport cases and is not independent evidence of JWT security. The JWKS tests use controlled synthetic keys and responses rather than production Cloudflare credentials.
+
+Website and MCP reuse shared planner services and the same mutation/undo infrastructure. Stored text remains untrusted user content, including sanitized description HTML and quote URLs. Tool grants and annotations do not waive the client's confirmation policy or guarantee unattended execution. The [capability matrix](mcp-capabilities.md) distinguishes shared-service tests from selected end-to-end equivalence tests; it is not exhaustive parity certification.
+
+## Retention, bounds and operational limits
+
+- Ordinary mutation receipts last 24 hours, with at most 2,000 unexpired receipts per account and a 252 KiB serialized receipt ceiling, reserving space within the MCP result envelope. New work fails when capacity is exhausted; valid retries remain available. Reuse the same key and exact payload after uncertain transport failure. An expired receipt is no longer a deduplication guarantee.
+- Undo is available for thirty seconds, only for supported operations and the matching current account version. The journal bounds snapshots to 5,000 rows per captured table, changed rows to 5,000 and serialized inverse data to 1 MiB. Oversized operations can succeed with `undoAvailable:false`. Preferences, notification settings/sends, bulk quote restore/import and export preparation have no undo. An unrelated later edit or materialization can conservatively invalidate undo.
+- Scheduled indexed cleanup runs each minute, with each cleanup statement processing at most 500 records. Expiry checks deny access immediately, but physical deletion may lag until cleanup catches up. Expired inverse data is cleared; operation markers remain for the retry window. This is logical deletion, not secure erasure of SQLite pages or host backups.
+- Each account can retain two frozen export artifacts, each at most 5 MiB and valid for ten minutes. Chunk lengths are at most 48 KiB before base64 encoding. Artifacts use private SQLite storage, and include the saved notification email in plaintext as the portable backup format does.
+- Test notifications allow three attempts/hour/account and one pending attempt. Attempt records are retained for 24 hours; abandoned pending records become unknown on startup or recovery. Sender timeout is ten seconds by default. A delivery may complete after timeout or revocation once the external send starts; retained retry keys never resend, but neither timeout nor a new key establishes that email was not delivered. Attempts store no recipient plaintext or message body.
+- Holiday fetches use a fixed provider, an eight-second timeout and a 1 MiB response limit; cached valid public data can be served stale on failure. Device profiles are capped at 50/account. Quote import is limited to 5,000 rows and ten returned errors, with a total error count.
+
+Response/body ceilings do not bound every intermediate CPU/memory cost. List pagination streams an account-wide fingerprint before the SQL page; large offsets and whole-account export assembly still require account-size/load review. Export size is checked after snapshot construction. The response timer closes the connection; it cannot interrupt synchronous SQLite work or reverse a committed operation. Process-local rate-limit counters reset on restart and are not a shared distributed quota.
+
+Default task reads do not materialize recurrence; daily quotes do not select a new pin unless explicitly requested. These narrow maintenance operations require enabled planner writes and `planner_write`, run in shared transactions and can advance the planner version without an ordinary mutation key. Public holiday-cache maintenance is separate. Unversioned website compatibility and old partial board endpoints fail closed while the agent-write flag is enabled; retirement of compatibility and verification of every browser/system writer remain release review items.
+
+## Consent and revocation limits
+
+The UI control is **Disable all agent access**. It stops local authorization immediately and retains the identity binding. It does not destroy Cloudflare OAuth grants. Because verified assertions have not established reliable per-client grant identity, UniPlanner cannot truthfully offer a Claude-only or ChatGPT-only local revoke control.
+
+Re-enrollment explicitly authorizes surviving provider grants for the same identity, with fresh website password proof and consent. Permanent disconnect or compromise recovery requires the provider/client grant-revocation operation before re-enrollment. That operation and subsequent old-client behavior have not been verified externally. Website logout ends only the browser session; credential-version changes invalidate the agent link.
+
+Authorization rows are deliberately excluded from portable user exports/imports. A full database disaster-recovery snapshot is different: it can restore older authorization state. Keep MCP disabled after such a restore, invalidate restored links and require fresh enrollment. `planner_versions`, `mutation_receipts`, `planner_operations`, `notification_attempts` and `export_artifacts` are concurrency/ephemeral state, excluded from portable backups. Preference profiles are user content and are included. Website backup restoration rotates the account epoch, clears its retry/recovery/send/export state and revokes its link; restore remains outside MCP scope.
+
+## Dependencies and checks
+
+New direct packages are pinned in the server manifest/lockfile: `@modelcontextprotocol/sdk` `1.30.1`, `jose` `6.2.12`, and `zod` `4.6.5`. Docker server stages, client builder and CI runtime declarations use maintained Node 22. The local checks ran under Node 22; no Alpine/NAS native-module compatibility claim follows from that.
+
+The pre-change baseline was 578 server tests and 273 client tests passing. The final backend run passed 952 tests after hardening. The final client run passed 338 tests. Both lint runs have zero errors, with two existing client warnings and one existing server warning. The production client build and service-worker verification pass. Current run results belong in the completion report and [capability matrix](mcp-capabilities.md).
+
+After compatible dependency remediation, the 2026-09-27 full audits, including development dependencies, report **server: zero findings; client: two moderate findings, zero high/critical findings**. The client findings are `react-router` and its dependent `react-router-dom`, covering [backslash open redirects](https://github.com/advisories/GHSA-wrjc-x8rr-h8h6) and [SSR hydration error deserialization](https://github.com/advisories/GHSA-337j-9hxr-rhxg). npm proposes React Router 7.18.4, a major-version upgrade, rather than a compatible patch. These remain unresolved and need a focused migration/reachability review; their presence is not waived by the successful high-severity gate. The server `nodemailer` and compatible transitive patches, and client development `fast-uri`/`js-yaml` patches, removed the earlier high findings. Re-run production and full audits before release; this is a dated snapshot, not a permanent clean bill. Do not run unrelated `npm audit fix --force` upgrades.
+
+Useful commands from the repository root:
+
+```sh
+npm test --prefix server
+npm run lint --prefix server
+npm test --prefix client
+npm run lint --prefix client
+npm run build --prefix client
+npm audit --prefix server --omit=dev --audit-level=high
+npm audit --prefix client --omit=dev --audit-level=high
+npm audit --prefix server
+npm audit --prefix client
+```
+
+There is no project TypeScript or Prettier configuration to certify. Production dependency scans are in CI; full development/build scans are additional review. The separate Docker publishing workflow still needs release-process review: a green independent CI workflow must not be assumed to gate publication automatically.
+
+## Outstanding gates and rollback
+
+All real Cloudflare Tunnel/Access and target-client checks are unverified: metadata/challenge ownership, PKCE/resource/client-registration behavior, stable cross-application subjects and actual assertion claims, refresh, grant expiry, provider/local revocation, restart, two-user isolation and standalone mobile support. The origin currently returns a generic Bearer challenge; no origin OAuth/discovery implementation is being represented as complete. See [operator setup](mcp-setup.md).
+
+MCP Inspector, full visual/browser interaction verification, nginx syntax and live proxy checks, proxy-hop/limiter load cases and native Alpine/NAS containers remain unverified. The local environment lacks nginx and a running Docker daemon. A local Safari spot-check covered icon selection, preference persistence, and card markers; pointer-hover behavior was not exercised directly. Source assertions are not deployment verification. No real planner data should be used for destructive testing.
+
+Keep both `MCP_ENABLED=false` and `MCP_WRITES_ENABLED=false` until the corresponding authorized rollout gates are satisfied. Fast rollback disables MCP and revokes provider grants where appropriate, retaining `WEB_PUBLIC_ORIGIN`, restrictive host routing and additive tables. Never replace newer user data with an old database merely to roll back code. Backups must be WAL-consistent before migration.
+
+Production writes require the external authentication/client gate, completed shared behavior/concurrency/isolation review and full browser parity checks, followed by deployment/security review. Local implementations and tests do not satisfy those external gates.
+
+## Authoritative references
+
+- [MCP authorization](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization), [transports](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports), [security guidance](https://modelcontextprotocol.io/docs/2025-11-25/tutorials/security/security_best_practices)
+- [OAuth security BCP, RFC 9700](https://www.rfc-editor.org/rfc/rfc9700.html), [protected-resource metadata, RFC 9728](https://www.rfc-editor.org/rfc/rfc9728.html), [resource indicators, RFC 8707](https://www.rfc-editor.org/rfc/rfc8707.html)
+- [Cloudflare Managed OAuth](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/managed-oauth/), [Access JWT verification](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/validating-json/)
+- [OWASP API Security Top 10](https://owasp.org/API-Security/editions/2023/en/0x00-header/), [Node release support](https://nodejs.org/en/about/previous-releases)

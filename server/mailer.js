@@ -16,6 +16,9 @@ const transporter = (GMAIL_USER && GMAIL_APP_PASSWORD)
       service: 'gmail',
       pool: true,
       maxConnections: 3,
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 10000,
       auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
     })
   : null;
@@ -381,13 +384,14 @@ function buildHtml({ completedTodos, uncompletedTodos, tomorrowTodos, dateStr, t
 </html>`;
 }
 
-async function sendDailySummary(toEmail, { completedTodos, uncompletedTodos, tomorrowTodos, dateStr, tomorrowStr, userName, hour }) {
+async function sendDailySummary(toEmail, { completedTodos, uncompletedTodos, tomorrowTodos, dateStr, tomorrowStr, userName, hour, messageId }) {
   if (!transporter) {
     throw new Error('GMAIL_USER and GMAIL_APP_PASSWORD env vars are required');
   }
   await transporter.sendMail({
     from: `"Uni Planner" <${GMAIL_USER}>`,
     to: toEmail,
+    ...(messageId ? { messageId } : {}),
     subject: `Your daily summary – ${dateStr}`,
     html: buildHtml({ completedTodos, uncompletedTodos, tomorrowTodos, dateStr, tomorrowStr, userName, hour }),
     attachments: LOGO_PNG ? [

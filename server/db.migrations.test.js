@@ -107,6 +107,7 @@ const LIST_TYPE_ERA = fixture('list_type era', LEGACY_USERS + `
 const CARRIED_COLUMNS = [
   'planner_order', 'approx_time', 'recurrence_interval_days',
   'recurrence_parent_id', 'recurrence_pattern', 'completed_at',
+  'agent_activity_at', 'agent_activity_action',
 ];
 
 test.describe('migrating a list_type-era database', () => {
@@ -146,6 +147,13 @@ test.describe('migrating a day-name-era database', () => {
 
   test('still has every column the guards added before the rebuild', () => {
     assert.deepEqual(CARRIED_COLUMNS.filter(c => !migrated.cols.includes(c)), []);
+  });
+
+  test('adds activity columns idempotently on later boots', () => {
+    const reopened = migrateAndInspect(DAY_NAME_ERA.dbPath);
+    assert.deepEqual(reopened.cols.filter(column => column.startsWith('agent_activity_')),
+      ['agent_activity_at', 'agent_activity_action']);
+    assert.deepEqual(reopened.todos, migrated.todos);
   });
 
   test('reaches the modern shape: list_id, not list_type', () => {

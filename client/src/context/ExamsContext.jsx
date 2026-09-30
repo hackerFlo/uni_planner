@@ -1,14 +1,12 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { api } from '../api/client';
-import { userMessage } from '../api/errors';
-import { useAuth } from './AuthContext';
-import { useUndo } from './UndoContext';
-import { useToast } from './ToastContext';
 import { parseDateLocal } from '../utils/dates';
 import { useToday } from './TimeContext';
-import { useAutoRefresh } from '../hooks/useAutoRefresh';
+import { useAuth } from './AuthContext';
 
+import { usePlannerResource } from '../hooks/usePlannerResource';
 const ExamsContext = createContext(null);
+const EMPTY = [];
 
 const MS_PER_DAY = 86400000;
 
@@ -17,28 +15,12 @@ function daysUntil(dateStr, todayIso) {
 }
 
 export function ExamsProvider({ children }) {
-  const { user } = useAuth();
-  const { recordUndo } = useUndo();
-  const toast = useToast();
   const todayIso = useToday();
-  const [exams, setExams] = useState([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const examsRef = useRef(exams);
-  useEffect(() => { examsRef.current = exams; }, [exams]);
-
-  const fetchExams = useCallback(async () => {
-    if (!user) { setExams([]); return; }
-    try {
-      const { exams: fetched } = await api.get('/api/exams');
-      setExams(fetched);
-    } catch (err) {
-      console.warn('[exams] failed to load:', err.kind, err.message);
-      toast?.error(`Could not load exams. ${userMessage(err)}`, { ref: err.requestId ?? null });
-    }
-  }, [user, toast]);
-
-  useEffect(() => { fetchExams(); }, [fetchExams]);
-  useAutoRefresh(fetchExams);
+  const { user } = useAuth();
+  const [modalAccount, setModalAccount] = useState(null);
+  const isModalOpen = Boolean(user?.id && modalAccount === user.id);
+  const { data, refresh: fetchExams, mutate, captureVersion, version } = usePlannerResource('/api/exams', 'exams');
+  const exams = data ?? EMPTY;
 
   // todayIso is a real dependency: daysUntil reads it, so leaving it out froze
   // every countdown at whatever it was when the exams were last fetched.
@@ -50,52 +32,29 @@ export function ExamsProvider({ children }) {
     [exams, todayIso]
   );
 
-  const addExam = useCallback(async (title, examDate) => {
-    const { exam } = await api.post('/api/exams', { title, exam_date: examDate });
-    setExams(prev => [...prev, exam]);
-    recordUndo(async () => {
-      await api.delete(`/api/exams/${exam.id}`);
-      setExams(prev => prev.filter(e => e.id !== exam.id));
-    });
-    return exam;
-  }, [recordUndo]);
-
-  const updateExam = useCallback(async (id, updates) => {
-    const prevExam = examsRef.current.find(e => e.id === id);
-    const { exam } = await api.patch(`/api/exams/${id}`, updates);
-    setExams(prev => prev.map(e => e.id === id ? exam : e));
-    if (prevExam) {
-      recordUndo(async () => {
-        const { exam: reverted } = await api.patch(`/api/exams/${id}`, { title: prevExam.title, exam_date: prevExam.exam_date });
-        setExams(prev => prev.map(e => e.id === id ? reverted : e));
-      });
-    }
-    return exam;
-  }, [recordUndo]);
-
-  const deleteExam = useCallback(async (id) => {
-    const prevExam = examsRef.current.find(e => e.id === id);
-    await api.delete(`/api/exams/${id}`);
-    setExams(prev => prev.filter(e => e.id !== id));
-    if (prevExam) {
-      recordUndo(async () => {
-        const { exam: restored } = await api.post('/api/exams', { title: prevExam.title, exam_date: prevExam.exam_date });
-        setExams(prev => [...prev, restored]);
-      });
-    }
-  }, [recordUndo]);
+  const addExam = useCallback(async (title, examDate, controls) => {
+    const result = await mutate(options => api.post('/api/exams', { title, exam_date: examDate }, options), controls);
+    return result.exam ?? result.data?.exam;
+  }, [mutate]);
+  const updateExam = useCallback(async (id, updates, controls) => {
+    const result = await mutate(options => api.patch(`/api/exams/${id}`, updates, options), controls);
+    return result.exam ?? result.data?.exam;
+  }, [mutate]);
+  const deleteExam = useCallback((id, controls) => mutate(options => api.delete(`/api/exams/${id}`, options), controls), [mutate]);
 
   return (
     <ExamsContext.Provider value={{
       upcomingExams,
+      captureVersion,
+      version,
       nextExam: upcomingExams[0] ?? null,
       fetchExams,
       addExam,
       updateExam,
       deleteExam,
       isModalOpen,
-      openModal: () => setIsModalOpen(true),
-      closeModal: () => setIsModalOpen(false),
+      openModal: () => setModalAccount(user?.id ?? null),
+      closeModal: () => setModalAccount(null),
     }}>
       {children}
     </ExamsContext.Provider>

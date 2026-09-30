@@ -7,11 +7,12 @@ import { useExams } from '../../context/ExamsContext';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import { userMessage } from '../../api/errors';
-import { TimePicker } from '../ui/TimePicker';
+import NotificationSection from '../settings/NotificationSection';
 import ListsSection from '../settings/ListsSection';
 import AppearanceSection from '../settings/AppearanceSection';
 import ShortcutsSection from '../settings/ShortcutsSection';
 import QuotesSection from '../settings/QuotesSection';
+import AgentConnectionsSection from '../settings/AgentConnectionsSection';
 
 // Mirrors the server's own 15-minute cache, so reopening this panel does not
 // spend a rate-limit slot re-asking a question we already have the answer to.
@@ -99,25 +100,6 @@ export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
     return 'Password updated successfully';
   });
 
-  const [notifForm, setNotifForm] = useState({ notify_enabled: false, notify_time: '22:00', notify_email: '' });
-  // 'loading' | 'ready' | 'failed'. A failed load used to leave the form sitting on
-  // its useState defaults, so pressing Save wrote "notifications off, no address"
-  // over the real settings -- a silent data loss triggered by a transient network
-  // blip. Saving is refused until the current values are actually known.
-  const [notifLoad, setNotifLoad] = useState('loading');
-  const [notifLoadError, setNotifLoadError] = useState('');
-  const notifOp = useAsync(async () => {
-    await api.patch('/api/auth/notification-settings', {
-      ...notifForm,
-      notify_tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    });
-    return 'Notification settings saved';
-  });
-  const testEmailOp = useAsync(async () => {
-    const data = await api.post('/api/auth/test-email');
-    return `Test email sent to ${data.sentTo}`;
-  });
-
   const [versionInfo, setVersionInfo] = useState(null);
   const [versionLoad, setVersionLoad] = useState('loading'); // 'loading' | 'ready' | 'failed'
   const [versionError, setVersionError] = useState('');
@@ -148,26 +130,6 @@ export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
   const [restoreLoading, setRestoreLoading] = useState(false);
   const [restoreResult, setRestoreResult] = useState(null);
   const [restoreError, setRestoreError] = useState('');
-
-  const loadNotifSettings = useCallback(async () => {
-    setNotifLoad('loading');
-    setNotifLoadError('');
-    try {
-      const data = await api.get('/api/auth/notification-settings');
-      setNotifForm({
-        notify_enabled: data.notify_enabled,
-        notify_time: data.notify_time,
-        notify_email: data.notify_email,
-      });
-      setNotifLoad('ready');
-    } catch (err) {
-      console.warn('[settings] failed to load notification settings:', err.kind, err.message);
-      setNotifLoadError(userMessage(err));
-      setNotifLoad('failed');
-    }
-  }, []);
-
-  useEffect(() => { loadNotifSettings(); }, [loadNotifSettings]);
 
   useEffect(() => {
     loadVersion(false).catch(err => {
@@ -319,6 +281,10 @@ export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
 
           <div className="border-t border-zinc-100 dark:border-zinc-800" />
 
+          <AgentConnectionsSection key={user?.id} />
+
+          <div className="border-t border-zinc-100 dark:border-zinc-800" />
+
           <ShortcutsSection />
 
           <div className="border-t border-zinc-100 dark:border-zinc-800" />
@@ -336,87 +302,7 @@ export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
 
           <div className="border-t border-zinc-100 dark:border-zinc-800" />
 
-          {/* Email Notifications */}
-          <form onSubmit={e => { e.preventDefault(); notifOp.run(); }} className="space-y-3">
-            <h3 className="text-xs font-semibold text-zinc-600 dark:text-zinc-300 uppercase tracking-widest">Email Notifications</h3>
-            <p className="text-[11px] text-zinc-400 dark:text-zinc-500 leading-relaxed">
-              Receive a daily summary of all tasks you completed that day. Messages are sent at central european time.
-            </p>
-
-            {notifLoad === 'failed' && (
-              <div className="rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950 px-3 py-2 space-y-1.5">
-                <p className="text-[11px] text-amber-800 dark:text-amber-200 leading-relaxed">
-                  Your current notification settings could not be loaded, so they cannot be
-                  saved from here without overwriting them. {notifLoadError}
-                </p>
-                <button
-                  type="button"
-                  onClick={loadNotifSettings}
-                  className="text-[11px] font-medium text-amber-900 underline underline-offset-2 hover:no-underline"
-                >
-                  Try again
-                </button>
-              </div>
-            )}
-
-            <label className="flex items-center gap-3 cursor-pointer">
-              <div className="relative">
-                <input
-                  type="checkbox"
-                  className="sr-only"
-                  checked={notifForm.notify_enabled}
-                  disabled={notifLoad !== 'ready'}
-                  onChange={e => setNotifForm(f => ({ ...f, notify_enabled: e.target.checked }))}
-                />
-                <div className={`w-9 h-5 rounded-full transition-colors ${notifForm.notify_enabled ? 'bg-indigo-500' : 'bg-zinc-200 dark:bg-zinc-700'}`} />
-                <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white dark:bg-zinc-900 rounded-full shadow transition-transform ${notifForm.notify_enabled ? 'translate-x-4' : ''}`} />
-              </div>
-              <span className="text-xs text-zinc-600 dark:text-zinc-300">Enable daily summary</span>
-            </label>
-
-            <div className={notifForm.notify_enabled && notifLoad === 'ready' ? '' : 'opacity-40 pointer-events-none'}>
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Send to email</label>
-                  <input
-                    type="email"
-                    maxLength={254}
-                    value={notifForm.notify_email}
-                    onChange={e => setNotifForm(f => ({ ...f, notify_email: e.target.value }))}
-                    className="w-full text-sm border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition"
-                    placeholder="you@example.com"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Send time</label>
-                  <TimePicker
-                    value={notifForm.notify_time}
-                    onChange={t => setNotifForm(f => ({ ...f, notify_time: t }))}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {notifOp.error && <p className="text-xs text-red-500">{notifOp.error}</p>}
-            {notifOp.success && <p className="text-xs text-emerald-600">{notifOp.success}</p>}
-            <button
-              type="submit"
-              disabled={notifOp.loading || notifLoad !== 'ready'}
-              className="w-full text-xs font-medium bg-indigo-500 hover:bg-indigo-600 text-white py-2 rounded-lg transition disabled:opacity-50"
-            >
-              {notifOp.loading ? 'Saving…' : notifLoad === 'loading' ? 'Loading…' : 'Save Notification Settings'}
-            </button>
-            <button
-              type="button"
-              disabled={testEmailOp.loading}
-              onClick={testEmailOp.run}
-              className="w-full text-xs font-medium border border-indigo-300 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950 py-2 rounded-lg transition disabled:opacity-50"
-            >
-              {testEmailOp.loading ? 'Sending…' : 'Send Test Email Now'}
-            </button>
-            {testEmailOp.error && <p className="text-xs text-red-500">{testEmailOp.error}</p>}
-            {testEmailOp.success && <p className="text-xs text-emerald-600">{testEmailOp.success}</p>}
-          </form>
+          <NotificationSection />
 
           <div className="border-t border-zinc-100 dark:border-zinc-800" />
 

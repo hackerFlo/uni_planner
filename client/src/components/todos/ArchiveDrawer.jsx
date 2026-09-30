@@ -1,17 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
-import { api } from '../../api/client';
+import { useEffect, useRef } from 'react';
+import { usePlannerResource } from '../../hooks/usePlannerResource';
 import { useLists } from '../../context/ListsContext';
 import { useRegisterModal } from '../../context/ModalContext';
-import { useToast } from '../../context/ToastContext';
 import { LIST_PALETTE } from '../../constants/listPalette';
 import RichText from '../ui/RichText';
 
 export default function ArchiveDrawer({ onClose, onRestore, onDelete }) {
   useRegisterModal();
-  const [todos, setTodos] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { data, loading, captureVersion, refresh, reportFailure } = usePlannerResource('/api/todos/archived', 'todos');
+  const todos = data ?? [];
   const { getList } = useLists();
-  const toast = useToast();
   const panelRef = useRef(null);
   // The caller passes a fresh arrow on every one of its renders, so the effect
   // below must not depend on it -- it would re-run constantly and yank focus back
@@ -30,24 +28,11 @@ export default function ArchiveDrawer({ onClose, onRestore, onDelete }) {
     };
   }, []);
 
-  useEffect(() => {
-    api.get('/api/todos/archived')
-      .then(({ todos }) => setTodos(todos))
-      .catch(err => {
-        console.warn('[archive] failed to load:', err.message);
-        toast?.error('Could not load archive. Please try again.');
-      })
-      .finally(() => setLoading(false));
-  }, [toast]);
-
-  async function handleRestore(id) {
-    await onRestore(id);
-    setTodos(prev => prev.filter(t => t.id !== id));
-  }
-
-  async function handleDelete(id) {
-    await onDelete(id);
-    setTodos(prev => prev.filter(t => t.id !== id));
+  async function act(action, id) {
+    try {
+      await action(id, { expectedVersion: captureVersion(), idempotencyKey: crypto.randomUUID() });
+      await refresh();
+    } catch (error) { reportFailure('Could not change archived task', error); }
   }
 
   return (
@@ -104,14 +89,14 @@ export default function ArchiveDrawer({ onClose, onRestore, onDelete }) {
                 </div>
                 <div className="flex gap-2 mt-2.5">
                   <button
-                    onClick={() => handleRestore(todo.id)}
+                    onClick={() => act(onRestore, todo.id)}
                     aria-label={`Restore ${todo.title}`}
                     className="flex-1 text-xs font-medium text-indigo-600 bg-indigo-50 dark:bg-indigo-950 hover:bg-indigo-100 dark:hover:bg-indigo-900 py-2 sm:py-1.5 rounded-md transition"
                   >
                     Restore
                   </button>
                   <button
-                    onClick={() => handleDelete(todo.id)}
+                    onClick={() => act(onDelete, todo.id)}
                     aria-label={`Delete ${todo.title} permanently`}
                     className="flex-1 text-xs font-medium text-red-500 bg-red-50 dark:bg-red-950 hover:bg-red-100 dark:hover:bg-red-900 py-2 sm:py-1.5 rounded-md transition"
                   >

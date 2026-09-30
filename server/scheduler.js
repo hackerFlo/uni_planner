@@ -3,7 +3,7 @@ const { log } = require('./logger');
 const db = require('./db');
 const { decryptEmail } = require('./crypto');
 const { sendDailySummary } = require('./mailer');
-const { materializeWindowForUser } = require('./recurrence');
+const { materializeWindowForUser, listRecurringUsers } = require('./recurrence');
 const { localDayBoundsUtc } = require('./time');
 const { sweepExpiredSessions } = require('./sessions');
 
@@ -28,9 +28,7 @@ function isoDate(tz, now) {
 async function materializeRecurrencesAtLocalMidnight(now) {
   let users;
   try {
-    users = db.prepare(
-      'SELECT DISTINCT u.id, u.notify_tz FROM users u INNER JOIN todos t ON t.user_id = u.id WHERE (t.recurrence_interval_days IS NOT NULL OR t.recurrence_pattern IS NOT NULL) AND t.archived = 0 AND t.recurrence_parent_id IS NULL'
-    ).all();
+    users = listRecurringUsers();
   } catch (err) {
     log.error('scheduler recurrence query failed', { err });
     return;
@@ -134,6 +132,8 @@ async function sendDueSummaries(now) {
 function startScheduler() {
   cron.schedule('* * * * *', async () => {
     const now = new Date();
+    try { require('./domain/cleanup').sweepEphemeral(db, now.getTime()); }
+    catch { log.error('planner recovery cleanup failed'); }
     await materializeRecurrencesAtLocalMidnight(now);
     await sendDueSummaries(now);
   });

@@ -21,6 +21,7 @@ const db = require('../db');
 const { createSession } = require('../sessions');
 const { jsonBodyParser } = require('../middleware/bodyParser');
 const listRoutes = require('./lists');
+const { createListService } = require('../services/lists');
 
 function makeUser(email) {
   const id = db.prepare('INSERT INTO users (email, password_hash) VALUES (?, ?)').run(email, 'x').lastInsertRowid;
@@ -165,6 +166,20 @@ test.describe('PATCH /api/lists/reorder', () => {
   test('refuses an empty order', async () => {
     assert.equal((await call(alice, 'PATCH', '/reorder', { order: [] })).status, 400);
   });
+
+  test('rejects duplicates that omit a list without changing any positions', async () => {
+    const before = idsOf(alice);
+    const duplicate = before.map(() => before[0]);
+    assert.equal((await call(alice, 'PATCH', '/reorder', { order: duplicate })).status, 400);
+    assert.deepEqual(idsOf(alice), before);
+  });
+
+  test('rejects partially numeric list ids rather than parsing a prefix', async () => {
+    const before = idsOf(alice);
+    assert.equal((await call(alice, 'PATCH', '/reorder', { order: before.map(id => `${id}suffix`) })).status, 400);
+    assert.equal((await call(alice, 'PATCH', `/${aliceUni}suffix`, { name: 'Nope' })).status, 400);
+    assert.deepEqual(idsOf(alice), before);
+  });
 });
 
 test.describe('DELETE /api/lists/:id', () => {
@@ -212,4 +227,32 @@ test.describe('DELETE /api/lists/:id', () => {
     await call(alice, 'DELETE', `/${emptyList}`);
     assert.equal(db.prepare('SELECT id FROM lists WHERE id = ?').get(emptyList), undefined);
   });
+});
+
+test('website and direct shared-service list workflows produce equivalent owned state', async () => {
+  const webUser = makeUser('list-web-equivalence@example.com');
+  const agentUser = makeUser('list-agent-equivalence@example.com');
+  const service = createListService(db);
+  const context = { userId: agentUser.id, actor: 'mcp' };
+  const web = [];
+  const agent = [];
+  for (const name of ['First', 'Second']) {
+    web.push((await call(webUser, 'POST', '/', { name, color: 'teal' })).body.list);
+    agent.push(service.create(context, { name, color: 'teal' }));
+  }
+  await call(webUser, 'PATCH', `/${web[0].id}`, { name: 'Renamed' });
+  service.update(context, { id: agent[0].id, name: 'Renamed' });
+  await call(webUser, 'PATCH', '/reorder', { order: web.map(l => l.id).reverse() });
+  service.reorder(context, { order: agent.map(l => l.id).reverse() });
+  await call(webUser, 'DELETE', `/${web[1].id}`);
+  service.remove(context, { id: agent[1].id });
+  const normalize = rows => rows.map(({ id: _id, ...row }) => row);
+  assert.deepEqual(normalize((await call(webUser, 'GET', '/')).body.lists), normalize(service.list(context)));
+});
+
+test('revoked website sessions cannot mutate lists', async () => {
+  const user = makeUser('list-revoked-session@example.com');
+  db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
+  assert.equal((await call(user, 'POST', '/', { name: 'Nope', color: 'teal' })).status, 401);
+  assert.deepEqual(namesOf(user), []);
 });

@@ -1,17 +1,18 @@
-import { ApiError, KINDS, classifyStatus } from './errors';
-import { probeReachability } from './probe';
-import { beginRequest, endRequest } from './activity';
+import { ApiError, KINDS, classifyStatus } from './errors.js';
+import { probeReachability } from './probe.js';
+import { beginRequest, endRequest } from './activity.js';
 
 async function performRequest(path, options = {}) {
   let res;
   try {
     res = await fetch(path, {
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json', ...options.headers },
       ...options,
+      headers: { 'Content-Type': 'application/json', ...options.headers },
       body: options.body ? JSON.stringify(options.body) : undefined,
     });
   } catch (err) {
+    if (options.signal?.aborted) throw err;
     // fetch only rejects when no HTTP response arrived at all. A stopped backend
     // is therefore the one cause this cannot be -- nginx would answer 502. Ask
     // the probe what actually happened instead of guessing.
@@ -20,10 +21,13 @@ async function performRequest(path, options = {}) {
     throw new ApiError(kind);
   }
 
+  if (res.type === 'opaqueredirect') throw new ApiError(KINDS.ACCESS_EXPIRED);
+
   // Set on every response by the server's requestId middleware, so an on-screen
   // error can be matched to a log line (EL-8).
   const requestId = res.headers.get('X-Request-Id');
   const data = await res.json().catch(() => null);
+  if (options.signal?.aborted) throw options.signal.reason;
 
   if (!res.ok) {
     // A null body on a 5xx means an intermediary answered with an HTML error
@@ -50,9 +54,9 @@ async function request(path, options) {
 }
 
 export const api = {
-  get: (path) => request(path),
-  post: (path, body) => request(path, { method: 'POST', body }),
-  patch: (path, body) => request(path, { method: 'PATCH', body }),
-  put: (path, body) => request(path, { method: 'PUT', body }),
-  delete: (path) => request(path, { method: 'DELETE' }),
+  get: (path, options) => request(path, options),
+  post: (path, body, options) => request(path, { ...options, method: 'POST', body }),
+  patch: (path, body, options) => request(path, { ...options, method: 'PATCH', body }),
+  put: (path, body, options) => request(path, { ...options, method: 'PUT', body }),
+  delete: (path, options) => request(path, { ...options, method: 'DELETE' }),
 };
