@@ -32,6 +32,18 @@ export const CHANGELOG = [
         desc: 'Password and account changes now check that the session and credentials are still current before saving, including when two requests overlap. Dependency security updates are included.',
         svgPath: 'M12 3l8 4v5c0 5-8 9-8 9s-8-4-8-9V7l8-4zM9 12l2 2 4-4',
       },
+      {
+        icon: 'green',
+        name: 'Smoother planner loading and synchronization',
+        desc: 'Reduced repeated loading and unnecessary redraws. Expected refresh cancellations no longer show a sync error, and real failures stay visible until the planner recovers.',
+        svgPath: 'M20 11a8 8 0 10-2 6M20 4v7h-7',
+      },
+      {
+        icon: 'purple',
+        name: 'Stricter agent request checks',
+        desc: 'Tightened validation for agent requests while keeping access tied to the authorized account and its selected permissions.',
+        svgPath: 'M12 3l8 4v5c0 5-8 9-8 9s-8-4-8-9V7l8-4zM9 12l2 2 4-4',
+      },
     ],
   },
   {

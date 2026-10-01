@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { plannerApi } from '../api/planner.js';
-import { PlannerRevisionPoller } from './plannerRevision.js';
+import { PlannerRevisionPoller, plannerRevisionSnapshot } from './plannerRevision.js';
 
 export default function usePlannerRevision({ onChange, paused = false }) {
   const { user, loading } = useAuth();
@@ -20,7 +20,9 @@ export default function usePlannerRevision({ onChange, paused = false }) {
     if (scope.accountId === null) return;
     const poller = new PlannerRevisionPoller({ readVersion: plannerApi.getVersion,
       onChange: (version, options) => { if (scopeRef.current === scope) return callback.current(version, options); },
-      onState: state => { if (scopeRef.current === scope) setSnapshot({ ...state, scope }); } });
+      onState: state => {
+        if (scopeRef.current === scope) setSnapshot(previous => plannerRevisionSnapshot(previous, state, scope));
+      } });
     pollerRef.current = poller;
     poller.setVisible(document.visibilityState !== 'hidden');
     poller.setPaused(pausedRef.current);
@@ -40,5 +42,5 @@ export default function usePlannerRevision({ onChange, paused = false }) {
   useEffect(() => { pollerRef.current?.setPaused(paused); }, [paused]);
   const refresh = useCallback(() => pollerRef.current?.refresh(), []);
   const current = accountId !== null && snapshot?.scope === scope ? snapshot : null;
-  return { version: current?.version ?? null, error: current?.error ?? null, polling: current?.polling ?? false, refresh };
+  return { version: current?.version ?? null, error: current?.error ?? null, refresh };
 }

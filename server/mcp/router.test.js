@@ -69,6 +69,21 @@ test('Host and Origin boundary blocks API on MCP host and hostile origins', asyn
   assert.equal(await rawGet('/api/private', { Host: 'planner.example.com' }), 200);
 });
 
+test('Origin boundary distinguishes absent headers from invalid and repeated wire headers', async t => {
+  const origin = config.allowedOrigins[0];
+  for (const [name, extra, status] of [
+    ['missing Origin permits native clients', {}, 405],
+    ['one allowlisted Origin permits browser clients', { Origin: origin }, 405],
+    ['hostile Origin is denied', { Origin: 'https://evil.example.com' }, 403],
+    ['empty Origin is denied', { Origin: '' }, 403],
+    ['whitespace Origin is denied', { Origin: '   ' }, 403],
+    ['opaque Origin is denied', { Origin: 'null' }, 403],
+    ['repeated allowlisted Origins are denied', { Origin: [origin, origin] }, 403],
+    ['allowlisted and empty Origins are denied', { Origin: [origin, ''] }, 403],
+    ['repeated empty Origins are denied', { Origin: ['', ''] }, 403],
+  ]) await t.test(name, async () => assert.equal(await rawGet('/mcp', extra), status));
+});
+
 test('web cookies and session identifiers cannot substitute for assertion authentication', async () => {
   const response = await fetch(`${base}/mcp`, { headers: headers({
     'cf-access-jwt-assertion': '', Cookie: 'token=anything', 'Mcp-Session-Id': 'alice',

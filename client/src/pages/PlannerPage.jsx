@@ -24,6 +24,7 @@ import { planCrossDayDrop, planSameDayReorder, todosForDay } from '../utils/plan
 import { isDividerId } from '../utils/plannerItems';
 import { PlannerDraft } from '../hooks/plannerDraft';
 import usePlannerRevision from '../hooks/usePlannerRevision';
+import { refreshPlannerResources } from '../hooks/plannerRefresh';
 import { useAnyModalOpen } from '../context/ModalContext';
 import { useExams } from '../context/ExamsContext';
 import { usePreferences } from '../context/PreferencesContext';
@@ -286,11 +287,9 @@ export default function PlannerPage() {
     useCompletedTodos(weekDates, revealedDays.size > 0);
   relatedRefresh.current = refreshCompleted;
 
-  const refreshAll = useCallback(async (_version, options) => {
-    const applied = await Promise.all([fetchBoard(options), fetchLists(options), fetchExams(options), fetchNotes(options),
-      refreshCompleted(options), refreshPreferences(options)]);
-    if (applied.some(result => result === false)) throw new Error('Planner refresh deferred');
-  }, [fetchBoard, fetchLists, fetchExams, fetchNotes, refreshCompleted, refreshPreferences]);
+  const refreshAll = useCallback((version, options) => refreshPlannerResources(
+    [fetchBoard, fetchLists, fetchExams, fetchNotes, refreshCompleted, refreshPreferences], { ...options, minimumVersion: version }
+  ), [fetchBoard, fetchLists, fetchExams, fetchNotes, refreshCompleted, refreshPreferences]);
   const syncPaused = anyModalOpen || Boolean(formState) || Boolean(activeItem) || editingText;
   const revisionSync = usePlannerRevision({ onChange: refreshAll, paused: syncPaused });
   const refreshedDay = useRef(todayIso);
@@ -301,8 +300,10 @@ export default function PlannerPage() {
     async function refreshDay() {
       if (document.visibilityState === 'hidden' || controller.signal.aborted) return;
       try {
-        await refreshAll(null, { signal: controller.signal });
-        if (!controller.signal.aborted) refreshedDay.current = todayIso;
+        const applied = await refreshAll(null, { signal: controller.signal });
+        if (controller.signal.aborted) return;
+        if (applied) refreshedDay.current = todayIso;
+        else retry = setTimeout(refreshDay, 5000);
       } catch (error) {
         if (!controller.signal.aborted) {
           console.warn('[planner] midnight refresh deferred:', error.kind || error.name);

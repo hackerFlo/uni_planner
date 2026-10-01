@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { PlannerRevisionPoller } from './plannerRevision.js';
+import { PlannerRevisionPoller, plannerRevisionSnapshot } from './plannerRevision.js';
+import { PlannerResource } from './plannerResource.js';
 
 const version = (revision, epoch = 'a'.repeat(32)) => ({ epoch, revision });
 const settle = () => new Promise(resolve => setImmediate(resolve));
@@ -137,6 +138,59 @@ describe('planner revision polling', () => {
     await f.poller.refresh(); await settle();
     assert.equal(calls, 2); f.poller.stop();
   });
+  it('keeps a view failure visible while a successful version probe retries the views', async () => {
+    const retry = deferred();
+    const failure = new Error('view unavailable');
+    let calls = 0;
+    const f = fixture({ onChange: () => ++calls === 1 ? Promise.reject(failure) : retry.promise });
+    await f.poller.refresh(); await settle();
+    await f.poller.refresh(); await settle();
+    assert.equal(f.states.at(-1).error, failure);
+    retry.resolve(true); await settle();
+    assert.equal(f.states.at(-1).error, null);
+    f.poller.stop();
+  });
+
+  it('does not clear a version probe failure when an earlier view refresh succeeds', async () => {
+    const views = deferred();
+    const failure = new Error('version unavailable');
+    let reads = 0;
+    const f = fixture({ readVersion: async () => {
+      if (++reads > 1) throw failure;
+      return version(0);
+    }, onChange: () => views.promise });
+    await f.poller.refresh(); await f.poller.refresh();
+    views.resolve(true); await settle();
+    assert.equal(f.states.at(-1).error, failure);
+    f.poller.stop();
+  });
+
+  it('keeps the page snapshot stable during unchanged healthy polling', async () => {
+    const scope = { accountId: 1 };
+    let snapshot = null;
+    let updates = 0;
+    const f = fixture({ onState: state => {
+      const next = plannerRevisionSnapshot(snapshot, state, scope);
+      if (next !== snapshot) updates++;
+      snapshot = next;
+    } });
+    await f.poller.refresh(); await settle();
+    const firstSnapshot = snapshot;
+    const initialUpdates = updates;
+    for (let attempt = 0; attempt < 3; attempt++) await f.poller.refresh();
+    assert.equal(snapshot, firstSnapshot);
+    assert.equal(updates, initialUpdates);
+    f.poller.stop();
+  });
+
+  it('does not reuse an identical revision snapshot across accounts', () => {
+    const state = { version: version(0), error: null };
+    const previous = plannerRevisionSnapshot(null, state, { accountId: 1 });
+    const nextScope = { accountId: 2 };
+    const next = plannerRevisionSnapshot(previous, state, nextScope);
+    assert.notEqual(next, previous);
+    assert.equal(next.scope, nextScope);
+  });
   it('retains the initial version when a view refresh returns false, even if the version does not change', async () => {
     let calls = 0;
     const f = fixture({ onChange: async () => ++calls > 1 });
@@ -149,5 +203,23 @@ describe('planner revision polling', () => {
     assert.deepEqual(f.poller.delivered, version(2));
     assert.equal(f.poller.pending, null);
     f.poller.stop();
+  });
+
+  it('retries an older resource snapshot before delivering the unchanged observed revision', async () => {
+    let reads = 0;
+    const resource = new PlannerResource({
+      read: async () => ({ rows: [], version: version(++reads === 1 ? 1 : 2) }),
+      select: result => result.rows,
+    });
+    const f = fixture({ onChange: (minimumVersion, options) => resource.refresh({ ...options, minimumVersion }) });
+    f.setVersion(version(2));
+    await f.poller.refresh(); await settle();
+    assert.equal(f.poller.delivered, null);
+    assert.deepEqual(f.poller.pending, version(2));
+    await f.poller.refresh(); await settle();
+    assert.deepEqual(f.poller.delivered, version(2));
+    assert.equal(f.poller.pending, null);
+    assert.equal(reads, 2);
+    f.poller.stop(); resource.close();
   });
 });

@@ -69,3 +69,87 @@ test('a successful HTTP response without mutation metadata is not claimed as suc
   await resource.refresh();
   await assert.rejects(resource.mutate(async () => ({ todo: { id: 1 } }), { idempotencyKey: key }));
 });
+
+test('revision reconciliation reuses an already-current snapshot but ordinary refreshes still read', async () => {
+  let reads = 0;
+  const resource = new PlannerResource({ read: async () => {
+    reads++;
+    return { rows: [], version };
+  }, select: x => x.rows });
+  await resource.refresh();
+  assert.equal(await resource.refresh({ minimumVersion: version }), true);
+  assert.equal(reads, 1);
+  await resource.refresh();
+  assert.equal(reads, 2);
+});
+
+test('revision reconciliation shares an initial read without aborting or repeating it', async () => {
+  let finish;
+  let reads = 0;
+  let initialSignal;
+  const resource = new PlannerResource({ read: options => {
+    reads++; initialSignal = options.signal;
+    return new Promise(resolve => { finish = resolve; });
+  }, select: x => x.rows });
+  const initial = resource.refresh();
+  const sync = resource.refresh({ minimumVersion: version, signal: new AbortController().signal });
+  assert.equal(reads, 1);
+  finish({ rows: ['loaded'], version: { ...version, revision: 2 } });
+  assert.equal(await initial, true);
+  assert.equal(await sync, true);
+  assert.equal(initialSignal.aborted, false);
+  assert.equal(reads, 1);
+});
+
+test('revision reconciliation refreshes stale initial data and changed epochs', async () => {
+  let finish;
+  let reads = 0;
+  let current = { ...version, revision: 2 };
+  const resource = new PlannerResource({ read: () => {
+    if (++reads === 1) return new Promise(resolve => { finish = resolve; });
+    return Promise.resolve({ rows: ['fresh'], version: current });
+  }, select: x => x.rows });
+  const initial = resource.refresh();
+  const sync = resource.refresh({ minimumVersion: current });
+  finish({ rows: ['old'], version });
+  await initial;
+  assert.equal(await sync, true);
+  assert.equal(reads, 2);
+  current = { epoch: 'b'.repeat(32), revision: 0 };
+  assert.equal(await resource.refresh({ minimumVersion: current }), true);
+  assert.equal(reads, 3);
+  assert.deepEqual(resource.captureVersion(), current);
+});
+
+test('aborting revision reconciliation preserves the independent initial read', async () => {
+  let finish;
+  const signals = [];
+  const resource = new PlannerResource({ read: options => {
+    signals.push(options.signal);
+    return new Promise(resolve => { finish = resolve; });
+  }, select: x => x.rows });
+  const initial = resource.refresh();
+  const controller = new AbortController();
+  const sync = resource.refresh({ minimumVersion: version, signal: controller.signal });
+  controller.abort(); finish({ rows: ['initial'], version });
+  assert.equal(await sync, false);
+  assert.equal(await initial, true);
+  assert.equal(signals.length, 1);
+  assert.equal(signals[0].aborted, false);
+});
+
+test('a snapshot older than the observed revision cannot satisfy reconciliation', async () => {
+  const resource = new PlannerResource({ read: async () => ({ rows: [], version }), select: x => x.rows });
+  assert.equal(await resource.refresh({ minimumVersion: { ...version, revision: 2 } }), false);
+});
+
+test('account disposal blocks both an initial read and its waiting reconciliation', async () => {
+  let finish;
+  const resource = new PlannerResource({ read: () => new Promise(resolve => { finish = resolve; }), select: x => x.rows });
+  const initial = resource.refresh();
+  const sync = resource.refresh({ minimumVersion: version });
+  resource.close(); finish({ rows: ['private'], version });
+  assert.equal(await initial, false);
+  assert.equal(await sync, false);
+  assert.equal(resource.state.data, null);
+});

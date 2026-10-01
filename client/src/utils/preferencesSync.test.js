@@ -115,4 +115,89 @@ describe('device preference synchronization', () => {
     assert.equal(reads, 1); assert.equal(writes, 1);
     assert.equal(f.states.at(-1).preferences.theme, 'dark');
   });
+
+  it('reuses current preferences during revision reconciliation and still reloads on demand', async () => {
+    let reads = 0;
+    const f = fixture(1011, { get: async () => { reads++; return reply({}); } });
+    await f.sync.load();
+    assert.equal(await f.sync.load({ minimumVersion: version }), true);
+    assert.equal(reads, 1);
+    await f.sync.load();
+    assert.equal(reads, 2);
+  });
+
+  it('waits for initial preferences and refreshes again when they predate the observed revision', async () => {
+    let finish;
+    let reads = 0;
+    const target = { ...version, revision: 2 };
+    const f = fixture(1012, { get: () => {
+      if (++reads === 1) return new Promise(resolve => { finish = resolve; });
+      return Promise.resolve({ ...reply({ theme: 'dark' }), version: target });
+    } });
+    const initial = f.sync.load();
+    const sync = f.sync.load({ minimumVersion: target });
+    finish(reply({}));
+    await initial;
+    assert.equal(await sync, true);
+    assert.equal(reads, 2);
+    assert.deepEqual(f.sync.version, target);
+  });
+
+  it('does not let an aborted reconciliation satisfy or cancel the initial preference load', async () => {
+    let finish;
+    const signals = [];
+    const f = fixture(1013, { get: (_path, options) => {
+      signals.push(options.signal);
+      return new Promise(resolve => { finish = resolve; });
+    } });
+    const initial = f.sync.load();
+    const controller = new AbortController();
+    const sync = f.sync.load({ minimumVersion: version, signal: controller.signal });
+    controller.abort(); finish(reply({}));
+    assert.equal(await sync, false);
+    assert.equal(await initial, true);
+    assert.equal(signals[0].aborted, false);
+  });
+
+  it('refreshes a changed revision epoch even when its counter is lower', async () => {
+    let current = version;
+    let reads = 0;
+    const f = fixture(1014, { get: async () => { reads++; return { ...reply({}), version: current }; } });
+    await f.sync.load();
+    current = { epoch: 'b'.repeat(32), revision: 0 };
+    assert.equal(await f.sync.load({ minimumVersion: current }), true);
+    assert.equal(reads, 2);
+    assert.deepEqual(f.sync.version, current);
+  });
+
+  it('does not reuse a current profile while a preference write is pending', async () => {
+    let finish;
+    const f = fixture(1015, { get: async () => reply({}),
+      patch: () => new Promise(resolve => { finish = resolve; }) });
+    await f.sync.load();
+    const saving = f.sync.update({ theme: 'dark' });
+    assert.equal(await f.sync.load({ minimumVersion: version }), false);
+    finish(reply({ theme: 'dark' }));
+    await saving;
+  });
+
+  it('reuses an initial preference response newer than the observed revision', async () => {
+    let finish;
+    let reads = 0;
+    const f = fixture(1016, { get: () => {
+      reads++;
+      return new Promise(resolve => { finish = resolve; });
+    } });
+    const initial = f.sync.load();
+    const sync = f.sync.load({ minimumVersion: version });
+    finish({ ...reply({}), version: { ...version, revision: 2 } });
+    assert.equal(await initial, true);
+    assert.equal(await sync, true);
+    assert.equal(reads, 1);
+  });
+
+  it('rejects a preference response older than the required reconciliation version', async () => {
+    const f = fixture(1017, { get: async () => reply({}) });
+    assert.equal(await f.sync.load({ minimumVersion: { ...version, revision: 2 } }), false);
+  });
 });

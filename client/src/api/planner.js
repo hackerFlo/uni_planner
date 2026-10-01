@@ -9,6 +9,11 @@ export function isPlannerVersion(value) {
     && Number.isSafeInteger(value.revision) && value.revision >= 0;
 }
 
+export function plannerVersionSatisfies(current, minimum) {
+  return isPlannerVersion(current) && isPlannerVersion(minimum)
+    && current.epoch === minimum.epoch && current.revision >= minimum.revision;
+}
+
 function readVersion(value) {
   if (!isPlannerVersion(value)) throw new ApiError(KINDS.UNKNOWN);
   return { epoch: value.epoch, revision: value.revision };

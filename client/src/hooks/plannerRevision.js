@@ -2,6 +2,12 @@ const INTERVAL_MS = 5000;
 const MAX_BACKOFF_MS = 60000;
 const sameVersion = (left, right) => left?.epoch === right?.epoch && left?.revision === right?.revision;
 
+export function plannerRevisionSnapshot(previous, state, scope) {
+  if (previous?.scope === scope && sameVersion(previous.version, state.version)
+    && previous.error === state.error) return previous;
+  return { version: state.version, error: state.error, scope };
+}
+
 // One instance belongs to one authenticated account and is disposed on logout.
 // Refresh callbacks receive an abort signal and must honor it before committing
 // fetched data, so entering a form or switching accounts cannot overwrite drafts.
@@ -20,10 +26,12 @@ export class PlannerRevisionPoller {
     this.refreshRequest = null;
     this.delivered = null;
     this.pending = null;
+    this.versionError = null;
+    this.refreshError = null;
   }
 
   publish(patch) {
-    if (!this.active) return;
+    if (!this.active || Object.keys(patch).every(key => this.state[key] === patch[key])) return;
     this.state = { ...this.state, ...patch };
     this.onState(this.state);
   }
@@ -68,6 +76,7 @@ export class PlannerRevisionPoller {
   accept(version) {
     const previous = this.state.version;
     if (previous?.epoch === version.epoch && previous.revision > version.revision) return;
+    if (sameVersion(previous, version)) { this.flush(); return; }
     const current = { epoch: version.epoch, revision: version.revision };
     this.publish({ version: current });
     if (!sameVersion(this.delivered, current)) this.pending = current;
@@ -84,11 +93,13 @@ export class PlannerRevisionPoller {
       const version = await this.readVersion({ signal: controller.signal });
       if (!this.active || this.request !== controller) return;
       this.failures = 0;
-      this.publish({ error: null });
+      this.versionError = null;
+      this.publish({ error: this.refreshError });
       this.accept(version);
     } catch (error) {
       if (!this.active || this.request !== controller || controller.signal.aborted) return;
       this.failures = Math.min(this.failures + 1, 4);
+      this.versionError = error;
       this.publish({ error });
     } finally {
       if (this.active && this.request === controller) {
@@ -110,9 +121,14 @@ export class PlannerRevisionPoller {
       if (applied === false || !this.active || this.refreshRequest !== controller) return;
       this.delivered = current;
       if (sameVersion(this.pending, current)) this.pending = null;
+      this.refreshError = null;
+      this.publish({ error: this.versionError });
       succeeded = true;
     } catch (error) {
-      if (this.active && this.refreshRequest === controller && !controller.signal.aborted) this.publish({ error });
+      if (this.active && this.refreshRequest === controller && !controller.signal.aborted) {
+        this.refreshError = error;
+        this.publish({ error: this.versionError ?? error });
+      }
     } finally {
       if (this.active && this.refreshRequest === controller) {
         this.refreshRequest = null;

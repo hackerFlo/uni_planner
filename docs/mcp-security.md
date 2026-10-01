@@ -95,6 +95,18 @@ Keep both `MCP_ENABLED=false` and `MCP_WRITES_ENABLED=false` until the correspon
 
 Production writes require the external authentication/client gate, completed shared behavior/concurrency/isolation review and full browser parity checks, followed by deployment/security review. Local implementations and tests do not satisfy those external gates.
 
+## Unauthorized-access review — 2026-10-01
+
+The source review and synthetic authentication/isolation tests found no confirmed path for an unauthenticated caller or another linked account to read or change a user's tasks. Signed assertions, separate audiences, password-proven website enrollment, current account links and per-operation ownership checks remain required. Cookie tokens, unsigned identity hints, service identities, stale assertions, foreign task identifiers, foreign cursors and revoked links are covered by the existing access, enrollment, integration and service tests. This is local evidence, not a guarantee against every attack or verification of an operator's Access configuration.
+
+The Origin boundary now distinguishes an absent header (valid for native MCP clients) from a present empty header. Real HTTP regression cases reject empty, whitespace-only, opaque `null`, hostile and repeated Origin headers while retaining the existing authentication requirements for absent and allowlisted origins. Empty Origin previously passed this boundary but did not bypass signed identity or account authorization.
+
+For a private deployment, restrict the dedicated MCP Access application's Allow policy to the intended owner's identity; do not use an Everyone or Bypass policy as an OAuth workaround. Keep the origin reachable only from the intended trusted ingress and leave the backend unpublished. Verify unauthenticated denial, other-identity denial, local disable and provider grant revocation through the actual Tunnel before enabling production writes. A valid stolen assertion remains a bearer credential until expiry; origin-side offline signature validation does not independently discover provider revocation.
+
+Enrolling an agent intentionally allows its provider to receive the planner data returned by permitted tools. This differs from unauthorized third-party access. UniPlanner currently grants an identity's selected capabilities to all clients with surviving valid provider grants, rather than identifying individual client grants. Review client consent and revoke provider grants before re-enrolling after a compromise. MCP remains disabled by default and production configuration was not changed during this review.
+
+Local verification for this review: 989 backend tests and 385 client tests pass, including signed-assertion HTTP integration, enrollment/revocation and task-owner isolation coverage. Both full dependency audits report zero vulnerabilities. The client synchronization regressions reproduce overlapping startup requests and false generic errors; version-checked request reuse preserves account scopes, abort guards and stale-version retries, and unchanged polling does not update the page snapshot. These browser changes retain the MCP version/mutation contract. No authenticated Tunnel/client connection or target NAS performance measurement was made.
+
 ## Authoritative references
 
 - [MCP authorization](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization), [transports](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports), [security guidance](https://modelcontextprotocol.io/docs/2025-11-25/tutorials/security/security_best_practices)

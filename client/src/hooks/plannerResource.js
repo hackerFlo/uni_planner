@@ -1,4 +1,4 @@
-import { isPlannerVersion, plannerMutationOptions } from '../api/planner.js';
+import { isPlannerVersion, plannerMutationOptions, plannerVersionSatisfies } from '../api/planner.js';
 import { ApiError, KINDS } from '../api/errors.js';
 
 // Each instance belongs to one authenticated account and one displayed snapshot.
@@ -9,6 +9,7 @@ export class PlannerResource {
     this.closed = false;
     this.sequence = 0;
     this.lifetime = new AbortController();
+    this.initialRead = null;
   }
   emit(patch) {
     if (this.closed) return;
@@ -18,7 +19,17 @@ export class PlannerResource {
   captureVersion() { return this.state.version ? { ...this.state.version } : null; }
   cancelRead() { this.sequence++; this.readController?.abort(); }
   close() { this.closed = true; this.cancelRead(); this.lifetime.abort(); }
-  async refresh({ signal } = {}) {
+  async refresh({ signal, minimumVersion } = {}) {
+    if (this.closed || signal?.aborted) return false;
+    if (minimumVersion && this.initialRead) await this.initialRead;
+    if (this.closed || signal?.aborted) return false;
+    if (minimumVersion && plannerVersionSatisfies(this.state.version, minimumVersion)) return true;
+    const pending = this.readSnapshot({ signal, minimumVersion });
+    if (!signal) this.initialRead = pending;
+    try { return await pending; }
+    finally { if (this.initialRead === pending) this.initialRead = null; }
+  }
+  async readSnapshot({ signal, minimumVersion } = {}) {
     if (this.closed || signal?.aborted) return false;
     this.cancelRead();
     const sequence = this.sequence;
@@ -32,7 +43,7 @@ export class PlannerResource {
       if (this.closed || controller.signal.aborted || sequence !== this.sequence) return false;
       if (this.requireVersion && !isPlannerVersion(result.version)) throw new ApiError(KINDS.UNKNOWN);
       this.emit({ data: this.select(result), version: result.version ?? null, hasLoaded: true });
-      return true;
+      return !minimumVersion || plannerVersionSatisfies(result.version, minimumVersion);
     } catch (error) {
       if (this.closed || controller.signal.aborted || sequence !== this.sequence) return false;
       throw error;

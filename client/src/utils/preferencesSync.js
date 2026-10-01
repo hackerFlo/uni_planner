@@ -1,6 +1,6 @@
 import { api as defaultApi } from '../api/client.js';
 import { ApiError, KINDS } from '../api/errors.js';
-import { isPlannerVersion, plannerMutationOptions } from '../api/planner.js';
+import { isPlannerVersion, plannerMutationOptions, plannerVersionSatisfies } from '../api/planner.js';
 import { DEFAULT_PREFERENCES, loadPreferences, normalizePreferences,
   loadPreferenceProfile, savePreferenceProfile } from './preferences.js';
 
@@ -68,12 +68,17 @@ export class PreferencesSync {
     return this.api.post('/api/preferences/profiles', input, plannerMutationOptions(version, this.uuid(), options));
   }
 
-  load({ signal = this.controller.signal } = {}) {
-    if (this.closed || this.state.saving) return Promise.resolve(false);
+  async load({ signal = this.controller.signal, minimumVersion } = {}) {
+    if (this.closed || this.state.saving || signal.aborted) return false;
+    if (minimumVersion && this.loading) await this.loading;
+    if (this.closed || this.state.saving || signal.aborted) return false;
+    if (minimumVersion && this.state.ready && !this.state.error
+      && plannerVersionSatisfies(this.version, minimumVersion)) return true;
     if (this.loading) return this.loading;
     this.publish({ ready: false });
     this.loading = this.fetchProfile(signal)
-      .then(result => this.apply(result, signal))
+      .then(result => this.apply(result, signal)
+        && (!minimumVersion || plannerVersionSatisfies(this.version, minimumVersion)))
       .catch(error => { if (!signal.aborted) this.report(error); return false; })
       .finally(() => { this.loading = null; });
     return this.loading;

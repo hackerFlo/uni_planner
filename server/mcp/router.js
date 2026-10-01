@@ -34,7 +34,7 @@ function boundary(config) {
       return res.status(404).json({ error: 'Not found' });
     }
     if (req.headers.host !== new URL(config.publicUrl).host) return res.status(404).json({ error: 'Not found' });
-    if (req.headers.origin && !config.allowedOrigins.includes(req.headers.origin)) {
+    if (Object.hasOwn(req.headers, 'origin') && !config.allowedOrigins.includes(req.headers.origin)) {
       return res.status(403).json({ error: 'Origin not allowed' });
     }
     next();
