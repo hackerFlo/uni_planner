@@ -3,7 +3,8 @@ const SESSION_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 // Number of reverse proxies between the client and Express, nearest-first.
 // 1 = the bundled nginx only. 2 = cloudflared -> nginx (Cloudflare Tunnel).
-// Wrong values break both req.secure and the rate limiter's client-IP key.
+// Too few hops group visitors under a proxy IP; too many can trust spoofed IPs.
+// req.secure additionally requires nginx to forward the actual edge scheme.
 function parseTrustProxyHops(raw) {
   if (raw === undefined || raw === '') return 1;
   const hops = Number(raw);

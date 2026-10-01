@@ -1,6 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const { z } = require('zod');
 const db = require('../db');
 const { log } = require('../logger');
 const requireAuth = require('../middleware/auth');
@@ -19,12 +20,39 @@ const notificationMutations = createMutationService(db);
 const { SESSION_COOKIE_NAME, sessionCookieOptions, clearSessionCookieOptions } = require('../config');
 const { authLimiter, sessionLimiter } = require('../middleware/rateLimiter');
 const {
-  createSession, deleteSession, deleteAllSessions, sweepExpiredSessions,
+  createSession, deleteSession, deleteAllSessions, sweepExpiredSessions, findLiveSession,
 } = require('../sessions');
 
 const router = express.Router();
 
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+const credentialSchema = z.strictObject({
+  currentPassword: z.string().min(1).max(128),
+  newEmail: z.string().max(100).refine(validateIdentifier).optional(),
+  newPassword: z.string().min(8).max(128).optional(),
+}).refine(input => input.newEmail !== undefined || input.newPassword !== undefined);
+
+function credentialsUnchanged(user) {
+  const current = db.prepare('SELECT email, password_hash, token_version FROM users WHERE id = ?').get(user.id);
+  return current && current.email === user.email && current.password_hash === user.password_hash
+    && current.token_version === user.token_version;
+}
+
+function commitCredentialChange(req, user, email, passwordHash) {
+  return db.transaction(() => {
+    if (!credentialsUnchanged(user) || req.user.tv !== user.token_version
+      || req.user.exp <= Math.floor(Date.now() / 1000) || !findLiveSession(req.user.sid, user.id)) {
+      return { status: 401, error: 'Invalid or expired token' };
+    }
+    const taken = db.prepare('SELECT id FROM users WHERE email = ? AND id != ?').get(email, user.id);
+    if (taken) return { status: 409, error: 'Username or email already in use' };
+    const tokenVersion = user.token_version + 1;
+    db.prepare('UPDATE users SET email = ?, password_hash = ?, token_version = ? WHERE id = ?')
+      .run(email, passwordHash, tokenVersion, user.id);
+    deleteAllSessions(user.id);
+    return { sid: createSession(user.id), tokenVersion };
+  })();
+}
 
 router.post('/login', authLimiter, asyncHandler(async (req, res) => {
   const { email, password } = req.body;
@@ -53,8 +81,12 @@ router.post('/login', authLimiter, asyncHandler(async (req, res) => {
 
   // Cheap housekeeping on a route that runs rarely, so the table cannot grow
   // without bound from devices that simply stopped coming back.
-  sweepExpiredSessions();
-  const sid = createSession(user.id);
+  const sid = db.transaction(() => {
+    if (!credentialsUnchanged(user)) return null;
+    sweepExpiredSessions();
+    return createSession(user.id);
+  })();
+  if (!sid) return res.status(401).json({ error: 'Invalid email or password' });
   const token = jwt.sign({ id: user.id, email: user.email, tv: user.token_version, sid }, process.env.JWT_SECRET, {
     expiresIn: JWT_EXPIRES_IN,
   });
@@ -132,16 +164,12 @@ router.get('/me', sessionLimiter, requireAuth, (req, res) => {
 });
 
 router.patch('/me', authLimiter, requireAuth, asyncHandler(async (req, res) => {
-  const { currentPassword, newEmail, newPassword } = req.body;
-
-  if (!currentPassword || typeof currentPassword !== 'string') {
-    return res.status(400).json({ error: 'Current password is required' });
-  }
-  if (!newEmail && !newPassword) {
-    return res.status(400).json({ error: 'Provide a new email or new password' });
-  }
+  const input = credentialSchema.safeParse(req.body);
+  if (!input.success) return res.status(400).json({ error: 'Invalid account change' });
+  const { currentPassword, newEmail, newPassword } = input.data;
 
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+  if (!user) return res.status(401).json({ error: 'Invalid or expired token' });
   const match = await bcrypt.compare(currentPassword, user.password_hash);
   if (!match) return res.status(401).json({ error: 'Current password is incorrect' });
 
@@ -149,16 +177,10 @@ router.patch('/me', authLimiter, requireAuth, asyncHandler(async (req, res) => {
   let passwordHash = user.password_hash;
 
   if (newEmail) {
-    if (!validateIdentifier(newEmail)) return res.status(400).json({ error: 'Invalid username or email' });
-    const taken = db.prepare('SELECT id FROM users WHERE email = ? AND id != ?').get(newEmail.trim().toLowerCase(), req.user.id);
-    if (taken) return res.status(409).json({ error: 'Username or email already in use' });
     email = newEmail.trim().toLowerCase();
   }
 
   if (newPassword) {
-    if (typeof newPassword !== 'string' || newPassword.length < 8 || newPassword.length > 128) {
-      return res.status(400).json({ error: 'New password must be at least 8 characters' });
-    }
     passwordHash = await bcrypt.hash(newPassword, 12);
   }
 
@@ -168,12 +190,9 @@ router.patch('/me', authLimiter, requireAuth, asyncHandler(async (req, res) => {
   // token_version kills tokens already in flight, and dropping the session rows
   // means a stolen `sid` cannot be replayed either. The device making the change
   // gets a fresh session immediately, so it stays signed in.
-  const newTokenVersion = user.token_version + 1;
-  db.prepare('UPDATE users SET email = ?, password_hash = ?, token_version = ? WHERE id = ?').run(email, passwordHash, newTokenVersion, req.user.id);
-  deleteAllSessions(req.user.id);
-
-  const sid = createSession(req.user.id);
-  const token = jwt.sign({ id: req.user.id, email, tv: newTokenVersion, sid }, process.env.JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+  const result = commitCredentialChange(req, user, email, passwordHash);
+  if (result.error) return res.status(result.status).json({ error: result.error });
+  const token = jwt.sign({ id: req.user.id, email, tv: result.tokenVersion, sid: result.sid }, process.env.JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
   res.cookie(SESSION_COOKIE_NAME, token, sessionCookieOptions(req));
   res.json({ user: { id: req.user.id, email, created_at: user.created_at } });
 }));

@@ -35,12 +35,54 @@ describe('MCP deployment configuration', () => {
     }
   });
 
+  it('requires the reusable CI checks before image publication', () => {
+    const publish = read('.github/workflows/docker-publish.yml');
+    assert.match(publish, /checks:\s*uses: \.\/\.github\/workflows\/ci\.yml/);
+    assert.match(publish, /build-and-push:\s*needs: checks/);
+    assert.match(read('.github/workflows/ci.yml'), /workflow_call:/);
+    assert.doesNotMatch(read('.github/workflows/ci.yml'), /^ {2}push:/m);
+  });
+
+  it('smokes both built runtime images before publishing either', () => {
+    const publish = read('.github/workflows/docker-publish.yml');
+    const serverSmoke = publish.indexOf('bash scripts/smoke-server-container.sh');
+    const clientSmoke = publish.indexOf('bash scripts/smoke-client-container.sh');
+    const firstPush = publish.indexOf('push: true');
+    assert.ok(serverSmoke > 0 && clientSmoke > 0 && serverSmoke < firstPush && clientSmoke < firstPush);
+    assert.equal(publish.match(/load: true/g)?.length, 2);
+  });
+
   it('renders only the validated MCP hostname without expanding nginx request variables', () => {
     const dockerfile = read('client/Dockerfile');
     assert.match(dockerfile, /NGINX_ENVSUBST_FILTER="\^MCP_HOST\$"/);
     assert.match(dockerfile, /COPY nginx\.conf \/etc\/nginx\/templates\/default\.conf\.template/);
     assert.match(dockerfile, /COPY --chmod=755 docker-entrypoint\.d\/15-validate-mcp-host\.sh/);
     assert.deepEqual([...read('client/nginx.conf').matchAll(/\$\{([^}]+)\}/g)].map(match => match[1]), ['MCP_HOST']);
+  });
+
+  it('sets the map hash bucket size before nginx initializes the first map', () => {
+    const nginx = read('client/nginx.conf');
+    const bucketDirectives = [...nginx.matchAll(/^\s*map_hash_bucket_size\s+512;/gm)];
+    assert.equal(bucketDirectives.length, 1);
+    const firstMap = nginx.search(/^\s*map\s/m);
+    assert.ok(firstMap >= 0 && bucketDirectives[0].index < firstMap);
+  });
+
+  it('preserves the public authority in every website API proxy', () => {
+    const nginx = read('client/nginx.conf');
+    for (const location of ['/api/', '/api/backup/restore', '/api/quotes/import']) {
+      const block = nginx.split(`location ${location} {`)[1]?.split('\n    }')[0];
+      assert.ok(block);
+      assert.match(block, /proxy_set_header Host \$http_host;/);
+    }
+  });
+
+  it('refreshes Docker backend DNS without rewriting request URIs', () => {
+    const nginx = read('client/nginx.conf');
+    assert.match(nginx, /resolver 127\.0\.0\.11 valid=5s ipv6=off;/);
+    assert.match(nginx, /upstream planner_backend \{\s*zone planner_backend 64k;\s*server server:3001 resolve;/);
+    assert.equal(nginx.match(/proxy_pass http:\/\/planner_backend;/g)?.length, 4);
+    assert.doesNotMatch(nginx, /proxy_pass http:\/\/server:3001/);
   });
 
   it('rejects all noncanonical paths on the MCP host before API or SPA routing', () => {

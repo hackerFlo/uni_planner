@@ -1,6 +1,6 @@
 {
   "name": "uni-planner-server",
-  "version": "5.0",
+  "version": "5.1",
   "private": true,
   "scripts": {
     "dev": "node --watch index.js",
@@ -20,7 +20,7 @@
     "jose": "6.2.12",
     "jsonwebtoken": "^9.0.2",
     "node-cron": "^4.2.1",
-    "nodemailer": "^9.0.5",
+    "nodemailer": "^10.0.13",
     "zod": "4.6.5"
   },
   "devDependencies": {

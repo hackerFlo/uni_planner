@@ -1,4 +1,4 @@
-import { ApiError, KINDS, classifyStatus } from './errors.js';
+import { ApiError, KINDS, classifyStatus, reportAccessExpiry } from './errors.js';
 import { beginRequest, endRequest } from './activity.js';
 import { probeReachability } from './probe.js';
 
@@ -16,13 +16,16 @@ function validateStatus(data) {
   return data;
 }
 
-async function readResponse(response) {
+async function readResponse(response, probe) {
   if (response.type === 'opaqueredirect' || response.status === 0) {
     throw new ApiError(KINDS.ACCESS_EXPIRED);
   }
   const requestId = response.headers.get('X-Request-Id');
   const data = await response.json().catch(() => null);
   if (!response.ok) {
+    if (response.status === 401 && data === null && await probe() === KINDS.ACCESS_EXPIRED) {
+      throw new ApiError(KINDS.ACCESS_EXPIRED, { status: response.status, requestId });
+    }
     const kind = data === null && response.status >= 500 ? KINDS.GATEWAY : classifyStatus(response.status);
     const message = typeof data?.error === 'string' ? data.error : undefined;
     throw new ApiError(kind, { status: response.status, requestId, message });
@@ -42,7 +45,7 @@ async function performRequest(fetchImpl, probe, method, body) {
   } catch {
     throw new ApiError(await probe());
   }
-  return readResponse(response);
+  return readResponse(response, probe);
 }
 
 export function createAgentConnectionsApi({ fetchImpl = (...args) => fetch(...args), probe = probeReachability } = {}) {
@@ -50,6 +53,9 @@ export function createAgentConnectionsApi({ fetchImpl = (...args) => fetch(...ar
     beginRequest();
     try {
       return await performRequest(fetchImpl, probe, method, body);
+    } catch (error) {
+      reportAccessExpiry(error);
+      throw error;
     } finally {
       endRequest();
     }

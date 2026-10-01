@@ -56,3 +56,30 @@ export class ApiError extends Error {
 export function userMessage(err) {
   return err instanceof ApiError ? err.message : describeFailure(KINDS.UNKNOWN);
 }
+
+export function failureToastOptions(err, reload) {
+  const options = { ref: err?.requestId ?? null };
+  if (err?.kind !== KINDS.ACCESS_EXPIRED) return options;
+  return { ...options, duration: 0, action: { label: 'Reload', onClick: reload } };
+}
+
+const accessExpiryListeners = new Set();
+
+export function subscribeAccessExpiry(listener) {
+  accessExpiryListeners.add(listener);
+  return () => accessExpiryListeners.delete(listener);
+}
+
+export function reportAccessExpiry(error) {
+  if (error?.kind !== KINDS.ACCESS_EXPIRED) return;
+  for (const listener of accessExpiryListeners) listener(error);
+}
+
+export function createAccessExpiryReporter(showError, reload) {
+  let notified = false;
+  return error => {
+    if (error?.kind !== KINDS.ACCESS_EXPIRED || notified) return;
+    notified = true;
+    showError(userMessage(error), failureToastOptions(error, reload));
+  };
+}

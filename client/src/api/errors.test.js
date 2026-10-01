@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { ApiError, KINDS, classifyStatus, describeFailure, userMessage } from './errors.js';
+import { ApiError, KINDS, classifyStatus, describeFailure, userMessage, failureToastOptions,
+  createAccessExpiryReporter, subscribeAccessExpiry, reportAccessExpiry } from './errors.js';
 
 test.describe('classifyStatus', () => {
   const cases = [
@@ -82,5 +83,45 @@ test.describe('userMessage', () => {
 
   test('survives a thrown non-error', () => {
     assert.equal(userMessage(undefined), describeFailure(KINDS.UNKNOWN));
+  });
+});
+
+test.describe('failureToastOptions', () => {
+  test('keeps Access expiry visible and offers a reload without a CSP violation', () => {
+    let reloads = 0;
+    const options = failureToastOptions(new ApiError(KINDS.ACCESS_EXPIRED), () => { reloads += 1; });
+    assert.equal(options.duration, 0);
+    assert.equal(options.action.label, 'Reload');
+    options.action.onClick();
+    assert.equal(reloads, 1);
+  });
+
+  test('preserves the request reference for other errors', () => {
+    assert.deepEqual(failureToastOptions(new ApiError(KINDS.SERVER, { requestId: 'request-example' })), {
+      ref: 'request-example',
+    });
+  });
+});
+
+test.describe('central Access notice', () => {
+  test('deduplicates expiry notices independently of unrelated errors', () => {
+    const notices = [];
+    const report = createAccessExpiryReporter((...args) => notices.push(args), () => undefined);
+    report(new ApiError(KINDS.SERVER));
+    report(new ApiError(KINDS.ACCESS_EXPIRED));
+    report(new ApiError(KINDS.ACCESS_EXPIRED));
+    assert.equal(notices.length, 1);
+    assert.equal(notices[0][1].duration, 0);
+    assert.equal(notices[0][1].action.label, 'Reload');
+  });
+
+  test('only broadcasts Access expiry and stops notifying an unsubscribed listener', () => {
+    const received = [];
+    const unsubscribe = subscribeAccessExpiry(error => received.push(error.kind));
+    reportAccessExpiry(new ApiError(KINDS.UNAUTHORIZED));
+    reportAccessExpiry(new ApiError(KINDS.ACCESS_EXPIRED));
+    unsubscribe();
+    reportAccessExpiry(new ApiError(KINDS.ACCESS_EXPIRED));
+    assert.deepEqual(received, [KINDS.ACCESS_EXPIRED]);
   });
 });

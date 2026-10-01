@@ -86,6 +86,15 @@ test.describe('proxy topologies', () => {
     });
   }
 
+  test('two trusted tunnel hops ignore client-supplied XFF prefixes', async () => {
+    const { server, port } = await startProbe(2);
+    try {
+      const result = await probe(port, { 'X-Forwarded-Proto': 'https',
+        'X-Forwarded-For': '198.51.100.66, 203.0.113.9, 172.20.0.5' });
+      assert.equal(result.ip, '203.0.113.9');
+    } finally { server.close(); }
+  });
+
   test('an edge that omits X-Forwarded-Proto degrades to a non-Secure cookie, not a failed login', async () => {
     const { server, port } = await startProbe(2);
     try {

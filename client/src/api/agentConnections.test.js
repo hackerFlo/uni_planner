@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createAgentConnectionsApi } from './agentConnections.js';
-import { KINDS } from './errors.js';
+import { KINDS, subscribeAccessExpiry } from './errors.js';
 import { isBusy } from './activity.js';
 
 const status = {
@@ -69,6 +69,33 @@ describe('agent connection requests', () => {
   it('preserves HTTP error classification and request correlation', async () => {
     const api = createAgentConnectionsApi({ fetchImpl: async () => response({ error: 'Please wait.' }, 429) });
     await assert.rejects(api.getStatus(), { kind: KINDS.RATE_LIMITED, requestId: 'test-request', message: 'Please wait.' });
+  });
+
+  it('distinguishes an Access AJAX HTML 401 from an application session expiry', async () => {
+    const api = createAgentConnectionsApi({
+      fetchImpl: async () => new Response('<html>Unauthorized</html>', {
+        status: 401, headers: { 'X-Request-Id': 'access-request' },
+      }),
+      probe: async () => KINDS.ACCESS_EXPIRED,
+    });
+    await assert.rejects(api.disable(), { kind: KINDS.ACCESS_EXPIRED, status: 401, requestId: 'access-request' });
+    assert.equal(isBusy(), false);
+  });
+
+  it('reports caught Access expiry centrally from connection requests', async t => {
+    const reported = [];
+    t.after(subscribeAccessExpiry(error => reported.push(error.kind)));
+    const api = createAgentConnectionsApi({ fetchImpl: async () => ({ type: 'opaqueredirect' }) });
+    await api.disable().catch(() => undefined);
+    assert.deepEqual(reported, [KINDS.ACCESS_EXPIRED]);
+  });
+
+  it('preserves an application JSON 401 without probing the Access gate', async () => {
+    const api = createAgentConnectionsApi({
+      fetchImpl: async () => response({ error: 'Invalid or expired token' }, 401),
+      probe: async () => assert.fail('Application JSON failures do not need an Access probe'),
+    });
+    await assert.rejects(api.disable(), { kind: KINDS.UNAUTHORIZED, status: 401 });
   });
 
   it('uses reachability classification after network failure and settles activity', async () => {

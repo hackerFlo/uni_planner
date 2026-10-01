@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useToast } from '../context/ToastContext';
-import { KINDS, userMessage, describeFailure } from '../api/errors';
+import { ApiError, KINDS, userMessage, createAccessExpiryReporter, subscribeAccessExpiry } from '../api/errors';
 
 const THROTTLE_MS = 5000;
 
@@ -18,8 +18,14 @@ export default function GlobalErrorToast() {
 
   useEffect(() => {
     let lastShownAt = 0;
+    const reportAccess = createAccessExpiryReporter(toast.error, () => window.location.reload());
+    const unsubscribeAccess = subscribeAccessExpiry(reportAccess);
 
     function report(error) {
+      if (error?.kind === KINDS.ACCESS_EXPIRED) {
+        reportAccess(error);
+        return;
+      }
       // An expired session already redirects to /login; a toast on top is noise.
       if (error?.kind === KINDS.UNAUTHORIZED) return;
       if (Date.now() - lastShownAt < THROTTLE_MS) return;
@@ -37,21 +43,16 @@ export default function GlobalErrorToast() {
     // Also fires for failed image/script loads, where e.error is null.
     const onError = (e) => { if (e.error instanceof Error) report(e.error); };
 
-    let accessNotified = false;
     const onCspViolation = (e) => {
       console.error('[csp] blocked', { directive: e.effectiveDirective, blockedURI: e.blockedURI });
-      if (accessNotified || !ACCESS_HOST.test(e.blockedURI ?? '')) return;
-      accessNotified = true;
-      toast.error(describeFailure(KINDS.ACCESS_EXPIRED), {
-        duration: 0, // a reload is the only way out; do not let it time out
-        action: { label: 'Reload', onClick: () => window.location.reload() },
-      });
+      if (ACCESS_HOST.test(e.blockedURI ?? '')) reportAccess(new ApiError(KINDS.ACCESS_EXPIRED));
     };
 
     window.addEventListener('unhandledrejection', onRejection);
     window.addEventListener('error', onError);
     window.addEventListener('securitypolicyviolation', onCspViolation);
     return () => {
+      unsubscribeAccess();
       window.removeEventListener('unhandledrejection', onRejection);
       window.removeEventListener('error', onError);
       window.removeEventListener('securitypolicyviolation', onCspViolation);

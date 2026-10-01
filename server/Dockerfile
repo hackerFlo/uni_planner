@@ -13,7 +13,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # Only /app/data needs to be writable. The application files stay root-owned and
 # read-only to the runtime user, which is the point of dropping privileges.
-RUN mkdir -p /app/data && chown -R node:node /app/data
+RUN chmod -R u=rwX,go=rX /app && mkdir -p /app/data && chown -R node:node /app/data
 
 # Stamped by CI so the running container can say which commit it is. Without
 # this the deployed build is observable from nowhere.

@@ -68,6 +68,102 @@ const patch = (url, { token, body }) => fetch(`${base}${url}`, {
   body: JSON.stringify(body),
 });
 
+function pauseFirstBcryptCall(t, method) {
+  let enter;
+  let release;
+  const entered = new Promise(resolve => { enter = resolve; });
+  const barrier = new Promise(resolve => { release = resolve; });
+  const original = bcrypt[method];
+  let first = true;
+  t.mock.method(bcrypt, method, async (...args) => {
+    if (first) { first = false; enter(); await barrier; }
+    return original(...args);
+  });
+  t.after(release);
+  return { entered, release };
+}
+
+test.describe('credential races', { timeout: 5000 }, () => {
+  for (const method of ['compare', 'hash']) {
+    test(`does not revive a logged-out session while ${method} is pending`, async t => {
+      const user = makeUser(`logout-${method}-race@example.com`);
+      const token = tokenFor(user);
+      const pause = pauseFirstBcryptCall(t, method);
+      const pending = patch('/api/auth/me', { token,
+        body: { currentPassword: PASSWORD, newPassword: 'replacement-password' } });
+      await pause.entered;
+      await post('/api/auth/logout', { token });
+      pause.release();
+      const res = await pending;
+      assert.deepEqual({ status: res.status, sessions: sessionCountOf(user.id), version: tokenVersionOf(user.id) },
+        { status: 401, sessions: 0, version: 0 });
+    });
+  }
+
+  test('rejects a stale change after newer credentials and MCP reenrollment', async t => {
+    const user = makeUser('concurrent-credentials@example.com');
+    const token = tokenFor(user);
+    const pause = pauseFirstBcryptCall(t, 'compare');
+    const pending = patch('/api/auth/me', { token,
+      body: { currentPassword: PASSWORD, newEmail: 'stale-identifier@example.com' } });
+    await pause.entered;
+    const newer = await patch('/api/auth/me', { token,
+      body: { currentPassword: PASSWORD, newPassword: 'replacement-password' } });
+    assert.equal(newer.status, 200);
+    const links = require('../mcp/links').createLinkService(db);
+    links.enroll(user.id, { issuer: 'https://example.com', subject: 'test-credential-race' }, ['planner_read']);
+    pause.release();
+    const res = await pending;
+    const current = db.prepare('SELECT email, password_hash FROM users WHERE id = ?').get(user.id);
+    assert.deepEqual({ status: res.status, email: current.email, version: tokenVersionOf(user.id),
+      passwordMatches: await bcrypt.compare('replacement-password', current.password_hash), linked: links.status(user.id).linked },
+    { status: 401, email: user.email, version: 1, passwordMatches: true, linked: true });
+    const freshToken = newer.headers.get('set-cookie').split(';')[0].slice(SESSION_COOKIE_NAME.length + 1);
+    const validChange = await patch('/api/auth/me', { token: freshToken,
+      body: { currentPassword: 'replacement-password', newEmail: 'confirmed-identifier@example.com' } });
+    assert.deepEqual({ status: validChange.status, version: tokenVersionOf(user.id), linked: links.status(user.id).linked },
+      { status: 200, version: 2, linked: false });
+  });
+
+  test('rejects a session that expires during password verification', async t => {
+    const user = makeUser('expired-credential-race@example.com');
+    const token = tokenFor(user);
+    const pause = pauseFirstBcryptCall(t, 'compare');
+    const pending = patch('/api/auth/me', { token,
+      body: { currentPassword: PASSWORD, newEmail: 'should-not-change@example.com' } });
+    await pause.entered;
+    db.prepare('UPDATE sessions SET expires_at = ? WHERE user_id = ?').run('2000-01-01T00:00:00.000Z', user.id);
+    pause.release();
+    const res = await pending;
+    assert.deepEqual({ status: res.status, version: tokenVersionOf(user.id) }, { status: 401, version: 0 });
+  });
+
+  test('does not issue a session after a login verifies an obsolete password', async t => {
+    const user = makeUser('login-password-race@example.com');
+    const pause = pauseFirstBcryptCall(t, 'compare');
+    const pending = post('/api/auth/login', { body: { email: user.email, password: PASSWORD } });
+    await pause.entered;
+    await patch('/api/auth/me', { token: tokenFor(user),
+      body: { currentPassword: PASSWORD, newPassword: 'replacement-password' } });
+    pause.release();
+    const res = await pending;
+    assert.deepEqual({ status: res.status, sessions: sessionCountOf(user.id), cookieIssued: res.headers.has('set-cookie') },
+      { status: 401, sessions: 1, cookieIssued: false });
+  });
+
+  test('rejects unknown fields and unbounded passwords before invoking bcrypt', async t => {
+    const user = makeUser('invalid-credential-input@example.com');
+    const compare = t.mock.method(bcrypt, 'compare', async () => true);
+    for (const body of [
+      { currentPassword: PASSWORD, newEmail: 'valid@example.com', token_version: 99 },
+      { currentPassword: 'a'.repeat(129), newEmail: 'valid@example.com' },
+    ]) {
+      assert.equal((await patch('/api/auth/me', { token: tokenFor(user), body })).status, 400);
+    }
+    assert.equal(compare.mock.callCount(), 0);
+  });
+});
+
 test.describe('POST /logout', () => {
   // Clearing the cookie alone left a copied JWT usable for its remaining 7 days.
   test('makes the logged-out token unusable on a protected route', async () => {

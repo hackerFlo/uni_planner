@@ -4,11 +4,36 @@
 // This way every Watchtower deploy maps to exactly one version.
 // Versioning: X.Y — increment Y for regular updates, bump X (reset Y to 0) for big releases.
 // Add a new entry to CHANGELOG (newest first) on first push of a window; append to top entry otherwise.
-export const CURRENT_VERSION = '5.0';
+export const CURRENT_VERSION = '5.1';
 
 // icon: 'purple' | 'green' | 'amber' | 'blue' | 'rose'
 // Each feature needs: icon, name, desc, and a 24×24 SVG path string (stroke icons).
 export const CHANGELOG = [
+  {
+    version: '5.1',
+    date: '2026-10-01',
+    title: 'Reliable updates and clearer sign-in recovery',
+    features: [
+      {
+        icon: 'green',
+        name: 'Keep the planner running after updates',
+        desc: 'Fixed container startup failures and made the website reconnect automatically when the backend container is replaced. Both containers must now pass startup checks before an update is published.',
+        svgPath: 'M20 7l-8 10-4-4M4 4h16v16H4z',
+      },
+      {
+        icon: 'blue',
+        name: 'Recover from an expired Access session',
+        desc: 'When your Cloudflare Access session expires, the planner shows a persistent Reload notice so you can sign in again. Normal application sign-in errors keep their own messages.',
+        svgPath: 'M20 11a8 8 0 10-2 6M20 4v7h-7',
+      },
+      {
+        icon: 'purple',
+        name: 'More reliable account changes',
+        desc: 'Password and account changes now check that the session and credentials are still current before saving, including when two requests overlap. Dependency security updates are included.',
+        svgPath: 'M12 3l8 4v5c0 5-8 9-8 9s-8-4-8-9V7l8-4zM9 12l2 2 4-4',
+      },
+    ],
+  },
   {
     version: '5.0',
     date: '2026-09-30',

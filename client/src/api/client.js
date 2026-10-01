@@ -1,4 +1,4 @@
-import { ApiError, KINDS, classifyStatus } from './errors.js';
+import { ApiError, KINDS, classifyStatus, reportAccessExpiry } from './errors.js';
 import { probeReachability } from './probe.js';
 import { beginRequest, endRequest } from './activity.js';
 
@@ -8,6 +8,7 @@ async function performRequest(path, options = {}) {
     res = await fetch(path, {
       credentials: 'include',
       ...options,
+      redirect: 'manual',
       headers: { 'Content-Type': 'application/json', ...options.headers },
       body: options.body ? JSON.stringify(options.body) : undefined,
     });
@@ -21,6 +22,10 @@ async function performRequest(path, options = {}) {
     throw new ApiError(kind);
   }
 
+  return parseResponse(path, options, res);
+}
+
+async function parseResponse(path, options, res) {
   if (res.type === 'opaqueredirect') throw new ApiError(KINDS.ACCESS_EXPIRED);
 
   // Set on every response by the server's requestId middleware, so an on-screen
@@ -30,6 +35,10 @@ async function performRequest(path, options = {}) {
   if (options.signal?.aborted) throw options.signal.reason;
 
   if (!res.ok) {
+    if (res.status === 401 && data === null) {
+      const kind = await probeReachability();
+      if (kind === KINDS.ACCESS_EXPIRED) throw new ApiError(kind, { status: res.status, requestId });
+    }
     // A null body on a 5xx means an intermediary answered with an HTML error
     // page -- nginx or the tunnel, not the API.
     const kind = data === null && res.status >= 500 ? KINDS.GATEWAY : classifyStatus(res.status);
@@ -38,6 +47,9 @@ async function performRequest(path, options = {}) {
       if (window.location.pathname !== '/login') window.location.href = '/login';
     }
     throw new ApiError(kind, { status: res.status, requestId, message: data?.error });
+  }
+  if (data === null && res.status !== 204) {
+    throw new ApiError(KINDS.UNKNOWN, { status: res.status, requestId });
   }
   return data ?? {};
 }
@@ -48,6 +60,9 @@ async function request(path, options) {
   beginRequest();
   try {
     return await performRequest(path, options);
+  } catch (error) {
+    reportAccessExpiry(error);
+    throw error;
   } finally {
     endRequest();
   }

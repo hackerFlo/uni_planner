@@ -2,7 +2,8 @@ name: CI
 
 # G-2 requires tests to pass before a commit lands. Nothing enforced that until
 # now: docker-publish.yml builds and pushes images on every push to main without
-# running a single test, so a red suite still ships. This workflow is the gate.
+# running a single test, so a red suite still shipped. Publication now calls
+# this reusable workflow and waits for all checks before building images.
 #
 # eslint now runs here (see the lint job): both packages carry an
 # eslint.config.mjs and a `lint` script. It is configured as a defect linter,
@@ -17,8 +18,7 @@ name: CI
 
 on:
   pull_request:
-  push:
-    branches: [main]
+  workflow_call:
 
 # This workflow only reads the repo. It publishes nothing, comments on nothing,
 # and needs no packages:write (that belongs to docker-publish.yml alone).
@@ -136,10 +136,7 @@ jobs:
       - name: Install
         run: npm ci
 
-      # Errors fail the build; warnings do not. The two surviving warnings are
-      # deliberate (an exhaustive-deps pair that would loop if "fixed", and one
-      # benign in-memory cache race), so --max-warnings=0 would only invite
-      # someone to silence them badly.
+      # Errors fail the build; existing warnings remain visible for review.
       - name: Lint
         run: npm run lint
 
