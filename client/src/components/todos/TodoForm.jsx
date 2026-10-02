@@ -624,7 +624,7 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
               <select
                 value={effectiveListId ?? ''}
                 onChange={e => setListId(Number(e.target.value))}
-                className="w-full px-3.5 py-2.5 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                className="todo-form-select w-full pl-3.5 pr-10 py-2.5 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
               >
                 {lists.map(l => (
                   <option key={l.id} value={l.id}>{l.name}</option>
@@ -639,7 +639,7 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
               <select
                 value={dayAssigned}
                 onChange={e => { setDayAssigned(e.target.value); if (!e.target.value) setRecurrence(''); }}
-                className="w-full px-3.5 py-2.5 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition capitalize"
+                className="todo-form-select w-full pl-3.5 pr-10 py-2.5 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition capitalize"
               >
                 <option value="">None</option>
                 {assignableDates.flatMap(({ value, label, isNextWeek }, idx) => {
@@ -661,7 +661,7 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
               <select
                 value={approxTime}
                 onChange={e => setApproxTime(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                className="todo-form-select w-full pl-3.5 pr-10 py-2.5 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
               >
                 <option value="">None</option>
                 <option value="5m">5m</option>
@@ -701,7 +701,7 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
                 onChange={e => setRecurrence(e.target.value)}
                 disabled={!dayAssigned}
                 title={!dayAssigned ? 'Pick a day first' : undefined}
-                className="w-full px-3.5 py-2.5 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition disabled:opacity-40 disabled:cursor-not-allowed"
+                className="todo-form-select w-full pl-3.5 pr-10 py-2.5 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <option value="">Does not repeat</option>
                 <option value="1">Every day</option>

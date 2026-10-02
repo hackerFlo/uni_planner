@@ -4,11 +4,24 @@
 // This way every Watchtower deploy maps to exactly one version.
 // Versioning: X.Y — increment Y for regular updates, bump X (reset Y to 0) for big releases.
 // Add a new entry to CHANGELOG (newest first) on first push of a window; append to top entry otherwise.
-export const CURRENT_VERSION = '5.1';
+export const CURRENT_VERSION = '5.2';
 
 // icon: 'purple' | 'green' | 'amber' | 'blue' | 'rose'
 // Each feature needs: icon, name, desc, and a 24×24 SVG path string (stroke icons).
 export const CHANGELOG = [
+  {
+    version: '5.2',
+    date: '2026-10-02',
+    title: 'Balanced dropdown spacing',
+    features: [
+      {
+        icon: 'purple',
+        name: 'Balanced dropdown spacing',
+        desc: 'Dropdown arrows in the item form now have the same inset from the right edge as the text has from the left edge.',
+        svgPath: 'M6 9l6 6 6-6',
+      },
+    ],
+  },
   {
     version: '5.1',
     date: '2026-10-01',
