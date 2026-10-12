@@ -47,8 +47,10 @@ const call = async (user, method, url, body) => {
   return { status: res.status, body: await res.json() };
 };
 
-const DAY = '2026-08-19';
-const RANGE = 'from=2026-08-17&to=2026-08-23';
+const { getWindowBounds, addDays } = require('../recurrence');
+const { windowStart } = getWindowBounds('UTC');
+const DAY = addDays(windowStart, 2);
+const RANGE = `from=${windowStart}&to=${addDays(windowStart, 6)}`;
 
 let seq = 0;
 async function completedTodo(title) {

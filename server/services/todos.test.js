@@ -101,13 +101,14 @@ test('completion and restoration are occurrence-local and preserve series conten
 });
 
 test('single occurrence deletion may regenerate, all-series deletion removes exactly owned members', () => {
-  const { todo, materialized } = create({ day_assigned: start, ...daily });
+  const { materialized } = create({ day_assigned: start, ...daily });
   const removedDay = materialized[0].day_assigned;
   assert.deepEqual(service.remove(alice, { id: materialized[0].id, scope: 'single' }).removedIds, [materialized[0].id]);
   assert.ok(service.list(alice, { materialize: true }).todos.some(row => row.day_assigned === removedDay));
   const ownIds = service.list(alice, { status: 'all' }).todos.map(row => row.id).sort((a, b) => a - b);
   const foreign = service.create(bob, { title: 'Other', list_id: bobList });
-  const result = service.remove(alice, { id: todo.id, scope: 'all' });
+  const retainedRoot = service.list(alice).todos.find(row => row.recurrence_parent_id === null && row.recurrence_interval_days !== null);
+  const result = service.remove(alice, { id: retainedRoot.id, scope: 'all' });
   assert.deepEqual(result.removedIds.sort((a, b) => a - b), ownIds);
   assert.equal(service.get(bob, foreign.todo.id).todo.title, 'Other');
 });
@@ -238,13 +239,13 @@ test('website edits and dismissal clear only owned markers', () => {
 
 test('explicit agent recurrence children are marked but later automatic children are not', () => {
   const agent = { ...alice, actor: 'mcp' };
-  const { todo, materialized } = service.create(agent, { title: 'Daily', list_id: aliceList,
+  const { materialized } = service.create(agent, { title: 'Daily', list_id: aliceList,
     day_assigned: start, ...daily });
   assert.ok(materialized.length > 0);
   assert.ok(materialized.every(child => child.agent_activity_action === 'created'));
   db.prepare('DELETE FROM todos WHERE id=? AND user_id=?').run(materialized[0].id, alice.userId);
   service.materialize(alice);
-  const replaced = db.prepare('SELECT agent_activity_at FROM todos WHERE user_id=? AND recurrence_parent_id=? AND day_assigned=?')
-    .get(alice.userId, todo.id, materialized[0].day_assigned);
+  const replaced = db.prepare('SELECT agent_activity_at FROM todos WHERE user_id=? AND day_assigned=?')
+    .get(alice.userId, materialized[0].day_assigned);
   assert.equal(replaced.agent_activity_at, null);
 });

@@ -1,25 +1,33 @@
-import { useCallback, useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useReducer, useRef, useState } from 'react';
 import { agentConnections } from '../../api/agentConnections';
 import { userMessage } from '../../api/errors';
+import { createEnrollmentSelection, enrollmentSelectionReducer } from './agentEnrollmentSelection';
 
 function useConnectionStatus() {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const refreshSequence = useRef(0);
+  const invalidateRefresh = useCallback(() => { refreshSequence.current++; }, []);
   const refresh = useCallback(async () => {
+    const sequence = ++refreshSequence.current;
     setLoading(true);
     setError('');
     try {
       const current = await agentConnections.getStatus();
+      if (sequence !== refreshSequence.current) return;
       setStatus(current);
       return current;
     } catch (err) {
-      setError(userMessage(err));
+      if (sequence === refreshSequence.current) setError(userMessage(err));
     } finally {
-      setLoading(false);
+      if (sequence === refreshSequence.current) setLoading(false);
     }
   }, []);
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    refresh();
+    return invalidateRefresh;
+  }, [refresh, invalidateRefresh]);
   return { status, loading, error, refresh };
 }
 
@@ -43,11 +51,19 @@ function ConnectionSummary({ status }) {
   );
 }
 
-function EnrollmentForm({ reenrollment, busy, onEnroll }) {
+export function EnrollmentForm({ status, confirmedStatus, reenrollment, busy, onEnroll }) {
   const id = useId();
   const [password, setPassword] = useState('');
   const [consent, setConsent] = useState(false);
-  const [capabilities, setCapabilities] = useState(['planner_read']);
+  const [selection, dispatch] = useReducer(enrollmentSelectionReducer, status, createEnrollmentSelection);
+  const { capabilities } = selection;
+  useEffect(() => {
+    dispatch({ type: 'status', status, confirmed: status === confirmedStatus });
+  }, [status, confirmedStatus]);
+  useEffect(() => {
+    setPassword('');
+    setConsent(false);
+  }, [selection.boundary]);
   function submit(event) {
     event.preventDefault();
     const submittedPassword = password;
@@ -69,16 +85,20 @@ function EnrollmentForm({ reenrollment, busy, onEnroll }) {
       <fieldset className="space-y-2 text-xs text-zinc-600 dark:text-zinc-300" disabled={busy}>
         <legend className="mb-2">Choose agent permissions</legend>
         <p>Read planner data (required)</p>
-        {[['planner_write', 'Create, edit and delete planner items and preferences'],
+        {[['planner_write', 'Permission to create, edit and delete planner items and preferences'],
           ['notifications', 'Read and change notification settings and send test emails'],
           ['export', 'Export all planner data, including your notification email address']].map(([value, label]) => (
           <label key={value} className="flex items-start gap-2">
-            <input type="checkbox" checked={capabilities.includes(value)} onChange={event => setCapabilities(current =>
-              event.target.checked ? [...current, value] : current.filter(item => item !== value))} />
+            <input type="checkbox" checked={capabilities.includes(value)} onChange={event => dispatch({
+              type: 'toggle', capability: value, checked: event.target.checked,
+            })} />
             <span>{label}</span>
           </label>
         ))}
       </fieldset>
+      {!status.writesEnabled && <p role="note" className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
+        These choices save permissions for your account. Planner changes and test emails are currently disabled for the whole server. The server operator must enable them before agents can use those permissions.
+      </p>}
       <label className="flex items-start gap-2 text-xs text-zinc-600 dark:text-zinc-300">
         <input type="checkbox" required checked={consent} disabled={busy}
           onChange={event => setConsent(event.target.checked)} className="mt-0.5" />
@@ -97,8 +117,11 @@ export default function AgentConnectionsSection() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [confirmedStatus, setConfirmedStatus] = useState(null);
+  const actionInFlight = useRef(false);
   async function runAction(action, expectedLinked) {
-    if (busy) return;
+    if (actionInFlight.current) return;
+    actionInFlight.current = true;
     setBusy(true);
     setError('');
     setSuccess('');
@@ -110,10 +133,12 @@ export default function AgentConnectionsSection() {
         setError('Connection status changed before it could be confirmed. Review the current status before trying again.');
         return;
       }
+      setConfirmedStatus(current);
       setSuccess(expectedLinked ? 'Selected agent permissions authorized.' : 'All agent access to UniPlanner is disabled.');
     } catch (err) {
       setError(userMessage(err));
     } finally {
+      actionInFlight.current = false;
       setBusy(false);
     }
   }
@@ -127,8 +152,8 @@ export default function AgentConnectionsSection() {
       </div>}
       {status && <>
         <ConnectionSummary status={status} />
-        {status.enabled && status.configured && !loadError && <EnrollmentForm
-          key={`${status.revokedAt}-${status.requiresReenrollment}`} busy={busy || loading}
+        {status.enabled && status.configured && <EnrollmentForm
+          status={status} confirmedStatus={confirmedStatus} busy={busy || loading || Boolean(loadError)}
           reenrollment={status.linked || status.requiresReenrollment || Boolean(status.revokedAt)}
           onEnroll={(password, consent, capabilities) => runAction(() => agentConnections.enroll(password, consent, capabilities), true)} />}
         {(status.linked || status.requiresReenrollment) && <div className="space-y-2">

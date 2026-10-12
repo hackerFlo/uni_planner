@@ -31,6 +31,7 @@ import { usePreferences } from '../context/PreferencesContext';
 import { useToast } from '../context/ToastContext';
 import { userMessage } from '../api/errors';
 import { CopyDragProvider } from '../context/CopyDragContext';
+import { useAuth } from '../context/AuthContext';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const SIDEBAR_MIN_PX = 200;
@@ -74,6 +75,7 @@ export default function PlannerPage() {
   const { lists, fetchLists } = useLists();
   const { fetchExams } = useExams();
   const { refreshPreferences } = usePreferences();
+  const { refreshUser } = useAuth();
   const anyModalOpen = useAnyModalOpen();
   const toast = useToast();
   const [editingText, setEditingText] = useState(false);
@@ -275,21 +277,18 @@ export default function PlannerPage() {
   const sidebarByList = useMemo(() => {
     const result = {};
     for (const list of lists) {
-      result[list.id] = buildSidebar(todos.filter(t => t.list_id === list.id));
+      result[list.id] = buildSidebar(todos.filter(t => t.list_id === list.id), todayIso);
     }
     return result;
-    // Not keyed on weekDates any more: the sidebar shows every assignment
-    // regardless of which week is on screen, so paging the planner no longer
-    // changes what belongs here.
-  }, [todos, lists]);
+  }, [todos, lists, todayIso]);
 
   const { byDate: completedByDate, refresh: refreshCompleted, version: completedVersion } =
     useCompletedTodos(weekDates, revealedDays.size > 0);
   relatedRefresh.current = refreshCompleted;
 
   const refreshAll = useCallback((version, options) => refreshPlannerResources(
-    [fetchBoard, fetchLists, fetchExams, fetchNotes, refreshCompleted, refreshPreferences], { ...options, minimumVersion: version }
-  ), [fetchBoard, fetchLists, fetchExams, fetchNotes, refreshCompleted, refreshPreferences]);
+    [fetchBoard, fetchLists, fetchExams, fetchNotes, refreshCompleted, refreshPreferences, refreshUser], { ...options, minimumVersion: version }
+  ), [fetchBoard, fetchLists, fetchExams, fetchNotes, refreshCompleted, refreshPreferences, refreshUser]);
   const syncPaused = anyModalOpen || Boolean(formState) || Boolean(activeItem) || editingText;
   const revisionSync = usePlannerRevision({ onChange: refreshAll, paused: syncPaused });
   const refreshedDay = useRef(todayIso);

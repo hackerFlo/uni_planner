@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { toIso, parseDateLocal, getWeekDates, isSameDay, msUntilNextMidnight, countdownParts, formatCountdown } from './dates.js';
+import { toIso, parseDateLocal, getWeekDates, isSameDay, msUntilNextMidnight, dateInTimeZone, msUntilNextMidnightInZone, countdownParts, formatCountdown } from './dates.js';
 
 // Fixed local dates. Constructed with the Date(y, m, d) form so they are local
 // midnight regardless of the machine's zone -- the whole point of these helpers.
@@ -29,6 +29,37 @@ test.describe('parseDateLocal', () => {
     assert.equal(d.getHours(), 0);
     assert.equal(d.getDate(), 19);
   });
+});
+
+test.describe('account time zone dates', () => {
+  test('uses the account day when browser and account weeks differ', () => {
+    const now = new Date('2026-10-11T23:30:00Z');
+    assert.deepEqual(['Europe/Berlin', 'America/Los_Angeles', 'UTC'].map(zone => {
+      const today = dateInTimeZone(now, zone);
+      return { today, previousMonday: getWeekDates(-1, parseDateLocal(today))[0] };
+    }), [
+      { today: '2026-10-12', previousMonday: '2026-10-05' },
+      { today: '2026-10-11', previousMonday: '2026-09-28' },
+      { today: '2026-10-11', previousMonday: '2026-09-28' },
+    ]);
+  });
+
+  test('defaults new accounts to the server UTC calendar', () => {
+    assert.equal(dateInTimeZone(new Date('2026-10-12T00:30:00Z')), '2026-10-12');
+  });
+
+  for (const [label, now, midnight, zone] of [
+    ['Berlin spring DST day', '2026-03-28T23:00:00Z', '2026-03-29T22:00:00Z', 'Europe/Berlin'],
+    ['Berlin autumn DST day', '2026-10-24T22:00:00Z', '2026-10-25T23:00:00Z', 'Europe/Berlin'],
+    ['a half-hour offset', '2026-10-11T18:29:59.999Z', '2026-10-11T18:30:00Z', 'Asia/Kolkata'],
+    ['a year boundary', '2026-12-31T23:59:59.999Z', '2027-01-01T00:00:00Z', 'UTC'],
+    ['a Sunday/Monday boundary', '2026-10-11T21:59:59.999Z', '2026-10-11T22:00:00Z', 'Europe/Berlin'],
+  ]) {
+    test(`schedules the exact account midnight for ${label}`, () => {
+      const timestamp = new Date(now);
+      assert.equal(timestamp.getTime() + msUntilNextMidnightInZone(timestamp, zone), Date.parse(midnight));
+    });
+  }
 });
 
 test.describe('getWeekDates', () => {

@@ -5,6 +5,7 @@ const domainError = require('../middleware/domainError');
 const { createTodoService } = require('../services/todos');
 const service = createTodoService(db);
 const operations = require('../services/operations').createOperations(db);
+const maintenance = require('../domain/mutation').createMutationService(db);
 const { webMutation, legacyBoardMutation } = require('../domain/webMutation');
 const router = express.Router();
 router.use(requireAuth);
@@ -12,8 +13,10 @@ router.use(requireAuth);
 const context = req => ({ userId: req.user.id, actor: 'web' });
 const routeId = value => typeof value === 'string' && /^[1-9]\d*$/.test(value) ? Number(value) : NaN;
 function read(req, options) {
-  const data = service.list(context(req), options);
-  return { ...data, version: operations.version(context(req)) };
+  const ctx = context(req);
+  if (!options.materialize) return { ...service.list(ctx, options), version: operations.version(ctx) };
+  const result = maintenance.maintain(ctx, () => ({ data: service.list(ctx, options), changed: false }));
+  return { ...result.data, version: result.version };
 }
 router.get('/', (req, res) => res.json(read(req, { materialize: true })));
 router.get('/archived', (req, res) => res.json(read(req, { status: 'archived' })));

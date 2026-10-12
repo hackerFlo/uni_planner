@@ -374,6 +374,126 @@ function webAction(fixture, user, method, url, body, version) {
 }
 function currentVersion(user) { return db.prepare('SELECT epoch,revision FROM planner_versions WHERE user_id=?').get(user.id); }
 
+function seedRetentionTasks(user) {
+  const { getWindowBounds, addDays } = require('../recurrence');
+  const { windowStart } = getWindowBounds('UTC');
+  const before = addDays(windowStart, -7);
+  const listId = db.prepare('SELECT id FROM lists WHERE user_id=? LIMIT 1').get(user.id).id;
+  const insert = db.prepare(`INSERT INTO todos(user_id,list_id,title,day_assigned,completed,archived,recurrence_interval_days)
+    VALUES(?,?,?,?,?,?,?)`);
+  for (const [title, day, completed, archived, interval] of [
+    ['Old open', addDays(before, -1), 0, 0, null], ['Boundary', before, 0, 0, null],
+    ['Backlog', null, 0, 0, null], ['Future', addDays(windowStart, 40), 0, 0, null],
+    ['Done', addDays(before, -1), 1, 1, null], ['Archived', addDays(before, -1), 0, 1, null],
+    ['Recurring', addDays(before, -20), 0, 0, 3],
+  ]) insert.run(user.id, listId, title, day, completed, archived, interval);
+}
+const retentionRows = user => db.prepare('SELECT * FROM todos WHERE user_id=? ORDER BY id').all(user.id);
+const normalizeRetention = rows => rows.map(({ title, day_assigned, completed, archived, recurrence_interval_days }) =>
+  ({ title, day_assigned, completed, archived, recurrence_interval_days })).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+const retain = (client, args = { materialize: true }) => client.callTool({ name: 'list_tasks', arguments: args });
+
+test('website and signed MCP maintenance expire the same owned old tasks and coalesce revisions', async t => {
+  const fixture = await setup(t);
+  fixture.config.writesEnabled = true;
+  seedRetentionTasks(fixture.alice);
+  seedRetentionTasks(fixture.bob);
+  const untouched = retentionRows(fixture.bob);
+  links.enroll(fixture.alice.id, fixture.alice.identity, ['planner_read', 'planner_write']);
+  const client = await connect(t, fixture, fixture.alice);
+  const tools = (await client.listTools()).tools;
+  for (const name of ['list_tasks', 'search_tasks', 'get_week']) {
+    assert.equal(tools.find(tool => tool.name === name).annotations.destructiveHint, true);
+  }
+  const initial = currentVersion(fixture.alice);
+  const mcp = await retain(client);
+  assert.equal(mcp.isError, undefined);
+  assert.equal(mcp.structuredContent.expiredTaskCount, 2);
+  assert.equal(mcp.structuredContent.version.revision, initial.revision + 1);
+  assert.deepEqual(retentionRows(fixture.bob), untouched);
+  const web = await webAction(fixture, fixture.bob, 'GET', '/api/todos', undefined, currentVersion(fixture.bob));
+  assert.equal(web.status, 200);
+  assert.equal(web.body.expiredTaskCount, 2);
+  assert.deepEqual(normalizeRetention(retentionRows(fixture.alice)), normalizeRetention(retentionRows(fixture.bob)));
+  assert.deepEqual(normalizeRetention(mcp.structuredContent.tasks), normalizeRetention(web.body.todos));
+  const repeat = await retain(client);
+  assert.equal(repeat.structuredContent.expiredTaskCount, 0);
+  assert.deepEqual(repeat.structuredContent.version, mcp.structuredContent.version);
+});
+
+test('expiration invalidates stale edits before any write', async t => {
+  const fixture = await setup(t);
+  fixture.config.writesEnabled = true;
+  seedRetentionTasks(fixture.alice);
+  links.enroll(fixture.alice.id, fixture.alice.identity, ['planner_read', 'planner_write']);
+  const client = await connect(t, fixture, fixture.alice);
+  const initial = currentVersion(fixture.alice);
+  const listId = retentionRows(fixture.alice)[0].list_id;
+  await retain(client);
+  const stale = await client.callTool({ name: 'create_task', arguments: { title: 'Stale edit', list_id: listId,
+    expectedVersion: initial, idempotencyKey: randomUUID() } });
+  assert.equal(JSON.parse(stale.content[0].text).code, 'CONFLICT');
+  assert.equal(retentionRows(fixture.alice).some(row => row.title === 'Stale edit'), false);
+});
+
+test('oversized signed MCP maintenance results roll back deletion recurrence generation and revisions', async t => {
+  const fixture = await setup(t);
+  fixture.config.writesEnabled = true;
+  seedRetentionTasks(fixture.alice);
+  links.enroll(fixture.alice.id, fixture.alice.identity, ['planner_read', 'planner_write']);
+  const client = await connect(t, fixture, fixture.alice);
+  const { getWindowBounds } = require('../recurrence');
+  const { windowStart } = getWindowBounds('UTC');
+  const listId = retentionRows(fixture.alice)[0].list_id;
+  const insert = db.prepare('INSERT INTO todos(user_id,list_id,title,description,day_assigned) VALUES(?,?,?,?,?)');
+  for (let index = 0; index < 60; index++) {
+    insert.run(fixture.alice.id, listId, `Large result ${index}`, 'x'.repeat(5000), windowStart);
+  }
+  const original = retentionRows(fixture.alice);
+  const before = currentVersion(fixture.alice);
+  for (const name of ['list_tasks', 'search_tasks', 'get_week']) {
+    const args = { materialize: true, limit: 100, ...(name === 'get_week'
+      ? { week_start: windowStart } : { includeDescription: true,
+        ...(name === 'search_tasks' ? { query: 'Large result' } : {}) }) };
+    const result = await client.callTool({ name, arguments: args });
+    assert.equal(result.isError, true);
+    assert.equal(JSON.parse(result.content[0].text).code, 'RESULT_TOO_LARGE');
+    assert.deepEqual(retentionRows(fixture.alice), original);
+    assert.deepEqual(currentVersion(fixture.alice), before);
+  }
+  const smaller = await client.callTool({ name: 'get_week', arguments: {
+    week_start: windowStart, materialize: true, limit: 1,
+  } });
+  assert.equal(smaller.isError, undefined);
+  assert.equal(smaller.structuredContent.expiredTaskCount, 2);
+  assert.equal(smaller.structuredContent.version.revision, before.revision + 1);
+});
+
+test('read-only, invalid and revoked MCP calls cannot trigger expiration', async t => {
+  const fixture = await setup(t);
+  fixture.config.writesEnabled = true;
+  seedRetentionTasks(fixture.alice);
+  const original = retentionRows(fixture.alice);
+  const client = await connect(t, fixture, fixture.alice);
+  await retain(client, {});
+  assert.equal((await retain(client)).isError, true);
+  assert.deepEqual(retentionRows(fixture.alice), original);
+  assert.equal((await retain(client, { materialize: true, user_id: fixture.bob.id })).isError, true);
+  links.revoke(fixture.alice.id);
+  await assert.rejects(retain(client));
+  assert.deepEqual(retentionRows(fixture.alice), original);
+});
+
+test('an expired website session cannot trigger expiration', async t => {
+  const fixture = await setup(t);
+  seedRetentionTasks(fixture.alice);
+  const original = retentionRows(fixture.alice);
+  db.prepare('DELETE FROM sessions WHERE user_id=?').run(fixture.alice.id);
+  const deniedWeb = await webAction(fixture, fixture.alice, 'GET', '/api/todos', undefined, currentVersion(fixture.alice));
+  assert.equal(deniedWeb.status, 401);
+  assert.deepEqual(retentionRows(fixture.alice), original);
+});
+
 test('website and MCP task, board, note and exam workflows produce equivalent owned state', async t => {
   const fixture = await setup(t);
   fixture.config.writesEnabled = true;

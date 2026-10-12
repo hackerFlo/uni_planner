@@ -83,6 +83,37 @@ function pauseFirstBcryptCall(t, method) {
   return { entered, release };
 }
 
+test.describe('account calendar in auth responses', () => {
+  test('returns each signed-in account own saved time zone on login and session refresh', async () => {
+    for (const zone of ['Europe/Berlin', 'America/Los_Angeles']) {
+      const user = makeUser(`calendar-${zone.replace('/', '-')}@example.com`);
+      db.prepare('UPDATE users SET notify_tz=? WHERE id=?').run(zone, user.id);
+      const login = await post('/api/auth/login', { body: { email: user.email, password: PASSWORD } });
+      const session = await fetch(`${base}/api/auth/me`, { headers: { Cookie: `${SESSION_COOKIE_NAME}=${tokenFor(user)}` } });
+      assert.deepEqual([(await login.json()).user.notify_tz, (await session.json()).user.notify_tz], [zone, zone]);
+    }
+  });
+
+  test('keeps the saved account calendar after a credential update', async () => {
+    const user = makeUser('calendar-credential-update@example.com');
+    db.prepare('UPDATE users SET notify_tz=? WHERE id=?').run('Pacific/Auckland', user.id);
+    const res = await patch('/api/auth/me', { token: tokenFor(user), body: { currentPassword: PASSWORD, newEmail: 'calendar-renamed@example.com' } });
+    assert.equal((await res.json()).user.notify_tz, 'Pacific/Auckland');
+  });
+
+  test('returns the default UTC calendar on registration', async () => {
+    const saved = process.env.ALLOW_REGISTER;
+    process.env.ALLOW_REGISTER = 'true';
+    try {
+      const res = await post('/api/auth/register', { body: { email: 'calendar-registration@example.com', password: PASSWORD } });
+      assert.equal((await res.json()).user.notify_tz, 'UTC');
+    } finally {
+      if (saved === undefined) delete process.env.ALLOW_REGISTER;
+      else process.env.ALLOW_REGISTER = saved;
+    }
+  });
+});
+
 test.describe('credential races', { timeout: 5000 }, () => {
   for (const method of ['compare', 'hash']) {
     test(`does not revive a logged-out session while ${method} is pending`, async t => {

@@ -8,7 +8,8 @@ import { useLists } from '../../context/ListsContext';
 import { LIST_PALETTE } from '../../constants/listPalette';
 import { useAnyModalOpen } from '../../context/ModalContext';
 import { useCopyDrag } from '../../context/CopyDragContext';
-import { sidebarDraggableId } from '../../utils/sidebar';
+import { sidebarAssignment, sidebarDraggableId } from '../../utils/sidebar';
+import { useToday } from '../../context/TimeContext';
 import AgentActivityBadge from '../ui/AgentActivityBadge';
 import { formatAgentActivityLabel } from '../../utils/agentActivity';
 
@@ -18,17 +19,14 @@ function isRecurring(todo) {
   return todo.recurrence_parent_id != null || todo.recurrence_interval_days != null || todo.recurrence_pattern != null;
 }
 
-const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function fmtTime(t) { return t ? t.replace(' min', 'm') : t; }
-function dayLabel(iso) {
-  if (!iso) return '';
-  const [y, m, d] = iso.split('-').map(Number);
-  return DAY_NAMES[new Date(y, m - 1, d).getDay()];
-}
 
-const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAssigned, checked, isGhost, onComplete, onEdit, onDelete, onUnassign, onDismissAgentActivity }) {
+const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, checked, isGhost, onComplete, onEdit, onDelete, onUnassign, onDismissAgentActivity }) {
+  const today = useToday();
+  const { inWindow, label: assignmentLabel } = sidebarAssignment(todo.day_assigned, today);
+  const assignmentDescription = `Assigned to ${todo.day_assigned}${inWindow ? '' : ' · Outside available weeks'}`;
   const anyModalOpen = useAnyModalOpen();
   const isCopying = useCopyDrag() && snapshot.isDragging;
   const hideOnHover = anyModalOpen ? '' : 'group-hover:invisible group-focus-within:invisible';
@@ -92,7 +90,7 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
         ...provided.draggableProps.style,
         width: isDraggingOverDay ? 180 : provided.draggableProps.style?.width,
         height: isDraggingOverDay ? 'auto' : provided.draggableProps.style?.height,
-        opacity: snapshot.isDragging ? 0.85 : checked ? 0.4 : 1,
+        opacity: snapshot.isDragging ? 0.85 : checked ? 0.4 : undefined,
         transform: snapshot.isDragging
           ? `${provided.draggableProps.style?.transform ?? ''} rotate(${rotation}deg) scale(1.03)`
           : checked
@@ -105,7 +103,7 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
       className={`group border rounded-lg shadow-sm transition-all select-none cursor-grab active:cursor-grabbing ${
         isDraggingOverDay
           ? 'bg-white dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800 p-2.5'
-          : isAssigned
+          : inWindow
           ? 'bg-zinc-50 dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800 p-3 opacity-50 hover:opacity-70'
           : 'bg-white dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800 p-3 hover:shadow-md hover:-translate-y-0.5'
       }${isGhost ? ' pointer-events-none' : ''}`}
@@ -171,7 +169,7 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
 
           <div className="flex-1 min-w-0">
             <div className="flex items-start gap-1.5 min-w-0">
-              <LinkText text={todo.title} className={`text-sm font-medium break-words flex-1 min-w-0 ${isAssigned ? 'text-zinc-400 dark:text-zinc-500' : 'text-zinc-800 dark:text-zinc-100'}`} />
+              <LinkText text={todo.title} className={`text-sm font-medium break-words flex-1 min-w-0 ${inWindow ? 'text-zinc-400 dark:text-zinc-500' : 'text-zinc-800 dark:text-zinc-100'}`} />
               <div className={`flex items-center gap-1.5 flex-shrink-0 ${hideOnHover}`}>
         {isCopying && (
           <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full uppercase tracking-wide bg-indigo-100 text-indigo-600 dark:bg-indigo-900 dark:text-indigo-200">
@@ -191,10 +189,13 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
                     {fmtTime(todo.approx_time)}
                   </span>
                 )}
-                {isAssigned && (
-                  <span className="text-[9px] font-medium text-zinc-400 dark:text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded-full">
-                    {dayLabel(todo.day_assigned)}
-                  </span>
+                {todo.day_assigned && (
+                  <Tooltip text={assignmentDescription}>
+                    <time dateTime={todo.day_assigned} className="text-[9px] font-medium text-zinc-400 dark:text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded-full">
+                      <span aria-hidden="true">{assignmentLabel}</span>
+                      <span className="sr-only">{assignmentDescription}</span>
+                    </time>
+                  </Tooltip>
                 )}
               </div>
               {hasAgentActivity && (
@@ -218,10 +219,10 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
                   ? 'hidden'
                   : 'flex opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto'
               }`}
-              style={{ background: `linear-gradient(to right, transparent, ${isAssigned ? 'var(--card-bg-assigned, #fafafa)' : 'var(--card-bg, #ffffff)'} 40%)` }}
+              style={{ background: `linear-gradient(to right, transparent, ${inWindow ? 'var(--card-bg-assigned, #fafafa)' : 'var(--card-bg, #ffffff)'} 40%)` }}
               onPointerDown={e => e.stopPropagation()}
             >
-              {isAssigned && (
+              {todo.day_assigned && (
                 <Tooltip text="Unassign">
                   <button
                     onClick={e => { e.stopPropagation(); onUnassign(todo.id); }}
@@ -287,7 +288,7 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, isAs
   );
 });
 
-export default function TodoCard({ todo, isAssigned, index, draggableId, isGhost = false, onComplete, onEdit, onDelete, onUnassign, onDismissAgentActivity }) {
+export default function TodoCard({ todo, index, draggableId, isGhost = false, onComplete, onEdit, onDelete, onUnassign, onDismissAgentActivity }) {
   const [checked, setChecked] = useState(false);
 
   function handleComplete(e) {
@@ -304,7 +305,6 @@ export default function TodoCard({ todo, isAssigned, index, draggableId, isGhost
           provided={provided}
           snapshot={snapshot}
           todo={todo}
-          isAssigned={isAssigned}
           checked={checked}
           isGhost={isGhost}
           onComplete={handleComplete}

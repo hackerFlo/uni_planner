@@ -8,6 +8,31 @@
 // to fix a bug in only four places.
 
 const DAYS_PER_WEEK = 7;
+const MS_PER_DAY = 86_400_000;
+
+// Current-day decisions share the server's saved account zone. Calendar
+// arithmetic below still uses local Date objects as containers for bare dates.
+export function dateInTimeZone(now = new Date(), timeZone = 'UTC') {
+  const parts = new Intl.DateTimeFormat('en', {
+    timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(now);
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+export function msUntilNextMidnightInZone(now = new Date(), timeZone = 'UTC') {
+  const today = dateInTimeZone(now, timeZone);
+  let before = now.getTime();
+  let after = before + 2 * MS_PER_DAY;
+  // Search the actual date boundary so DST and fractional offsets do not
+  // assume that the account day lasts 24 hours or matches browser midnight.
+  while (after - before > 1) {
+    const middle = Math.floor((before + after) / 2);
+    if (dateInTimeZone(new Date(middle), timeZone) === today) before = middle;
+    else after = middle;
+  }
+  return Math.max(1, after - now.getTime());
+}
 
 export function toIso(date) {
   const y = date.getFullYear();

@@ -4,11 +4,36 @@
 // This way every Watchtower deploy maps to exactly one version.
 // Versioning: X.Y — increment Y for regular updates, bump X (reset Y to 0) for big releases.
 // Add a new entry to CHANGELOG (newest first) on first push of a window; append to top entry otherwise.
-export const CURRENT_VERSION = '5.2';
+export const CURRENT_VERSION = '5.3';
 
 // icon: 'purple' | 'green' | 'amber' | 'blue' | 'rose'
 // Each feature needs: icon, name, desc, and a 24×24 SVG path string (stroke icons).
 export const CHANGELOG = [
+  {
+    version: '5.3',
+    date: '2026-10-12',
+    title: 'Clearer planning weeks and reliable agent connections',
+    features: [
+      {
+        icon: 'blue',
+        name: 'Planning follows your account timezone',
+        desc: 'Today, week navigation and task assignment use your saved account timezone, including midnight and daylight-saving changes.',
+        svgPath: 'M12 8v4l3 2M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+      },
+      {
+        icon: 'amber',
+        name: 'Keep the current planning window focused',
+        desc: 'The sidebar shows your backlog and assignments from the previous, current and next week. Unfinished, non-archived tasks assigned before the previous Monday are permanently removed during maintenance. Completed, archived, future and unassigned tasks are preserved, and recurring series continue.',
+        svgPath: 'M8 2v4m8-4v4M3 10h18M3 4h18v18H3z',
+      },
+      {
+        icon: 'green',
+        name: 'More reliable agent connections',
+        desc: 'Connection settings display saved permissions, preserve your selections after failures and prevent duplicate submissions. Oversized agent responses now roll back task maintenance safely.',
+        svgPath: 'M10 13a5 5 0 007 0l3-3a5 5 0 00-7-7l-2 2M14 11a5 5 0 00-7 0l-3 3a5 5 0 007 7l2-2',
+      },
+    ],
+  },
   {
     version: '5.2',
     date: '2026-10-02',

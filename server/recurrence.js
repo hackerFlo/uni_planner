@@ -4,10 +4,10 @@ function addDays(iso, n) {
   return date.toISOString().slice(0, 10);
 }
 
-function getWindowBounds(userTz) {
+function getWindowBounds(userTz, now = new Date()) {
   const today = new Intl.DateTimeFormat('en-CA', {
     timeZone: userTz, year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(new Date());
+  }).format(now);
   const dayOfWeek = new Date(`${today}T12:00:00Z`).getUTCDay();
   const windowStart = addDays(today, dayOfWeek === 0 ? -6 : 1 - dayOfWeek);
   return { windowStart, windowEnd: addDays(windowStart, 13) };
@@ -19,22 +19,26 @@ function isPatternMatch(isoDate, pattern) {
     : pattern === 'weekends' && (dayOfWeek === 0 || dayOfWeek === 6);
 }
 
-function candidateDays(template, tz) {
-  const { windowStart, windowEnd } = getWindowBounds(tz);
-  if (template.day_assigned >= windowEnd) return [];
+function isRecurrenceDay(template, day) {
+  if (day <= template.day_assigned) return false;
+  if (template.recurrence_pattern != null) return isPatternMatch(day, template.recurrence_pattern);
   const interval = template.recurrence_interval_days;
-  const pattern = template.recurrence_pattern;
+  const diff = (Date.parse(day) - Date.parse(template.day_assigned)) / 86400000;
+  return interval > 0 && diff % interval === 0;
+}
+
+function candidateDays(template, tz, now) {
+  const { windowStart, windowEnd } = getWindowBounds(tz, now);
+  if (template.day_assigned >= windowEnd) return [];
   const dates = [];
   const afterTemplate = addDays(template.day_assigned, 1);
   for (let day = windowStart > afterTemplate ? windowStart : afterTemplate; day <= windowEnd; day = addDays(day, 1)) {
-    const diff = (Date.parse(day) - Date.parse(template.day_assigned)) / 86400000;
-    const matches = pattern !== null ? isPatternMatch(day, pattern) : interval > 0 && diff % interval === 0;
-    if (matches) dates.push(day);
+    if (isRecurrenceDay(template, day)) dates.push(day);
   }
   return dates;
 }
 
-function materializeForTemplate(db, templateId, userTz, userId) {
+function materializeForTemplate(db, templateId, userTz, userId, now) {
   const template = db.prepare('SELECT * FROM todos WHERE id=? AND recurrence_parent_id IS NULL AND user_id=?')
     .get(templateId, userId);
   if (!template?.day_assigned || (template.recurrence_interval_days === null && template.recurrence_pattern === null)) return 0;
@@ -43,7 +47,7 @@ function materializeForTemplate(db, templateId, userTz, userId) {
   const insert = db.prepare(`INSERT INTO todos(user_id,list_id,title,description,day_assigned,approx_time,
     recurrence_parent_id,completed,archived) VALUES(?,?,?,?,?,?,?,0,0)`);
   let count = 0;
-  for (const day of candidateDays(template, userTz || 'UTC')) {
+  for (const day of candidateDays(template, userTz || 'UTC', now)) {
     if (existingDays.has(day)) continue;
     insert.run(userId, template.list_id, template.title, template.description, day, template.approx_time, templateId);
     count += 1;
@@ -51,12 +55,12 @@ function materializeForTemplate(db, templateId, userTz, userId) {
   return count;
 }
 
-function materializeWindowForUser(db, userId, userTz) {
+function materializeWindowForUser(db, userId, userTz, now) {
   // The template is the first occurrence; completing it must not end its series.
   const templates = db.prepare(`SELECT id FROM todos WHERE user_id=? AND recurrence_parent_id IS NULL
     AND (recurrence_interval_days IS NOT NULL OR recurrence_pattern IS NOT NULL)`).all(userId);
   return db.transaction(() => templates.reduce((total, row) =>
-    total + materializeForTemplate(db, row.id, userTz || 'UTC', userId), 0))();
+    total + materializeForTemplate(db, row.id, userTz || 'UTC', userId, now), 0))();
 }
 
 function listRecurringUsers(db) {
@@ -67,14 +71,14 @@ function listRecurringUsers(db) {
 
 function createRecurrenceService(db) {
   return {
-    materializeForTemplate: (id, tz, userId) => materializeForTemplate(db, id, tz, userId),
-    materializeWindowForUser: (userId, tz) => materializeWindowForUser(db, userId, tz),
+    materializeForTemplate: (id, tz, userId, now) => materializeForTemplate(db, id, tz, userId, now),
+    materializeWindowForUser: (userId, tz, now) => materializeWindowForUser(db, userId, tz, now),
     listRecurringUsers: () => listRecurringUsers(db),
   };
 }
 
 // Existing callers retain their API; injected services never open another database.
-module.exports = { createRecurrenceService, getWindowBounds, addDays,
+module.exports = { createRecurrenceService, getWindowBounds, addDays, isRecurrenceDay,
   materializeForTemplate: (...args) => materializeForTemplate(require('./db'), ...args),
   materializeWindowForUser: (...args) => materializeWindowForUser(require('./db'), ...args),
   listRecurringUsers: () => listRecurringUsers(require('./db')),

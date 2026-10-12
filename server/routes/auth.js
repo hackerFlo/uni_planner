@@ -32,6 +32,10 @@ const credentialSchema = z.strictObject({
   newPassword: z.string().min(8).max(128).optional(),
 }).refine(input => input.newEmail !== undefined || input.newPassword !== undefined);
 
+function publicUser(userId) {
+  return db.prepare('SELECT id, email, created_at, notify_tz FROM users WHERE id = ?').get(userId);
+}
+
 function credentialsUnchanged(user) {
   const current = db.prepare('SELECT email, password_hash, token_version FROM users WHERE id = ?').get(user.id);
   return current && current.email === user.email && current.password_hash === user.password_hash
@@ -93,7 +97,7 @@ router.post('/login', authLimiter, asyncHandler(async (req, res) => {
 
   res.cookie(SESSION_COOKIE_NAME, token, sessionCookieOptions(req));
   rlog.info('login ok', { userId: user.id, secure: sessionCookieOptions(req).secure });
-  res.json({ user: { id: user.id, email: user.email, created_at: user.created_at } });
+  res.json({ user: publicUser(user.id) });
 }));
 
 router.post('/register', authLimiter, asyncHandler(async (req, res) => {
@@ -130,7 +134,7 @@ router.post('/register', authLimiter, asyncHandler(async (req, res) => {
   });
 
   res.cookie(SESSION_COOKIE_NAME, token, sessionCookieOptions(req));
-  res.status(201).json({ user: { id: user.id, email: user.email, created_at: user.created_at } });
+  res.status(201).json({ user: publicUser(user.id) });
 }));
 
 // Clearing the cookie alone left the JWT valid for its remaining 7 days, so a
@@ -158,7 +162,7 @@ router.post('/logout', sessionLimiter, (req, res) => {
 });
 
 router.get('/me', sessionLimiter, requireAuth, (req, res) => {
-  const user = db.prepare('SELECT id, email, created_at FROM users WHERE id = ?').get(req.user.id);
+  const user = publicUser(req.user.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
   res.json({ user });
 });
@@ -194,7 +198,7 @@ router.patch('/me', authLimiter, requireAuth, asyncHandler(async (req, res) => {
   if (result.error) return res.status(result.status).json({ error: result.error });
   const token = jwt.sign({ id: req.user.id, email, tv: result.tokenVersion, sid: result.sid }, process.env.JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
   res.cookie(SESSION_COOKIE_NAME, token, sessionCookieOptions(req));
-  res.json({ user: { id: req.user.id, email, created_at: user.created_at } });
+  res.json({ user: publicUser(req.user.id) });
 }));
 
 const notificationContext = req => ({ userId: req.user.id, actor: 'web' });

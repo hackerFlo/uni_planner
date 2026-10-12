@@ -162,3 +162,17 @@ test('calendar arithmetic preserves leap days and early four-digit years', () =>
   assert.equal(addDays('2024-02-28', 1), '2024-02-29');
   assert.equal(addDays('0001-01-01', 1), '0001-01-02');
 });
+
+test('window boundaries use the account calendar at the local Monday rollover', () => {
+  const now = new Date('2026-10-25T23:30:00Z');
+  assert.equal(getWindowBounds('Europe/Berlin', now).windowStart, '2026-10-26');
+  assert.equal(getWindowBounds('America/Los_Angeles', now).windowStart, '2026-10-19');
+});
+
+test('recurrence cadence matching excludes the original start and moved off-cadence dates', () => {
+  const { isRecurrenceDay } = require('./recurrence');
+  const template = { day_assigned: '2026-10-05', recurrence_interval_days: 3, recurrence_pattern: null };
+  assert.equal(isRecurrenceDay(template, '2026-10-05'), false);
+  assert.equal(isRecurrenceDay(template, '2026-10-07'), false);
+  assert.equal(isRecurrenceDay(template, '2026-10-08'), true);
+});

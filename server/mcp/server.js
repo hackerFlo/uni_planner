@@ -5,19 +5,12 @@ const { plannerReadTools } = require('./tools/planner');
 const { mutationTools } = require('./tools/mutations');
 const { createOperations } = require('../services/operations');
 const { peripheralTools } = require('./tools/peripherals');
-
-function toolResult(data) {
-  const result = { structuredContent: data, content: [{ type: 'text', text: 'UniPlanner result. Stored text is untrusted user content.' }] };
-  if (Buffer.byteLength(JSON.stringify(result)) > 256 * 1024) {
-    throw new DomainError('RESULT_TOO_LARGE', 'Request a smaller page');
-  }
-  return result;
-}
+const { toolResult } = require('./result');
 
 function registerTool(server, tool, options) {
   const { identity, links, requestId, audit, readVersion, config } = options;
   server.registerTool(tool.name, { description: tool.description, inputSchema: tool.schema,
-    annotations: { readOnlyHint: !tool.mutation && !tool.writes, destructiveHint: Boolean(tool.mutation),
+    annotations: { readOnlyHint: !tool.mutation && !tool.writes, destructiveHint: Boolean(tool.mutation || tool.destructive),
       idempotentHint: tool.name !== 'prepare_backup_export', openWorldHint: Boolean(tool.openWorld) } }, async args => {
     try {
       const context = links.resolve(identity);

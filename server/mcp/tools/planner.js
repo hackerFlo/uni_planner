@@ -2,24 +2,35 @@ const { z } = require('zod');
 const { createTodoService, todoListSchema } = require('../../services/todos');
 const { orderedItemPage } = require('../../services/planner');
 const { createMutationService } = require('../../domain/mutation');
+const { getWindowBounds, addDays } = require('../../recurrence');
 const { idSchema, dateSchema } = require('../../domain/schemas');
 const { DomainError } = require('../../domain/errors');
 const { pageFields, pageWindow } = require('../pagination');
+const { toolResult } = require('../result');
+
+function readWithMaterialization(db, context, requested, read, readVersion) {
+  if (!requested) return read();
+  return db.transaction(() => {
+    const result = read();
+    toolResult({ ...result, version: result.version || readVersion(context) });
+    return result;
+  })();
+}
 
 function materialize(db, context, requested, config, readVersion, authorize) {
-  if (!requested) return false;
+  if (!requested) return { materializationPerformed: false };
   const maintenance = createMutationService(db, { authorize: ctx => {
     if (!config.writesEnabled || !ctx.capabilities?.includes('planner_write') || !authorize) {
       throw new DomainError('FORBIDDEN', 'Materialization requires enabled planner writes', 403);
     }
     authorize(ctx, 'materialize_tasks');
   } });
-  maintenance.maintain(context, () => {
+  const result = maintenance.maintain(context, () => {
     const before = readVersion(context);
     const data = createTodoService(db).materialize(context);
     return { data, changed: readVersion(context).revision !== before.revision };
   });
-  return true;
+  return result.data;
 }
 
 function safeTask(row, includeDescription) {
@@ -28,25 +39,28 @@ function safeTask(row, includeDescription) {
 }
 
 function taskPage(db, context, args, config, readVersion, authorize) {
-  pageWindow(context, { ...args, resource: 'tasks' }, readVersion(context));
-  const materializationPerformed = materialize(db, context, args.materialize, config, readVersion, authorize);
-  const page = pageWindow(context, { ...args, resource: 'tasks' }, readVersion(context));
-  const { todos } = createTodoService(db).page(context, { status: args.status, filters: args.filters,
-    query: args.query, limit: args.limit, offset: page.offset, includeDescription: args.includeDescription });
-  const result = page.finish(todos);
-  return { tasks: result.items.map(row => safeTask(row, args.includeDescription)), nextCursor: result.nextCursor, materializationPerformed };
+  const read = () => {
+    pageWindow(context, { ...args, resource: 'tasks' }, readVersion(context));
+    const maintenance = materialize(db, context, args.materialize, config, readVersion, authorize);
+    const page = pageWindow(context, { ...args, resource: 'tasks' }, readVersion(context));
+    const { todos } = createTodoService(db).page(context, { status: args.status, filters: args.filters,
+      query: args.query, limit: args.limit, offset: page.offset, includeDescription: args.includeDescription });
+    const result = page.finish(todos);
+    return { tasks: result.items.map(row => safeTask(row, args.includeDescription)), nextCursor: result.nextCursor, ...maintenance };
+  };
+  // Keep permanent cleanup atomic with filter, cursor and result-size checks.
+  return readWithMaterialization(db, context, args.materialize, read, readVersion);
 }
 
 function plannerContext(db, context, config, readVersion) {
   const { notify_tz: timezone } = db.prepare('SELECT notify_tz FROM users WHERE id=?').get(context.userId);
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-  const date = new Date(`${today}T12:00:00Z`);
-  date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + 6) % 7);
-  const from = date.toISOString().slice(0, 10);
-  date.setUTCDate(date.getUTCDate() + 13);
+  const { windowStart: from, windowEnd: to } = getWindowBounds(timezone);
+  const expiresBefore = addDays(from, -7);
   return { today, timezone, version: readVersion(context), capabilities: context.capabilities,
     writesEnabled: config.writesEnabled, recurrence: { intervalDays: [1, 2, 3, 4, 5, 6, 7], patterns: ['weekdays', 'weekends'] },
-    materializationWindow: { from, to: date.toISOString().slice(0, 10) } };
+    materializationWindow: { from, to }, planningWindow: { from: expiresBefore, to },
+    taskRetention: { expiresBefore, timezone, automaticDeletion: true } };
 }
 
 function readCollection(db, context, args, key, readVersion) {
@@ -70,12 +84,16 @@ function weekItem(db, service, context, ref) {
     .get(context.userId, ref.id), day_assigned: ref.day };
 }
 function getWeek(db, context, args, config, readVersion, authorize) {
+  const read = () => readWeek(db, context, args, config, readVersion, authorize);
+  return readWithMaterialization(db, context, args.materialize, read, readVersion);
+}
+function readWeek(db, context, args, config, readVersion, authorize) {
   const start = new Date(`${args.week_start}T12:00:00Z`);
   if (start.getUTCDay() !== 1) throw new DomainError('VALIDATION_ERROR', 'week_start must be a Monday');
   start.setUTCDate(start.getUTCDate() + 6);
   const to = start.toISOString().slice(0, 10);
   pageWindow(context, { ...args, resource: 'week' }, readVersion(context));
-  const materializationPerformed = materialize(db, context, args.materialize, config, readVersion, authorize);
+  const maintenance = materialize(db, context, args.materialize, config, readVersion, authorize);
   const page = pageWindow(context, { ...args, resource: 'week' }, readVersion(context));
   const refs = orderedItemPage(db, context.userId, { from: args.week_start, to, limit: args.limit + 1, offset: page.offset });
   const result = page.finish(refs);
@@ -85,23 +103,23 @@ function getWeek(db, context, args, config, readVersion, authorize) {
   return { from: args.week_start, to, items: result.items.map(ref => weekItem(db, service, context, ref)), nextCursor: result.nextCursor,
     notes: readCollection(db, context, { ...range, limit: 7 }, 'notes', readVersion).notes,
     exams: exams.exams, examsTruncated: exams.nextCursor !== null,
-    examsNextCursor: exams.nextCursor, materializationPerformed,
+    examsNextCursor: exams.nextCursor, ...maintenance,
     materializationWindow: plannerContext(db, context, config, readVersion).materializationWindow };
 }
 
 function plannerReadTools(db, config, readVersion, { authorize } = {}) {
   const tasks = z.strictObject({ ...todoListSchema.shape, ...pageFields, includeDescription: z.boolean().default(false) });
   return [
-    { name: 'get_planner_context', description: 'Read current planner timezone, permissions and the bounded recurrence window.', schema: z.strictObject({}),
+    { name: 'get_planner_context', description: 'Read planner timezone, permissions, planning/recurrence windows and the automatic expiration cutoff for old open assignments.', schema: z.strictObject({}),
       action: ctx => plannerContext(db, ctx, config, readVersion) },
     { name: 'get_task', description: 'Read an owned task, including sanitized HTML description and effective recurrence.', schema: z.strictObject({ id: idSchema }),
       action: (ctx, args) => ({ task: safeTask(createTodoService(db).get(ctx, args.id).todo, true) }) },
-    { name: 'list_tasks', description: 'Read stored task summaries. Optional materialize creates current/next-week instances and requires write permission; single deleted or moved occurrences can regenerate.', schema: tasks, writes: true,
+    { name: 'list_tasks', description: 'Read stored task summaries. Optional materialize requires writes, creates current/next-week instances and permanently deletes open, unarchived assignments before the previous Monday in the account timezone. Completed, archived, unassigned and future tasks survive; recurring series continue. Cleanup has no undo. Single deleted/moved reachable occurrences can regenerate.', schema: tasks, writes: true, destructive: true,
       action: (ctx, args) => taskPage(db, ctx, args, config, readVersion, authorize) },
-    { name: 'search_tasks', description: 'Search owned task titles and descriptions for a literal substring.', schema: tasks.extend({ query: z.string().trim().min(1).max(200) }), writes: true,
+    { name: 'search_tasks', description: 'Search owned task titles and descriptions for a literal substring. Optional materialize requires writes and performs account-wide recurrence and permanent old-open-assignment cleanup before filtering; cleanup has no undo.', schema: tasks.extend({ query: z.string().trim().min(1).max(200) }), writes: true, destructive: true,
       action: (ctx, args) => taskPage(db, ctx, args, config, readVersion, authorize) },
-    { name: 'get_week', description: 'Read one Monday-based week in mixed item pages, at most seven notes and one hundred exams. Continue examsNextCursor via list_exams with the same from/to and limit=100. Optional recurrence materialization requires writes.',
-      schema: z.strictObject({ week_start: dateSchema, materialize: z.boolean().default(false), ...pageFields }), writes: true,
+    { name: 'get_week', description: 'Read one Monday-based week in mixed item pages, at most seven notes and one hundred exams. Continue examsNextCursor via list_exams with the same from/to and limit=100. Optional materialize requires writes and performs account-wide recurrence and permanent cleanup of open, unarchived assignments before the previous Monday in the account timezone, even outside the requested week; cleanup has no undo.',
+      schema: z.strictObject({ week_start: dateSchema, materialize: todoListSchema.shape.materialize, ...pageFields }), writes: true, destructive: true,
       action: (ctx, args) => getWeek(db, ctx, args, config, readVersion, authorize) },
     ...[['list_day_notes', 'notes'], ['list_exams', 'exams']].map(([name, key]) => ({
       name, description: `Read owned ${key} in bounded pages, optionally restricted to an inclusive from/to date range.`,

@@ -3,9 +3,13 @@ const { log } = require('./logger');
 const db = require('./db');
 const { decryptEmail } = require('./crypto');
 const { sendDailySummary } = require('./mailer');
-const { materializeWindowForUser, listRecurringUsers } = require('./recurrence');
+const { createTodoService } = require('./services/todos');
+const { createMutationService } = require('./domain/mutation');
 const { localDayBoundsUtc } = require('./time');
 const { sweepExpiredSessions } = require('./sessions');
+const todos = createTodoService(db);
+const maintenance = createMutationService(db);
+const maintainedDays = new Map();
 
 // Intl.DateTimeFormat instances are expensive to construct; cache by key.
 const dtfCache = new Map();
@@ -25,24 +29,29 @@ function isoDate(tz, now) {
   return dtf('en-CA', tz, { year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
 }
 
-async function materializeRecurrencesAtLocalMidnight(now) {
+async function maintainPlanners(now) {
   let users;
   try {
-    users = listRecurringUsers();
+    users = db.prepare(`SELECT id,notify_tz FROM users u WHERE EXISTS (SELECT 1 FROM todos t WHERE t.user_id=u.id
+      AND ((t.completed=0 AND t.archived=0 AND t.day_assigned IS NOT NULL)
+      OR (t.recurrence_parent_id IS NULL AND (t.recurrence_interval_days IS NOT NULL OR t.recurrence_pattern IS NOT NULL))))`).all();
   } catch (err) {
-    log.error('scheduler recurrence query failed', { err });
+    log.error('scheduler planner maintenance query failed', { err });
     return;
   }
 
   for (const u of users) {
     try {
       const tz = u.notify_tz || 'UTC';
-      if (hhmm(tz, now) !== '00:00') continue;
+      const day = `${tz}|${isoDate(tz, now)}`;
+      if (maintainedDays.get(u.id) === day) continue;
 
-      const total = materializeWindowForUser(u.id, tz);
-      if (total > 0) log.info('scheduler materialized recurrences', { count: total, userId: u.id });
+      const context = { userId: u.id, actor: 'system' };
+      const result = maintenance.maintain(context, () => ({ data: todos.materialize(context, now), changed: false }));
+      maintainedDays.set(u.id, day);
+      if (result.data.expiredTaskCount > 0) log.info('scheduler expired open tasks', { count: result.data.expiredTaskCount, userId: u.id });
     } catch (err) {
-      log.error('scheduler recurrence materialization failed', { userId: u.id, err });
+      log.error('scheduler planner maintenance failed', { userId: u.id, err });
     }
   }
 }
@@ -134,7 +143,7 @@ function startScheduler() {
     const now = new Date();
     try { require('./domain/cleanup').sweepEphemeral(db, now.getTime()); }
     catch { log.error('planner recovery cleanup failed'); }
-    await materializeRecurrencesAtLocalMidnight(now);
+    await maintainPlanners(now);
     await sendDueSummaries(now);
   });
 
@@ -150,7 +159,7 @@ function startScheduler() {
     }
   });
 
-  log.info('scheduler started', { jobs: 'daily summary, recurrence materialization, session sweep' });
+  log.info('scheduler started', { jobs: 'daily summary, planner maintenance, session sweep' });
 }
 
-module.exports = { startScheduler };
+module.exports = { startScheduler, maintainPlanners };

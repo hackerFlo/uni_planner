@@ -2,11 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { notificationApi, capturedRequest } from '../../api/settingsMutations';
 import { userMessage } from '../../api/errors';
 import { useUndo } from '../../context/UndoContext';
+import { useAuth } from '../../context/AuthContext';
 import useAsync from '../../hooks/useAsync';
 import { TimePicker } from '../ui/TimePicker';
 
 export default function NotificationSection() {
   const undo = useUndo();
+  const { refreshUser } = useAuth();
   const [notifForm, setNotifForm] = useState({ notify_enabled: false, notify_time: '22:00', notify_email: '' });
   const [version, setVersion] = useState(null);
   const [notifLoad, setNotifLoad] = useState('loading');
@@ -34,6 +36,7 @@ export default function NotificationSection() {
         setNotifForm({ notify_enabled: saved.notify_enabled, notify_time: saved.notify_time, notify_email: saved.notify_email });
       }
       undo?.recordOperation(receipt, loadNotifSettings);
+      await refreshUser();
       return 'Notification settings saved';
     } catch (error) {
       if (error.status === 409) { setNotifLoad('failed'); setNotifLoadError('The planner changed. Reload before saving this draft.'); }

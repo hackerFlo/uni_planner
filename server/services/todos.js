@@ -2,7 +2,8 @@ const { z } = require('zod');
 const { DomainError } = require('../domain/errors');
 const { idSchema, parse } = require('../domain/schemas');
 const { sanitizeDescription, validateDayAssigned } = require('../middleware/validate');
-const { createRecurrenceService } = require('../recurrence');
+const { createRecurrenceService, getWindowBounds, addDays } = require('../recurrence');
+const { createTaskRetentionService } = require('./taskRetention');
 const { createPlannerService } = require('./planner');
 
 const daySchema = z.string().refine(value => Boolean(validateDayAssigned(value)), 'Invalid calendar date');
@@ -19,7 +20,8 @@ const todoUpdateSchema = z.strictObject({ ...Object.fromEntries(Object.entries(c
   planner_order: z.number().int().nonnegative().safe().nullable().optional(),
 });
 const todoListSchema = z.strictObject({
-  status: z.enum(['active', 'archived', 'completed', 'all']).default('active'), materialize: z.boolean().default(false),
+  status: z.enum(['active', 'archived', 'completed', 'all']).default('active'),
+  materialize: z.boolean().default(false).describe('Requires writes: generate current/next-week recurrence and permanently delete open, unarchived assignments before the previous Monday in the account timezone.'),
   filters: z.strictObject({ from: daySchema.optional(), to: daySchema.optional(), list_id: idSchema.optional() }).default({}),
 });
 const todoRemoveSchema = z.strictObject({ id: idSchema, scope: z.enum(['single', 'all']).default('single') });
@@ -92,16 +94,21 @@ function listQuery(db, context, { status, filters, query }) {
   return { sql: `${TODO_SELECT} WHERE ${conditions.join(' AND ')} ORDER BY ${order}`, params };
 }
 
-function materializeTodos(db, recurrence, context) {
+function materializeTodos(db, recurrence, context, now = new Date()) {
   const userId = owner(context);
-  recurrence.materializeWindowForUser(userId, timezone(db, userId));
-  return { materializationPerformed: true };
+  const tz = timezone(db, userId);
+  const { windowStart } = getWindowBounds(tz, now);
+  return db.transaction(() => {
+    recurrence.materializeWindowForUser(userId, tz, now);
+    const { removedIds } = createTaskRetentionService(db).cleanup(context, { before: addDays(windowStart, -7) });
+    return { materializationPerformed: true, expiredTaskCount: removedIds.length };
+  })();
 }
 function listTodos(db, recurrence, context, input) {
   const args = parse(todoListSchema, input);
   const query = listQuery(db, context, args);
-  if (args.materialize) materializeTodos(db, recurrence, context);
-  return { todos: db.prepare(query.sql).all(...query.params), materializationPerformed: args.materialize };
+  const maintenance = args.materialize ? materializeTodos(db, recurrence, context) : { materializationPerformed: false };
+  return { todos: db.prepare(query.sql).all(...query.params), ...maintenance };
 }
 const todoPageSchema = z.strictObject({ ...todoListSchema.omit({ materialize: true }).shape,
   limit: z.number().int().min(1).max(100).default(50), offset: z.number().int().nonnegative().safe().default(0),
@@ -280,7 +287,7 @@ function createTodoService(db) {
   return {
     list: (context, input = {}) => listTodos(db, recurrence, context, input),
     page: (context, input = {}) => pageTodos(db, context, input),
-    materialize: context => materializeTodos(db, recurrence, context),
+    materialize: (context, now) => materializeTodos(db, recurrence, context, now),
     get: (context, id) => ({ todo: ownedTodo(db, owner(context), id) }),
     create: (context, input) => createTodo(db, recurrence, context, input),
     update: (context, input) => updateTodo(db, recurrence, context, input),

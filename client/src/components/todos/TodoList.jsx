@@ -62,7 +62,6 @@ export default function TodoList({ list, todos, loading, onAdd, onEdit, onComple
                 index={index}
                 draggableId={row.draggableId}
                 isGhost={row.isGhost}
-                isAssigned={!!row.item.day_assigned}
                 onComplete={onComplete}
                 onEdit={onEdit}
                 onDelete={onDelete}

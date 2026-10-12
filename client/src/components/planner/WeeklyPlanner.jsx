@@ -4,7 +4,7 @@ import WeekScrollbar from './WeekScrollbar';
 import { useHolidays } from '../../hooks/useHolidays';
 import { useLists } from '../../context/ListsContext';
 import { useExams } from '../../context/ExamsContext';
-import { toIso } from '../../utils/dates';
+import { useToday } from '../../context/TimeContext';
 
 const WEEK_LABEL = { '-1': 'Last Week', '0': 'This Week', '1': 'Next Week' };
 
@@ -12,6 +12,7 @@ export default function WeeklyPlanner({ todos, dividers, loading = false, weekOf
   const holidays = useHolidays();
   const { lists } = useLists();
   const { upcomingExams } = useExams();
+  const today = useToday();
 
   const examsByDate = useMemo(() => {
     const m = new Map();
@@ -59,7 +60,7 @@ export default function WeeklyPlanner({ todos, dividers, loading = false, weekOf
       } else if (weekOffset === -1) {
         container.scrollLeft = container.scrollWidth;
       } else {
-        const idx = weekDates.indexOf(toIso(new Date()));
+        const idx = weekDates.indexOf(today);
         if (idx < 0) return;
         const col = container.firstChild?.children[idx];
         if (!col) return;
@@ -68,7 +69,7 @@ export default function WeeklyPlanner({ todos, dividers, loading = false, weekOf
         container.scrollLeft += colRect.left - containerRect.left;
       }
     });
-  }, [weekOffset, weekDates]);
+  }, [weekOffset, weekDates, today]);
 
   return (
     <div className="h-full flex flex-col p-5">

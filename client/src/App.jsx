@@ -54,13 +54,13 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <TimeProvider>
       <ToastProvider>
       <LoadingBar />
       <GlobalErrorToast />
       <NewVersionNotice />
       <ModalProvider>
       <AuthProvider>
+      <TimeProvider>
       <PreferencesProvider>
         <UndoProvider>
         <ListsProvider>
@@ -79,10 +79,10 @@ export default function App() {
         </ListsProvider>
         </UndoProvider>
       </PreferencesProvider>
+      </TimeProvider>
       </AuthProvider>
       </ModalProvider>
       </ToastProvider>
-      </TimeProvider>
     </ErrorBoundary>
   );
 }

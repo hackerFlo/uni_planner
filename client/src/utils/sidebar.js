@@ -1,11 +1,16 @@
-// The sidebar lists the unassigned backlog followed by every assignment,
-// whether or not the week it belongs to is the one on screen. It used to hold
-// back assignments outside the visible week and surface them in a separate row,
-// so that a todo could never be invisible in the planner yet silently present
-// here. That split is gone by request: one list, no special cases.
-//
-// The day chip is therefore the only thing saying which day an item belongs to,
-// and for a week the arrows cannot reach it still reads as a bare weekday.
+import { getWeekDates, parseDateLocal } from './dates.js';
+
+// Keep the backlog and reachable assignments in one list.
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+export function sidebarAssignment(dayAssigned, today) {
+  if (!dayAssigned) return { inWindow: false, label: '' };
+  const now = parseDateLocal(today);
+  const from = getWeekDates(-1, now)[0];
+  const to = getWeekDates(1, now)[6];
+  const inWindow = dayAssigned >= from && dayAssigned <= to;
+  return { inWindow, label: inWindow ? DAY_NAMES[parseDateLocal(dayAssigned).getDay()] : dayAssigned };
+}
 
 function byDayAsc(a, b) {
   return a.day_assigned.localeCompare(b.day_assigned);
@@ -15,9 +20,9 @@ function byCreatedDesc(a, b) {
   return b.created_at.localeCompare(a.created_at);
 }
 
-export function buildSidebar(items) {
+export function buildSidebar(items, today) {
   const unassigned = items.filter(t => !t.day_assigned).sort(byCreatedDesc);
-  const assigned = items.filter(t => t.day_assigned).sort(byDayAsc);
+  const assigned = items.filter(t => t.day_assigned && sidebarAssignment(t.day_assigned, today).inWindow).sort(byDayAsc);
   return [...unassigned, ...assigned];
 }
 

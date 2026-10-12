@@ -11,6 +11,7 @@ const { plannerReadTools } = require('./planner');
 const { orderedItems } = require('../../services/planner');
 const { getWindowBounds, addDays } = require('../../recurrence');
 const { DomainError } = require('../../domain/errors');
+const { pageWindow } = require('../pagination');
 let seq = 0;
 function account() {
   const userId = db.prepare('INSERT INTO users(email,password_hash) VALUES(?,?)').run(`reader-${++seq}@example.com`, 'synthetic').lastInsertRowid;
@@ -86,10 +87,123 @@ test('materialization reauthorizes at transaction entry and coalesces version ch
   const result = call(tools(true).list_tasks, ctx, { materialize: true });
   assert.equal(result.materializationPerformed, true);
   assert.ok(result.tasks.length > 1);
+  assert.equal(db.prepare('SELECT id FROM todos WHERE user_id=? AND id=?').get(ctx.userId, id), undefined);
+  assert.equal(result.tasks.filter(row => row.recurrence_parent_id === null && row.recurrence_interval_days === 1).length, 1);
   assert.equal(version(ctx).revision, before.revision + 1);
   call(tools(true).list_tasks, ctx, { materialize: true });
   assert.equal(version(ctx).revision, before.revision + 1);
 });
+
+function retentionFixture() {
+  const ctx = account();
+  const other = account();
+  const { windowStart, windowEnd } = getWindowBounds('UTC');
+  const boundary = addDays(windowStart, -7);
+  const expired = task(ctx, 'Retention expired', addDays(boundary, -1));
+  const retained = [task(ctx, 'Retention boundary', boundary), task(ctx, 'Retention current', windowStart),
+    task(ctx, 'Retention future', addDays(windowEnd, 30)), task(ctx, 'Retention backlog'),
+    task(ctx, 'Retention completed', addDays(boundary, -20)), task(ctx, 'Retention archived', addDays(boundary, -10)),
+    task(other, 'Retention foreign', addDays(boundary, -1))];
+  db.prepare('UPDATE todos SET completed=1,archived=1,completed_at=? WHERE user_id=? AND id=?')
+    .run(`${boundary}T12:00:00.000Z`, ctx.userId, retained[4]);
+  db.prepare('UPDATE todos SET archived=1 WHERE user_id=? AND id=?').run(ctx.userId, retained[5]);
+  return { ctx, expired, retained, windowStart };
+}
+const rowsFor = ids => ids.map(id => db.prepare('SELECT * FROM todos WHERE id=?').get(id));
+function retentionArgs(name, fixture) {
+  return name === 'get_week' ? { week_start: fixture.windowStart }
+    : { status: 'all', ...(name === 'search_tasks' ? { query: 'Retention' } : {}) };
+}
+
+test('stored-only MCP task and week reads leave expired assignments and planner revisions untouched', () => {
+  const fixture = retentionFixture();
+  const ids = [fixture.expired, ...fixture.retained];
+  const before = rowsFor(ids);
+  const beforeVersion = version(fixture.ctx);
+  const all = tools();
+  assert.equal(call(all.get_task, fixture.ctx, { id: fixture.expired }).task.id, fixture.expired);
+  for (const name of ['list_tasks', 'search_tasks', 'get_week']) {
+    assert.equal(call(all[name], fixture.ctx, retentionArgs(name, fixture)).materializationPerformed, false);
+  }
+  assert.deepEqual(rowsFor(ids), before);
+  assert.deepEqual(version(fixture.ctx), beforeVersion);
+});
+
+for (const name of ['list_tasks', 'search_tasks', 'get_week']) {
+  test(`explicit ${name} materialization deletes only expired owned open assignments`, () => {
+    const fixture = retentionFixture();
+    const beforeRetained = rowsFor(fixture.retained);
+    const beforeVersion = version(fixture.ctx);
+    const result = call(tools(true)[name], fixture.ctx, { ...retentionArgs(name, fixture), materialize: true });
+    assert.equal(result.materializationPerformed, true);
+    assert.equal(result.expiredTaskCount, 1);
+    assert.equal(rowsFor([fixture.expired])[0], undefined);
+    assert.deepEqual(rowsFor(fixture.retained), beforeRetained);
+    assert.equal(version(fixture.ctx).revision, beforeVersion.revision + 1);
+  });
+
+  test(`${name} cleanup requires enabled writes and live write authorization without changing stored tasks`, () => {
+    const fixture = retentionFixture();
+    const ids = [fixture.expired, ...fixture.retained];
+    const before = rowsFor(ids);
+    const beforeVersion = version(fixture.ctx);
+    const args = { ...retentionArgs(name, fixture), materialize: true };
+    assert.throws(() => call(tools()[name], fixture.ctx, args), { code: 'FORBIDDEN' });
+    assert.throws(() => call(tools(true)[name], { ...fixture.ctx, capabilities: ['planner_read'] }, args), { code: 'FORBIDDEN' });
+    let checks = 0;
+    const revoked = tools(true, () => { if (++checks === 2) throw new DomainError('FORBIDDEN', 'Revoked', 403); });
+    assert.throws(() => call(revoked[name], fixture.ctx, args), { code: 'FORBIDDEN' });
+    assert.deepEqual(rowsFor(ids), before);
+    assert.deepEqual(version(fixture.ctx), beforeVersion);
+  });
+
+  test(`${name} rolls back cleanup if materialization invalidates a previously valid cursor`, () => {
+    const fixture = retentionFixture();
+    const tool = tools(true)[name];
+    const args = tool.schema.parse({ ...retentionArgs(name, fixture), materialize: true, limit: 1 });
+    const beforeVersion = version(fixture.ctx);
+    // A cursor captured before a calendar rollover can still match the stored
+    // revision until maintenance deletes the newly expired tasks.
+    const resource = name === 'get_week' ? 'week' : 'tasks';
+    const cursor = pageWindow(fixture.ctx, { ...args, resource }, beforeVersion).finish([{}, {}]).nextCursor;
+    assert.throws(() => call(tool, fixture.ctx, { ...args, cursor }), { code: 'CONFLICT' });
+    assert.equal(rowsFor([fixture.expired])[0]?.id, fixture.expired);
+    assert.deepEqual(version(fixture.ctx), beforeVersion);
+  });
+
+  test(`${name} rolls back cleanup and revision when the result envelope exceeds its limit`, () => {
+    const ctx = account();
+    const { windowStart } = getWindowBounds('UTC');
+    const expired = task(ctx, 'Expired assignment', addDays(windowStart, -8));
+    const retained = Array.from({ length: 60 }, (_, index) => task(ctx, `Large result ${index}`, windowStart));
+    const ids = [expired, ...retained];
+    const before = rowsFor(ids);
+    const beforeVersion = version(ctx);
+    const args = { materialize: true, limit: 60, ...(name === 'get_week'
+      ? { week_start: windowStart } : { includeDescription: true,
+        ...(name === 'search_tasks' ? { query: 'Large result' } : {}) }) };
+    assert.throws(() => call(tools(true)[name], ctx, args), { code: 'RESULT_TOO_LARGE' });
+    assert.deepEqual(rowsFor(ids), before);
+    assert.deepEqual(version(ctx), beforeVersion);
+  });
+}
+
+for (const name of ['list_tasks', 'search_tasks']) {
+  test(`${name} rejects invalid ranges and foreign list filters before destructive maintenance`, () => {
+    const fixture = retentionFixture();
+    const ids = [fixture.expired, ...fixture.retained];
+    const beforeVersion = version(fixture.ctx);
+    const foreignList = rowsFor([fixture.retained.at(-1)])[0].list_id;
+    const filters = [{ from: '2026-10-01' }, { to: '2026-10-01' },
+      { from: '2026-10-02', to: '2026-10-01' }, { from: '2026-01-01', to: '2026-12-31' }, { list_id: foreignList }];
+    for (const filter of filters) {
+      assert.throws(() => call(tools(true)[name], fixture.ctx,
+        { ...retentionArgs(name, fixture), filters: filter, materialize: true }), { code: 'VALIDATION_ERROR' });
+      assert.deepEqual(rowsFor(ids).map(row => row?.id), ids);
+      assert.deepEqual(version(fixture.ctx), beforeVersion);
+    }
+  });
+}
 
 
 test('pure adapters never collect an unbounded SQL result before slicing', () => {
@@ -107,6 +221,17 @@ test('pure adapters never collect an unbounded SQL result before slicing', () =>
   const all = Object.fromEntries(plannerReadTools(bounded, { writesEnabled: false }, version).map(tool => [tool.name, tool]));
   assert.equal(call(all.list_tasks, ctx, { limit: 100 }).tasks.length, 100);
   assert.equal(call(all.get_week, ctx, { week_start: '2026-09-21', limit: 100 }).items.length, 100);
+});
+
+test('planner context describes the account retention boundary without performing cleanup', () => {
+  const fixture = retentionFixture();
+  const before = rowsFor([fixture.expired, ...fixture.retained]);
+  const { windowStart, windowEnd } = getWindowBounds('UTC');
+  const expiresBefore = addDays(windowStart, -7);
+  const result = call(tools().get_planner_context, fixture.ctx);
+  assert.deepEqual(result.planningWindow, { from: expiresBefore, to: windowEnd });
+  assert.deepEqual(result.taskRetention, { expiresBefore, timezone: 'UTC', automaticDeletion: true });
+  assert.deepEqual(rowsFor([fixture.expired, ...fixture.retained]), before);
 });
 
 test('individual task/context reads and range collection validation remain owner scoped', () => {

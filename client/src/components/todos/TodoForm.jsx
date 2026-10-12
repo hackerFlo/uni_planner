@@ -10,12 +10,11 @@ import { useToast } from '../../context/ToastContext';
 import { hasUnsavedChanges } from '../../utils/todoForm';
 import { sanitizeRichHtml, richTextToPlain } from '../../utils/richText';
 import { renderRichTextInto } from '../../utils/richTextDom';
-import { toIso } from '../../utils/dates';
+import { toIso, parseDateLocal } from '../../utils/dates';
+import { useToday } from '../../context/TimeContext';
 
-function getAssignableDates(extraDate) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayIso = toIso(today);
+function getAssignableDates(extraDate, todayIso) {
+  const today = parseDateLocal(todayIso);
 
   const day = today.getDay();
   const diffToMonday = day === 0 ? -6 : 1 - day;
@@ -155,8 +154,9 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
   useRegisterModal();
   const isMobile = useIsMobile();
   const { lists } = useLists();
+  const todayIso = useToday();
   const extraDate = todo?.day_assigned ?? defaults.day_assigned;
-  const assignableDates = useMemo(() => getAssignableDates(extraDate), [extraDate]);
+  const assignableDates = useMemo(() => getAssignableDates(extraDate, todayIso), [extraDate, todayIso]);
 
   const defaultListId = todo?.list_id ?? defaults.list_id ?? lists[0]?.id ?? null;
   const [title, setTitle] = useState(todo?.title ?? '');
