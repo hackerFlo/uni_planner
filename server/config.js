@@ -95,12 +95,69 @@ function parseWatchtowerToken(raw) {
   return value;
 }
 
+// --- Optional AI list categorisation ------------------------------------------
+// ANTHROPIC_API_KEY unset means the feature is unavailable: the Settings toggle
+// is hidden, enabling is refused and no request is ever made. The value is never
+// echoed in an error message (AR-6).
+const ANTHROPIC_API_KEY_MAX_LENGTH = 512;
+
+function parseAnthropicApiKey(raw) {
+  if (raw === undefined || raw.trim() === '') return null;
+  const value = raw.trim();
+  if (value.length > ANTHROPIC_API_KEY_MAX_LENGTH) {
+    throw new Error(`ANTHROPIC_API_KEY must be at most ${ANTHROPIC_API_KEY_MAX_LENGTH} characters`);
+  }
+  if (/\s/.test(value)) throw new Error('ANTHROPIC_API_KEY must not contain whitespace');
+  return value;
+}
+
+const AI_LIST_MODEL_DEFAULT = 'claude-haiku-5-5';
+const AI_LIST_MODEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/;
+
+function parseAiListModel(raw) {
+  if (raw === undefined || raw.trim() === '') return AI_LIST_MODEL_DEFAULT;
+  const value = raw.trim();
+  if (!AI_LIST_MODEL_PATTERN.test(value)) throw new Error(`AI_LIST_MODEL must be a model id such as ${AI_LIST_MODEL_DEFAULT}, got "${raw}"`);
+  return value;
+}
+
+const AI_LIST_DAILY_LIMIT_DEFAULT = 100;
+const AI_LIST_DAILY_LIMIT_MAX = 100000;
+
+function parseAiListDailyLimit(raw) {
+  if (raw === undefined || raw.trim() === '') return AI_LIST_DAILY_LIMIT_DEFAULT;
+  const limit = Number(raw);
+  if (!Number.isInteger(limit) || limit < 1 || limit > AI_LIST_DAILY_LIMIT_MAX) {
+    throw new Error(`AI_LIST_DAILY_LIMIT must be an integer from 1 to ${AI_LIST_DAILY_LIMIT_MAX}, got "${raw}"`);
+  }
+  return limit;
+}
+
+// Environment only, for pointing the SDK at a local fake. Never user input.
+function parseAnthropicBaseUrl(raw) {
+  if (raw === undefined || raw.trim() === '') return null;
+  let url;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    throw new Error(`ANTHROPIC_BASE_URL must be an absolute URL like https://example.com, got "${raw}"`);
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error(`ANTHROPIC_BASE_URL must use http or https, got "${raw}"`);
+  if (url.pathname !== '/' || url.search || url.hash) throw new Error(`ANTHROPIC_BASE_URL must be a bare origin with no path, got "${raw}"`);
+  return url.origin;
+}
+
 const TRUST_PROXY_HOPS = parseTrustProxyHops(process.env.TRUST_PROXY_HOPS);
 const COOKIE_SECURE_OVERRIDE = parseCookieSecureOverride(process.env.COOKIE_SECURE);
 const CORS_ORIGIN = parseCorsOrigin(process.env.CORS_ORIGIN);
 const GITHUB_REPO = parseGithubRepo(process.env.GITHUB_REPO);
 const WATCHTOWER_URL = parseWatchtowerUrl(process.env.WATCHTOWER_URL);
 const WATCHTOWER_TOKEN = parseWatchtowerToken(process.env.WATCHTOWER_TOKEN);
+const ANTHROPIC_API_KEY = parseAnthropicApiKey(process.env.ANTHROPIC_API_KEY);
+const AI_LIST_MODEL = parseAiListModel(process.env.AI_LIST_MODEL);
+const AI_LIST_DAILY_LIMIT = parseAiListDailyLimit(process.env.AI_LIST_DAILY_LIMIT);
+const ANTHROPIC_BASE_URL = parseAnthropicBaseUrl(process.env.ANTHROPIC_BASE_URL);
+const AI_LIST_AVAILABLE = ANTHROPIC_API_KEY !== null;
 
 // Marking the cookie Secure on a plain-HTTP page makes the browser discard it
 // silently: login returns 200 and every request after it is a 401. So Secure
@@ -131,6 +188,16 @@ module.exports = {
   WATCHTOWER_URL,
   WATCHTOWER_URL_DEFAULT,
   WATCHTOWER_TOKEN,
+  ANTHROPIC_API_KEY,
+  AI_LIST_MODEL,
+  AI_LIST_MODEL_DEFAULT,
+  AI_LIST_DAILY_LIMIT,
+  ANTHROPIC_BASE_URL,
+  AI_LIST_AVAILABLE,
+  parseAnthropicApiKey,
+  parseAiListModel,
+  parseAiListDailyLimit,
+  parseAnthropicBaseUrl,
   parseTrustProxyHops,
   parseCookieSecureOverride,
   parseCorsOrigin,

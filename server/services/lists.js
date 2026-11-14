@@ -3,7 +3,8 @@ const { z } = require('zod');
 const { DomainError } = require('../domain/errors');
 const { idSchema, parse } = require('../domain/schemas');
 
-const fields = { name: z.string().trim().min(1).max(40), color: z.enum(['indigo', 'emerald', 'teal', 'amber', 'rose', 'sky', 'violet', 'pink', 'slate']) };
+const PALETTE = ['indigo', 'emerald', 'teal', 'amber', 'rose', 'sky', 'violet', 'pink', 'slate'];
+const fields = { name: z.string().trim().min(1).max(40), color: z.enum(PALETTE) };
 const listSchemas = {
   create: z.strictObject(fields),
   update: z.strictObject({ id: idSchema, name: fields.name.optional(), color: fields.color.optional() })
@@ -140,4 +141,4 @@ function removeList(db, context, { id, moveTo }) {
   })();
 }
 
-module.exports = { createListService, pageSchema, listSchemas };
+module.exports = { createListService, pageSchema, listSchemas, PALETTE };

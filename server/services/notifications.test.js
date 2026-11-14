@@ -47,7 +47,8 @@ test('settings encrypt email and expose only owned normalized fields', () => {
 
 test('settings strictly reject malformed booleans, times, zones, recipients and extra fields', () => {
   for (const args of [{ notify_enabled: 'true' }, { notify_time: '25:00' }, { notify_tz: 'Mars/Olympus' },
-    { notify_email: 'a@example.com\r\nBcc: b@example.com' }, { notify_email: 'bad' }, { user_id: 2 }, {}]) {
+    { notify_email: 'a@example.com\r\nBcc: b@example.com' }, { notify_email: 'bad' },
+    { notify_email: 'x,extra@example.org' }, { notify_email: 'a<b>@example.org' }, { user_id: 2 }, {}]) {
     assert.throws(() => service.update(ctx, args), { code: 'VALIDATION_ERROR' });
   }
   assert.equal(service.settings(ctx).notify_enabled, false);

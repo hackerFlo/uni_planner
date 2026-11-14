@@ -56,11 +56,21 @@ export class PreferencesSync {
     return true;
   }
 
+  // The server no longer knows a profile this browser created (a restore or a
+  // new database). Its cached settings are stale, so they are not re-uploaded:
+  // the browser starts a new profile from defaults.
+  startOver() {
+    this.marker = { id: this.uuid(), initialized: false, settings: { ...DEFAULT_PREFERENCES } };
+    this.saveCache();
+    this.publish({ profileId: this.marker.id, preferences: this.marker.settings });
+  }
+
   async fetchProfile(signal) {
     const options = { signal, cache: 'no-store', redirect: 'manual' };
     try { return await this.api.get(`/api/preferences/profiles/${this.marker.id}`, options); }
     catch (error) {
-      if (error.status !== 404 || this.marker.initialized || this.closed || signal.aborted) throw error;
+      if (error.status !== 404 || this.closed || signal.aborted) throw error;
+      if (this.marker.initialized) this.startOver();
     }
     const { version } = await this.api.get('/api/planner/version', options);
     if (this.closed || signal.aborted) return null;

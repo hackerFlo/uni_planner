@@ -19,6 +19,33 @@ test.describe('API transport', () => {
     assert.equal(fetchMock.mock.callCount(), 1);
   });
 
+  test('does not count a silent request as activity', async () => {
+    let busyDuring = null;
+    test.mock.method(globalThis, 'fetch', async () => { busyDuring = isBusy(); return new Response('{}'); });
+    await api.get('/api/planner/version', { silent: true });
+    assert.equal(busyDuring, false);
+  });
+
+  test('counts an ordinary request as activity', async () => {
+    let busyDuring = null;
+    test.mock.method(globalThis, 'fetch', async () => { busyDuring = isBusy(); return new Response('{}'); });
+    await api.get('/api/todos');
+    assert.equal(busyDuring, true);
+  });
+
+  test('does not hand the silent flag to fetch', async () => {
+    const fetchMock = test.mock.method(globalThis, 'fetch', async () => new Response('{}'));
+    await api.get('/api/planner/version', { silent: true });
+    assert.equal('silent' in fetchMock.mock.calls[0].arguments[1], false);
+  });
+
+  test('keeps the conflict code and current version on the error', async () => {
+    const currentVersion = { epoch: 'a'.repeat(32), revision: 3 };
+    test.mock.method(globalThis, 'fetch', async () => new Response(
+      JSON.stringify({ error: 'Planner changed', code: 'CONFLICT', currentVersion }), { status: 409 }));
+    await assert.rejects(api.post('/api/todos', {}), { status: 409, code: 'CONFLICT', currentVersion });
+  });
+
   test('does not allow callers to follow Access redirects', async () => {
     const fetchMock = test.mock.method(globalThis, 'fetch', async () => new Response('{}'));
     await api.get('/api/todos', { redirect: 'follow' });

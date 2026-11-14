@@ -3,7 +3,7 @@ const { settingsSchema, DEFAULT_PREFERENCES } = require('./preferences');
 const { log } = require('../logger');
 function exportSettings(db, userId, rlog) {
   const row = db.prepare(
-    'SELECT notify_enabled, notify_time, notify_email_enc, notify_tz FROM users WHERE id = ?'
+    'SELECT notify_enabled, notify_time, notify_email_enc, notify_tz, ai_list_enabled FROM users WHERE id = ?'
   ).get(userId);
   let notifyEmail = '';
   if (row?.notify_email_enc) {
@@ -19,6 +19,7 @@ function exportSettings(db, userId, rlog) {
     notify_time: row?.notify_time || '22:00',
     notify_email: notifyEmail,
     notify_tz: row?.notify_tz || 'UTC',
+    ai_list_enabled: !!row?.ai_list_enabled,
   };
 }
 

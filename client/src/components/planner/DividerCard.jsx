@@ -3,6 +3,7 @@ import { Draggable } from '@hello-pangea/dnd';
 import Tooltip from '../ui/Tooltip';
 import { useCopyDrag } from '../../context/CopyDragContext';
 import { useDragTilt } from '../../hooks/useDragTilt';
+import { dragTransform, dropTransition } from '../../utils/dropTransition';
 
 // The body is its own component because it calls a hook: the render prop of a
 // Draggable is invoked inside the library's own render, so a hook here would
@@ -10,20 +11,21 @@ import { useDragTilt } from '../../hooks/useDragTilt';
 const DividerBody = memo(function DividerBody({ provided, snapshot, item, isGhost, boardDragging, onDelete }) {
   const dragging = snapshot.isDragging;
   const isCopying = useCopyDrag() && snapshot.isDragging;
-  const rotation = useDragTilt(dragging);
+  const setDividerRef = useDragTilt(dragging, provided.innerRef);
 
   return (
     <div
-      ref={provided.innerRef}
+      ref={setDividerRef}
       {...provided.draggableProps}
       {...provided.dragHandleProps}
       style={{
         ...provided.draggableProps.style,
+        transition: dropTransition(snapshot, provided.draggableProps.style?.transition),
         // Picked up, a divider is a card: same tilt, same lift, same shadow as
         // AssignedCard. Hover cannot supply this -- a touch drag never hovers,
         // and the pointer leaves the rule's own box as it swings.
         ...(dragging && {
-          transform: `${provided.draggableProps.style?.transform ?? ''} rotate(${rotation}deg) scale(1.03)`,
+          transform: dragTransform(provided.draggableProps.style?.transform, snapshot),
           boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
         }),
       }}
@@ -38,7 +40,7 @@ const DividerBody = memo(function DividerBody({ provided, snapshot, item, isGhos
       //
       // The border exists at rest and is merely transparent: giving it a width
       // only when shown would grow the row by 2px and shift every card below it.
-      className={`group/divider relative flex items-center h-11 rounded-lg border px-2.5 select-none min-w-0 w-full cursor-grab active:cursor-grabbing transition-shadow ${
+      className={`group/divider relative flex items-center mb-2 !mt-0 h-11 rounded-lg border px-2.5 select-none min-w-0 w-full cursor-grab active:cursor-grabbing transition-shadow ${
         dragging || boardDragging
           ? 'bg-white dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800 shadow-sm hover:shadow-md'
           : 'border-transparent hover:bg-white dark:hover:bg-zinc-900 hover:border-zinc-100 dark:hover:border-zinc-800 hover:shadow-md'

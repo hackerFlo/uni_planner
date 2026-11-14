@@ -1,5 +1,5 @@
 import { PlannerDraft } from '../../hooks/plannerDraft';
-import { useState, useRef, useEffect } from 'react';
+import { useId, useState, useRef, useEffect } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { useLists } from '../../context/ListsContext';
 import { useRegisterModal } from '../../context/ModalContext';
@@ -8,6 +8,7 @@ import { userMessage } from '../../api/errors';
 import { LIST_PALETTE, PALETTE_KEYS } from '../../constants/listPalette';
 import EmojiPicker from '../ui/EmojiPicker';
 import useEmojiInput from '../../hooks/useEmojiInput';
+import { useModalFocus } from '../../hooks/useModalFocus';
 
 function ColorDot({ color, size = 'md' }) {
   const cls = LIST_PALETTE[color]?.dot ?? LIST_PALETTE.slate.dot;
@@ -39,11 +40,21 @@ function ColorPicker({ value, onChange, onClose }) {
 function DeleteDialog({ list, otherLists, onConfirm, onCancel, saving }) {
   useRegisterModal();
   const [moveTo, setMoveTo] = useState(otherLists[0]?.id ?? '');
+  const dialogRef = useRef(null);
+  const titleId = useId();
+  useModalFocus(dialogRef);
 
   return (
     <div data-modal-root className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm px-4">
-      <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-xl w-full max-w-sm p-5">
-        <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-100 mb-2">Delete "{list.name}"?</h3>
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className="bg-white dark:bg-zinc-900 rounded-2xl shadow-xl w-full max-w-sm p-5 outline-none"
+      >
+        <h3 id={titleId} className="text-sm font-semibold text-zinc-800 dark:text-zinc-100 mb-2">Delete "{list.name}"?</h3>
         <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4">
           Any todos in this list will be moved to another list before deleting.
         </p>

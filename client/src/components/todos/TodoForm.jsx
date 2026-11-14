@@ -1,13 +1,20 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useId, useState, useRef, useEffect, useMemo } from 'react';
 import EmojiPicker from '../ui/EmojiPicker';
 import ConfirmPopover from '../ui/ConfirmPopover';
 import Tooltip from '../ui/Tooltip';
 import { useLists } from '../../context/ListsContext';
+import { useAuth } from '../../context/AuthContext';
+import useAiListSuggestion from '../../hooks/useAiListSuggestion';
+import { isDialogEligible } from '../../utils/aiSuggestion';
 import { loadEmojis, getLoadedEmojis } from '../../data/loadEmojis';
 import useIsMobile from '../../hooks/useIsMobile';
+import { useModalFocus } from '../../hooks/useModalFocus';
 import { useRegisterModal } from '../../context/ModalContext';
 import { useToast } from '../../context/ToastContext';
 import { hasUnsavedChanges } from '../../utils/todoForm';
+import {
+  draftKey, loadDraft, saveDraft, clearDraft, loadLastListId, saveLastListId, pickDefaultListId,
+} from '../../utils/todoDraft';
 import { sanitizeRichHtml, richTextToPlain } from '../../utils/richText';
 import { renderRichTextInto } from '../../utils/richTextDom';
 import { toIso, parseDateLocal } from '../../utils/dates';
@@ -78,6 +85,39 @@ function detectEmojiTrigger(value, cursorPos) {
   return { query, triggerStart: colonIdx };
 }
 
+const RECURRING_DELETE_OPTIONS = [
+  { label: 'Delete this item', tone: 'danger' },
+  { label: 'Delete all items', tone: 'danger' },
+];
+const SINGLE_DELETE_OPTIONS = [{ label: 'Delete task', tone: 'danger' }];
+const DRAFT_SAVE_DELAY_MS = 400;
+
+function originalFields(todo, defaults, listId) {
+  const approx = todo?.approx_time ?? '';
+  return {
+    title: todo?.title ?? '',
+    description: todo?.description ?? '',
+    listId,
+    dayAssigned: todo?.day_assigned ?? defaults.day_assigned ?? '',
+    recurrence: todo?.recurrence_pattern ?? (todo?.recurrence_interval_days != null ? String(todo.recurrence_interval_days) : ''),
+    approxTime: isPreset(approx) ? approx : 'custom',
+    customTime: !isPreset(approx) ? approx : '',
+  };
+}
+
+function payloadFor(f, descriptionHtml) {
+  const rawDesc = sanitizeRichHtml(descriptionHtml);
+  return {
+    title: f.title.trim(),
+    description: richTextToPlain(rawDesc).trim() ? rawDesc : '',
+    list_id: f.listId,
+    day_assigned: f.dayAssigned || null,
+    approx_time: f.approxTime === 'custom' ? (f.customTime.trim() || null) : (f.approxTime || null),
+    recurrence_interval_days: (f.recurrence === '' || f.recurrence === 'weekdays' || f.recurrence === 'weekends') ? null : Number(f.recurrence),
+    recurrence_pattern: (f.recurrence === 'weekdays' || f.recurrence === 'weekends') ? f.recurrence : null,
+  };
+}
+
 function MobileActionButtons({ todo, dayAssigned, onComplete, onUpdate, onDelete, onClose, onError }) {
   const isRecurring =
     todo?.recurrence_parent_id != null ||
@@ -113,39 +153,24 @@ function MobileActionButtons({ todo, dayAssigned, onComplete, onUpdate, onDelete
           </svg>
         </button>
       )}
-      {isRecurring ? (
-        <ConfirmPopover
-          options={[
-            { label: 'Delete this item', tone: 'danger' },
-            { label: 'Delete all items', tone: 'danger' },
-          ]}
-          onSelect={label => {
-            run(() => onDelete(todo.id, label === 'Delete all items' ? 'all' : 'single'));
-          }}
-        >
-          <button
-            type="button"
-            aria-label="Delete this recurring item"
-            aria-haspopup="menu"
-            className="flex-1 py-3 text-sm font-medium rounded-lg bg-red-50 dark:bg-red-950 text-red-600 hover:bg-red-100 dark:hover:bg-red-900 transition flex items-center justify-center"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-          </button>
-        </ConfirmPopover>
-      ) : (
+      <ConfirmPopover
+        options={isRecurring ? RECURRING_DELETE_OPTIONS : SINGLE_DELETE_OPTIONS}
+        onSelect={label => {
+          const scope = isRecurring ? (label === 'Delete all items' ? 'all' : 'single') : undefined;
+          run(() => onDelete(todo.id, scope));
+        }}
+      >
         <button
           type="button"
-          onClick={() => { if (window.confirm('Delete this task?')) run(() => onDelete(todo.id)) }}
-          aria-label="Delete this item"
+          aria-label={isRecurring ? 'Delete this recurring item' : 'Delete this item'}
+          aria-haspopup="menu"
           className="flex-1 py-3 text-sm font-medium rounded-lg bg-red-50 dark:bg-red-950 text-red-600 hover:bg-red-100 dark:hover:bg-red-900 transition flex items-center justify-center"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
         </button>
-      )}
+      </ConfirmPopover>
     </div>
   );
 }
@@ -154,21 +179,37 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
   useRegisterModal();
   const isMobile = useIsMobile();
   const { lists } = useLists();
+  const { user } = useAuth();
   const todayIso = useToday();
   const extraDate = todo?.day_assigned ?? defaults.day_assigned;
   const assignableDates = useMemo(() => getAssignableDates(extraDate, todayIso), [extraDate, todayIso]);
 
-  const defaultListId = todo?.list_id ?? defaults.list_id ?? lists[0]?.id ?? null;
-  const [title, setTitle] = useState(todo?.title ?? '');
-  const [description, setDescription] = useState(todo?.description ?? '');
-  const [listId, setListId] = useState(defaultListId);
-  const [dayAssigned, setDayAssigned] = useState(todo?.day_assigned ?? defaults.day_assigned ?? '');
-  const [recurrence, setRecurrence] = useState(
-    todo?.recurrence_pattern ?? (todo?.recurrence_interval_days != null ? String(todo.recurrence_interval_days) : '')
-  );
-  const initialApproxTime = todo?.approx_time ?? '';
-  const [approxTime, setApproxTime] = useState(isPreset(initialApproxTime) ? initialApproxTime : 'custom');
-  const [customTime, setCustomTime] = useState(!isPreset(initialApproxTime) ? initialApproxTime : '');
+  const dialogRef = useRef(null);
+  const titleId = useId();
+  useModalFocus(dialogRef);
+
+  const lastUsedListRef = useRef(undefined);
+  if (lastUsedListRef.current === undefined) lastUsedListRef.current = loadLastListId();
+  const defaultListId = pickDefaultListId({
+    todoListId: todo?.list_id, prefillListId: defaults.list_id, lastUsedId: lastUsedListRef.current, lists,
+  });
+  const original = originalFields(todo, defaults, defaultListId);
+  const draftKeyRef = useRef(null);
+  const restoredRef = useRef(null);
+  if (draftKeyRef.current === null) {
+    draftKeyRef.current = draftKey(mode, todo, defaults);
+    const saved = loadDraft(draftKeyRef.current);
+    restoredRef.current = saved && lists.some(l => l.id === saved.listId) ? saved : null;
+  }
+  const start = restoredRef.current ?? original;
+  const [title, setTitle] = useState(start.title);
+  const [description, setDescription] = useState(start.description);
+  const [listId, setListId] = useState(start.listId);
+  const [dayAssigned, setDayAssigned] = useState(start.dayAssigned);
+  const [recurrence, setRecurrence] = useState(start.recurrence);
+  const [approxTime, setApproxTime] = useState(start.approxTime);
+  const [customTime, setCustomTime] = useState(start.customTime);
+  const [draftRestored, setDraftRestored] = useState(restoredRef.current !== null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const toast = useToast();
@@ -184,6 +225,8 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
   const descCaretRef = useRef(0);
   const backdropMouseDownRef = useRef(false);
   const initialPayloadRef = useRef(null);
+  const submittingRef = useRef(false);
+  const draftClosedRef = useRef(false);
 
   useEffect(() => { loadEmojis(); }, []);
 
@@ -191,31 +234,68 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
   // DOM nodes rather than assigned as innerHTML: this was the client's only
   // live-markup sink, and it is what made a sanitiser slip exploitable.
   useEffect(() => {
-    if (descRef.current) {
-      renderRichTextInto(descRef.current, todo?.description ?? '');
-    }
+    const host = descRef.current;
+    if (host) renderRichTextInto(host, todo?.description ?? '');
     // Taken here, not from `todo`: the description round-trips through the
     // sanitiser on the way in, so the only honest baseline for "has the user
     // changed anything" is the payload an untouched form would send.
-    initialPayloadRef.current = buildPayload();
+    initialPayloadRef.current = payloadFor({ ...original, listId: original.listId ?? lists[0]?.id ?? null }, host?.innerHTML ?? '');
+    if (host && restoredRef.current) renderRichTextInto(host, sanitizeRichHtml(restoredRef.current.description));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // A restored draft or the last-used-list default is not a manual choice: a
+  // suggestion may replace either until the user touches the list field.
+  const [aiPicked, setAiPicked] = useState(false);
+  const aiSuggestion = useAiListSuggestion({
+    enabled: isDialogEligible({ user, mode, listCount: lists.length, prefilledListId: defaults.list_id }),
+    title, note: richTextToPlain(description),
+    onSuggest: id => { if (lists.some(l => l.id === id)) { setListId(id); setAiPicked(true); } },
+  });
 
   // Update listId default when lists load (in case they weren't available initially)
   const effectiveListId = listId ?? lists[0]?.id ?? null;
 
-  function buildPayload() {
-    const rawDesc = sanitizeRichHtml(descRef.current?.innerHTML ?? '');
-    return {
-      title: title.trim(),
-      description: richTextToPlain(rawDesc).trim() ? rawDesc : '',
-      list_id: effectiveListId,
-      day_assigned: dayAssigned || null,
-      approx_time: approxTime === 'custom' ? (customTime.trim() || null) : (approxTime || null),
-      recurrence_interval_days: (recurrence === '' || recurrence === 'weekdays' || recurrence === 'weekends') ? null : Number(recurrence),
-      recurrence_pattern: (recurrence === 'weekdays' || recurrence === 'weekends') ? recurrence : null,
-    };
+  function currentFields() {
+    return { title, description, listId: effectiveListId, dayAssigned, recurrence, approxTime, customTime };
   }
+
+  function buildPayload() {
+    return payloadFor(currentFields(), descRef.current?.innerHTML ?? '');
+  }
+
+  // Once the form is finished with (saved, discarded, deleted) the draft must
+  // not be written again by a debounce still in flight.
+  function clearAndClose() {
+    draftClosedRef.current = true;
+    clearDraft(draftKeyRef.current);
+    onClose();
+  }
+
+  function discardRestoredDraft() {
+    clearDraft(draftKeyRef.current);
+    setTitle(original.title);
+    setDescription(original.description);
+    setListId(original.listId);
+    setDayAssigned(original.dayAssigned);
+    setRecurrence(original.recurrence);
+    setApproxTime(original.approxTime);
+    setCustomTime(original.customTime);
+    if (descRef.current) renderRichTextInto(descRef.current, original.description);
+    setDraftRestored(false);
+  }
+
+  useEffect(() => {
+    const persist = () => {
+      if (draftClosedRef.current) return;
+      if (hasUnsavedChanges(initialPayloadRef.current, buildPayload())) saveDraft(draftKeyRef.current, currentFields());
+      else clearDraft(draftKeyRef.current);
+    };
+    const timer = setTimeout(persist, DRAFT_SAVE_DELAY_MS);
+    window.addEventListener('pagehide', persist);
+    return () => { clearTimeout(timer); window.removeEventListener('pagehide', persist); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [title, description, listId, dayAssigned, recurrence, approxTime, customTime]);
 
   // Closing never saves -- "Save changes" is the only way to commit, and Cancel,
   // the X, the backdrop and Escape all mean the same thing. They used to
@@ -228,7 +308,7 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
       setConfirmDiscard(true);
       return;
     }
-    onClose();
+    clearAndClose();
   }
 
   function applyAutoConvert(ref, val, cursorPos, setter) {
@@ -465,9 +545,13 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
   // ends up an honest record of what happened.
   async function handleSubmit(e, { completeNow = false } = {}) {
     e.preventDefault();
+    // State updates are asynchronous, so a second submit fired before the first
+    // re-render (double click, held Cmd+Enter) would still see loading=false.
+    if (submittingRef.current) return;
     if (!title.trim()) return setError('Title is required');
     if (!effectiveListId) return setError('Please select a list');
     setError('');
+    submittingRef.current = true;
     setLoading(true);
     try {
       const data = buildPayload();
@@ -475,12 +559,14 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
         await onUpdate(todo.id, data);
       } else {
         const created = await onCreate({ ...data, completed: completeNow });
+        saveLastListId(data.list_id);
         if (completeNow && created) {
           toast?.success('Added and marked complete.');
         }
       }
-      onClose();
+      clearAndClose();
     } catch (err) {
+      submittingRef.current = false;
       setError(err.message || 'Something went wrong');
     } finally {
       setLoading(false);
@@ -503,13 +589,20 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
         // answers the prompt the first one raised. Backing out is what the
         // Keep editing button is for -- a repeated Escape reads as "yes, I
         // meant it", not as a request to return to the form.
-        if (confirmDiscard) onClose();
+        if (confirmDiscard) clearAndClose();
         else requestClose();
       }}
     >
-      <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-xl w-full max-w-md p-6">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className="bg-white dark:bg-zinc-900 rounded-2xl shadow-xl w-full max-w-md p-6 outline-none"
+      >
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-base font-semibold text-zinc-800 dark:text-zinc-100">
+          <h2 id={titleId} className="text-base font-semibold text-zinc-800 dark:text-zinc-100">
             {mode === 'edit' ? 'Edit item' : 'New item'}
           </h2>
           <button
@@ -530,6 +623,19 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
           </div>
         )}
 
+        {draftRestored && (
+          <p role="status" className="text-xs text-zinc-500 dark:text-zinc-400 mb-4">
+            Draft restored ·{' '}
+            <button
+              type="button"
+              onClick={discardRestoredDraft}
+              className="font-medium underline underline-offset-2 hover:no-underline"
+            >
+              Discard
+            </button>
+          </p>
+        )}
+
         {confirmDiscard && (
           <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-200 text-sm px-3 py-2.5 rounded-lg mb-4 flex items-center gap-3">
             <span className="flex-1">Discard your changes?</span>
@@ -542,7 +648,7 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
             </button>
             <button
               type="button"
-              onClick={onClose}
+              onClick={clearAndClose}
               className="font-medium text-red-600 dark:text-red-400 underline underline-offset-2 hover:no-underline"
             >
               Discard
@@ -620,10 +726,11 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
             <div>
               <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide mb-1.5">
                 List
+                {aiPicked && <span className="ml-1.5 normal-case tracking-normal text-[10px] font-normal text-indigo-500">AI suggested</span>}
               </label>
               <select
                 value={effectiveListId ?? ''}
-                onChange={e => setListId(Number(e.target.value))}
+                onChange={e => { aiSuggestion.markManual(); setAiPicked(false); setListId(Number(e.target.value)); }}
                 className="todo-form-select w-full pl-3.5 pr-10 py-2.5 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
               >
                 {lists.map(l => (
@@ -725,7 +832,7 @@ export default function TodoForm({ mode, todo, defaults = {}, onClose, onCreate,
               onError={setError}
               onUpdate={onUpdate}
               onDelete={onDelete}
-              onClose={onClose}
+              onClose={clearAndClose}
             />
           )}
 

@@ -10,6 +10,15 @@ const retryKey = '5ce22963-02da-4bb2-828b-a5276b13efa9';
 const operationId = 'e2cc737e-30fb-4859-b32b-5f0b01ed3bb2';
 afterEach(() => mock.restoreAll());
 
+describe('planner version poll', () => {
+  it('is silent so the progress bar never reacts to it', async () => {
+    let busyDuring = null;
+    mock.method(globalThis, 'fetch', async () => { busyDuring = isBusy(); return new Response(JSON.stringify({ version })); });
+    await plannerApi.getVersion();
+    assert.equal(busyDuring, false);
+  });
+});
+
 describe('planner API controls', () => {
   it('sends the captured version and same caller key on intentional retry without fetching a newer version', async () => {
     const calls = [];

@@ -50,8 +50,6 @@ db.exec(`
     updated_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
   );
 
-  CREATE INDEX IF NOT EXISTS idx_todos_user_id ON todos(user_id);
-
   CREATE TABLE IF NOT EXISTS exams (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -244,7 +242,6 @@ if (schema && schema.sql.includes("'monday'")) {
       FROM todos;
     DROP TABLE todos;
     ALTER TABLE todos_new RENAME TO todos;
-    CREATE INDEX IF NOT EXISTS idx_todos_user_id ON todos(user_id);
     PRAGMA foreign_keys = ON;
   `);
   if (carried.some(c => c.name === 'recurrence_parent_id')) {
@@ -282,6 +279,26 @@ if (!userCols.some(c => c.name === 'token_version')) {
   db.exec(`ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0`);
   log.info('db migrated', { change: 'added token_version column to users' });
 }
+
+if (!userCols.some(c => c.name === 'ai_list_enabled')) {
+  db.exec(`ALTER TABLE users ADD COLUMN ai_list_enabled INTEGER NOT NULL DEFAULT 0`);
+  log.info('db migrated', { change: 'added ai_list_enabled column' });
+}
+
+// Per-user daily counter that caps AI list-categorisation calls (cost control).
+//
+// Deliberately NOT in backup.js (AR-15 exception): this is ephemeral
+// security/cost state. Restoring another machine's counts would mean nothing,
+// and a restore must not be a way to reset the cap. ai_list_enabled, by
+// contrast, is user content and travels with the other settings.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS ai_usage (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    day     TEXT    NOT NULL,
+    count   INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (user_id, day)
+  );
+`);
 
 // Migrate: replace list_type TEXT with list_id INTEGER -> lists(id)
 // Re-read columns after any ALTER TABLE operations above
@@ -356,7 +373,6 @@ if (currentTodoCols.includes('list_type')) {
       FROM todos t;
     DROP TABLE todos;
     ALTER TABLE todos_new RENAME TO todos;
-    CREATE INDEX IF NOT EXISTS idx_todos_user_id ON todos(user_id);
     CREATE INDEX IF NOT EXISTS idx_todos_recurrence_parent ON todos(recurrence_parent_id);
     PRAGMA foreign_keys = ON;
   `);
@@ -367,6 +383,31 @@ const activityColumns = db.prepare('PRAGMA table_info(todos)').all().map(column 
 if (!activityColumns.includes('agent_activity_at')) db.exec('ALTER TABLE todos ADD COLUMN agent_activity_at TEXT');
 if (!activityColumns.includes('agent_activity_action')) db.exec("ALTER TABLE todos ADD COLUMN agent_activity_action TEXT CHECK(agent_activity_action IN ('created','moved') OR agent_activity_action IS NULL)");
 
+// The shared agent sub-account (one per owner). The agent signs in with its own
+// credentials but works on the OWNER's planner, so its sessions are filed under
+// the owner's user_id with agent_account_id set.
+//
+// Deliberately NOT in backup.js (AR-15 exception): these are credentials, i.e.
+// security state, and restoring another machine's copy would resurrect a login.
+// A restore signs the agent out instead (services/agentAccounts.js).
+db.exec(`
+  CREATE TABLE IF NOT EXISTS agent_accounts (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    email         TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+    password_hash TEXT    NOT NULL,
+    token_version INTEGER NOT NULL DEFAULT 0,
+    disabled      INTEGER NOT NULL DEFAULT 0,
+    created_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    last_login_at TEXT
+  );
+`);
+const sessionColumns = db.prepare('PRAGMA table_info(sessions)').all().map(column => column.name);
+if (!sessionColumns.includes('agent_account_id')) {
+  db.exec('ALTER TABLE sessions ADD COLUMN agent_account_id INTEGER REFERENCES agent_accounts(id) ON DELETE CASCADE');
+}
+db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_agent_account_id ON sessions(agent_account_id)');
+
 // Indexes last: they reference columns (completed_at, list_id) that the
 // migrations above add, so creating them earlier crashes a fresh database.
 db.exec(`
@@ -375,6 +416,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_todos_user_completed ON todos(user_id, completed, completed_at);
   CREATE INDEX IF NOT EXISTS idx_todos_list_id        ON todos(list_id);
   CREATE INDEX IF NOT EXISTS idx_day_dividers_user_date ON day_dividers(user_id, date);
+  DROP INDEX IF EXISTS idx_todos_user_id; -- left-prefix of the composite user_id indexes above
 `);
 
 // Built-in quotes, after every table exists. Idempotent and cheap (one

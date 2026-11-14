@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { usePreferences } from '../context/PreferencesContext';
 import { api } from '../api/client';
+import { isStale, readCachedYear, writeCachedYear } from './holidayCache.js';
 
 // Our own API, not date.nager.at. The browser used to call that host directly,
 // which meant holidays disappeared whenever it was down, whenever the installed
@@ -53,18 +54,27 @@ export function useHolidays() {
 
     let cancelled = false;
     const thisYear = new Date().getFullYear();
+    const years = YEAR_OFFSETS.map(offset => thisYear + offset);
+    // Stale-while-revalidate: cached years render at once and are only
+    // refetched when older than a day, so a reload costs no holiday requests.
+    const cached = new Map(years.map(year => [year, readCachedYear(holidayCountry, year)]));
+    const byYear = new Map([...cached].filter(([, entry]) => entry).map(([year, entry]) => [year, entry.holidays]));
+    const publish = () => setHolidays(byDate(years.flatMap(year => byYear.get(year) ?? []), holidaySubdivision));
+    if (byYear.size) publish();
     // allSettled, not all: one year failing should cost that year, not the two
     // beside it. Failures are reported rather than swallowed (EL-1) -- silence
     // here used to look exactly like "there are no holidays this year".
-    Promise.allSettled(YEAR_OFFSETS.map(offset => fetchYear(thisYear + offset, holidayCountry)))
-      .then(results => {
-        if (cancelled) return;
-        for (const r of results) {
-          if (r.status === 'rejected') console.warn('[holidays] lookup failed:', r.reason?.message);
-        }
-        const fetched = results.flatMap(r => (r.status === 'fulfilled' ? r.value : []));
-        setHolidays(byDate(fetched, holidaySubdivision));
-      });
+    const due = years.filter(year => isStale(cached.get(year)));
+    Promise.allSettled(due.map(year => fetchYear(year, holidayCountry).then(list => {
+      writeCachedYear(holidayCountry, year, list);
+      byYear.set(year, list);
+    }))).then(results => {
+      if (cancelled) return;
+      for (const r of results) {
+        if (r.status === 'rejected') console.warn('[holidays] lookup failed:', r.reason?.message);
+      }
+      publish();
+    });
 
     return () => { cancelled = true; };
   }, [showHolidays, holidayCountry, holidaySubdivision]);

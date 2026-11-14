@@ -13,12 +13,12 @@ function taskPatch(data) {
 export function useTodos({ autoLoad = true } = {}) {
   const resource = usePlannerResource('/api/todos', 'todos', { autoLoad });
   const { mutate, refresh, captureVersion, reportFailure } = resource;
-  const createTodo = useCallback(async (data, controls, refreshAfter) => {
-    const result = await mutate(options => api.post('/api/todos', data, options), controls, refreshAfter);
+  const createTodo = useCallback(async (data, controls, refreshAfter, onWritten) => {
+    const result = await mutate(async options => { const written = await api.post('/api/todos', data, options); onWritten?.(); return written; }, controls, refreshAfter);
     return result.todo ?? result.data?.todo;
   }, [mutate]);
-  const updateTodo = useCallback(async (id, data, controls, refreshAfter) => {
-    const result = await mutate(options => api.patch(`/api/todos/${id}`, taskPatch(data), options), controls, refreshAfter);
+  const updateTodo = useCallback(async (id, data, controls, refreshAfter, onWritten) => {
+    const result = await mutate(async options => { const written = await api.patch(`/api/todos/${id}`, taskPatch(data), options); onWritten?.(); return written; }, controls, refreshAfter);
     return result.todo ?? result.data?.todo;
   }, [mutate]);
   const deleteTodo = useCallback((id, scope = 'single', controls, refreshAfter) =>

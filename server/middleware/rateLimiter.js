@@ -108,7 +108,22 @@ const updateLimiter = rateLimit({
   message: { error: 'Too many requests, please try again later.' },
 });
 
+// Each request that misses the suggestion cache is a paid model call. Runs after
+// requireAuth, so the budget is per account rather than per address; the daily
+// cap in ai_usage is the hard ceiling, this only smooths bursts.
+const aiSuggestLimiter = rateLimit({
+  handler: limitHandler('ai-suggest'),
+  windowMs: 60 * 1000,
+  max: 12,
+  keyGenerator: req => `user:${req.user?.id ?? 'anonymous'}`,
+  skip: skipWhenDisabled,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+});
+
 module.exports = {
+  aiSuggestLimiter,
   authLimiter,
   sessionLimiter,
   todoLimiter,

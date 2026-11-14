@@ -83,6 +83,17 @@ export class PlannerRevisionPoller {
     this.flush();
   }
 
+  // Called for a revision this client wrote itself; its own refresh already
+  // fetched the result, so the poll must not report it as a foreign change.
+  // Only trusted when the write started from a revision every resource has
+  // already caught up to: after a 409 recovery only the board was re-read, and
+  // the unseen foreign revision must still reach the full refresh.
+  markDelivered(expected, version) {
+    if (!sameVersion(this.delivered, expected)) return;
+    this.delivered = { epoch: version.epoch, revision: version.revision };
+    if (sameVersion(this.pending, version)) this.pending = null;
+  }
+
   async refresh() {
     this.cancel(this.timer);
     if (!this.active || !this.visible || this.request) return;

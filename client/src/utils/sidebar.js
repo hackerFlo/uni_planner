@@ -3,11 +3,13 @@ import { getWeekDates, parseDateLocal } from './dates.js';
 // Keep the backlog and reachable assignments in one list.
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-export function sidebarAssignment(dayAssigned, today) {
-  if (!dayAssigned) return { inWindow: false, label: '' };
+function sidebarWindow(today) {
   const now = parseDateLocal(today);
-  const from = getWeekDates(-1, now)[0];
-  const to = getWeekDates(1, now)[6];
+  return { from: getWeekDates(-1, now)[0], to: getWeekDates(1, now)[6] };
+}
+
+export function sidebarAssignment(dayAssigned, today, { from, to } = sidebarWindow(today)) {
+  if (!dayAssigned) return { inWindow: false, label: '' };
   const inWindow = dayAssigned >= from && dayAssigned <= to;
   return { inWindow, label: inWindow ? DAY_NAMES[parseDateLocal(dayAssigned).getDay()] : dayAssigned };
 }
@@ -22,7 +24,8 @@ function byCreatedDesc(a, b) {
 
 export function buildSidebar(items, today) {
   const unassigned = items.filter(t => !t.day_assigned).sort(byCreatedDesc);
-  const assigned = items.filter(t => t.day_assigned && sidebarAssignment(t.day_assigned, today).inWindow).sort(byDayAsc);
+  const range = sidebarWindow(today);
+  const assigned = items.filter(t => t.day_assigned && sidebarAssignment(t.day_assigned, today, range).inWindow).sort(byDayAsc);
   return [...unassigned, ...assigned];
 }
 

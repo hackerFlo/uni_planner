@@ -11,16 +11,13 @@ import { useCopyDrag } from '../../context/CopyDragContext';
 import { useDragTilt } from '../../hooks/useDragTilt';
 import AgentActivityBadge from '../ui/AgentActivityBadge';
 import { formatAgentActivityLabel } from '../../utils/agentActivity';
-
-const COMPLETION_DELAY_MS = 500;
-
-function isRecurring(todo) {
-  return todo.recurrence_parent_id != null || todo.recurrence_interval_days != null || todo.recurrence_pattern != null;
-}
+import { COMPLETION_DELAY_MS, checkmarkTransition, completionFadeTransition, isRecurring } from '../../utils/todoCard';
+import { dragTransform, dropTransition } from '../../utils/dropTransition';
+import { PLOP_MS } from '../../utils/freshIds';
 
 function fmtTime(t) { return t ? t.replace(' min', 'm') : t; }
 
-const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, isGhost, onComplete, onUnassign, onEdit, onDelete, onDismissAgentActivity }) {
+const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, isGhost, isFresh, onComplete, onUnassign, onEdit, onDelete, onDismissAgentActivity }) {
   const anyModalOpen = useAnyModalOpen();
   const isCopying = useCopyDrag() && snapshot.isDragging;
   const { getList } = useLists();
@@ -29,25 +26,26 @@ const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, isG
   const listName = list?.name ?? '';
   const hasAgentActivity = Boolean(formatAgentActivityLabel(todo.agent_activity_at, todo.agent_activity_action, { dayAssigned: todo.day_assigned }));
 
-  const rotation = useDragTilt(snapshot.isDragging);
+  const setCardRef = useDragTilt(snapshot.isDragging, provided.innerRef);
 
   return (
     <div
-      ref={provided.innerRef}
+      ref={setCardRef}
       {...provided.draggableProps}
       {...provided.dragHandleProps}
       style={{
         ...provided.draggableProps.style,
         ...(snapshot.isDragging && {
-          transform: `${provided.draggableProps.style?.transform ?? ''} rotate(${rotation}deg) scale(1.03)`,
+          transform: dragTransform(provided.draggableProps.style?.transform, snapshot),
           boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
         }),
         transition: checked
-          ? 'opacity 400ms ease, transform 300ms ease'
-          : provided.draggableProps.style?.transition,
-        opacity: checked ? 0.4 : 1,
+          ? completionFadeTransition
+          : dropTransition(snapshot, provided.draggableProps.style?.transition),
+        opacity: checked ? 0 : 1,
+        animation: isFresh ? `plop-in ${PLOP_MS}ms ease-out` : undefined,
       }}
-      className={`group bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-lg p-2.5 shadow-sm hover:shadow-md transition-shadow select-none min-w-0 w-full relative cursor-grab active:cursor-grabbing${isGhost ? ' pointer-events-none' : ''}`}
+      className={`group bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-lg p-2.5 shadow-sm hover:shadow-md transition-shadow select-none min-w-0 w-full relative mb-2 !mt-0 cursor-grab active:cursor-grabbing${isGhost ? ' pointer-events-none' : ''}`}
       aria-hidden={isGhost || undefined}
     >
       <div className="flex items-center gap-2 mb-1.5">
@@ -62,7 +60,7 @@ const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, isG
           onClick={e => { e.stopPropagation(); onComplete(e); }}
           aria-pressed={checked}
           aria-label={checked ? `Mark "${todo.title}" as not done` : `Mark "${todo.title}" as done`}
-          className={`flex-shrink-0 relative w-3.5 h-3.5 rounded border transition-all duration-150 flex items-center justify-center hover:scale-110 active:scale-95 md:before:absolute md:before:content-[''] md:before:inset-[-8px] ${
+          className={`flex-shrink-0 relative w-3.5 h-3.5 rounded border transition-[transform,background-color,border-color] duration-150 flex items-center justify-center hover:scale-110 active:scale-95 md:before:absolute md:before:content-[''] md:before:inset-[-8px] ${
             checked
               ? 'bg-indigo-500 border-indigo-500'
               : 'border-zinc-300 dark:border-zinc-700 hover:border-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950'
@@ -77,20 +75,24 @@ const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, isG
             style={{
               strokeDasharray: 48,
               strokeDashoffset: checked ? 0 : 48,
-              transition: 'stroke-dashoffset 280ms ease 60ms',
+              transition: checkmarkTransition,
             }}
           >
             <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
           </svg>
         </button>
         </Tooltip>
-        <span className={`min-w-0 max-w-[40%] truncate text-[9px] font-medium px-1.5 py-0.5 rounded-full uppercase tracking-wide ${palette.badge}`}>
-          {listName}
-        </span>
-        {todo.approx_time && (
-          <span className="min-w-0 max-w-[25%] text-[9px] font-medium text-zinc-400 dark:text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded-full truncate">
-            {fmtTime(todo.approx_time)}
+        <Tooltip text={listName} className="min-w-0 max-w-[40%]" onlyWhenTruncated>
+          <span className={`truncate text-[9px] font-medium px-1.5 py-0.5 rounded-full uppercase tracking-wide ${palette.badge}`}>
+            {listName}
           </span>
+        </Tooltip>
+        {todo.approx_time && (
+          <Tooltip text={todo.approx_time} className="min-w-0 max-w-[25%]" onlyWhenTruncated>
+            <span className="text-[9px] font-medium text-zinc-400 dark:text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded-full truncate">
+              {fmtTime(todo.approx_time)}
+            </span>
+          </Tooltip>
         )}
         {(todo.recurrence_interval_days != null || todo.recurrence_pattern != null) && (
           <Tooltip text={recurrenceLabel(todo.recurrence_interval_days, todo.recurrence_pattern)}>
@@ -111,7 +113,7 @@ const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, isG
         <RichText text={todo.description} className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5 line-clamp-2 block" />
       )}
 
-      <div className={`flex gap-1 mt-2 transition duration-200 ${anyModalOpen ? 'blur-sm opacity-60 pointer-events-none' : ''}`}>
+      <div className={`flex gap-1 mt-2 transition-opacity duration-200 ${anyModalOpen ? 'opacity-60 pointer-events-none' : ''}`}>
           <Tooltip text="Edit">
             <button
               onPointerDown={e => e.stopPropagation()}
@@ -177,7 +179,7 @@ const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, isG
   );
 });
 
-export default function AssignedCard({ todo, index, draggableId, isGhost = false, onUnassign, onComplete, onEdit, onDelete, onDismissAgentActivity }) {
+export default function AssignedCard({ todo, index, draggableId, isGhost = false, isFresh = false, onUnassign, onComplete, onEdit, onDelete, onDismissAgentActivity }) {
   const [checked, setChecked] = useState(false);
 
   function handleComplete(e) {
@@ -199,6 +201,7 @@ export default function AssignedCard({ todo, index, draggableId, isGhost = false
           todo={todo}
           checked={checked}
           isGhost={isGhost}
+          isFresh={isFresh}
           onComplete={handleComplete}
           onUnassign={onUnassign}
           onEdit={onEdit}

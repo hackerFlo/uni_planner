@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../db');
 const requireAuth = require('../middleware/auth');
+const { requestContext } = require('../domain/actor');
 const domainError = require('../middleware/domainError');
 const { quoteImportLimiter } = require('../middleware/rateLimiter');
 const { createQuoteService } = require('../services/quotes');
@@ -15,7 +16,7 @@ const mutations = createMutationService(db);
 const emptyBody = z.strictObject({});
 const router = express.Router();
 router.use(requireAuth);
-const context = req => ({ userId: req.user.id, actor: 'web' });
+const context = requestContext;
 const routeId = value => typeof value === 'string' && /^[1-9]\d*$/.test(value) ? Number(value) : NaN;
 router.get('/today', (req, res) => {
   const ctx = context(req);

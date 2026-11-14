@@ -1,12 +1,19 @@
+import { memo } from 'react';
 import { Droppable } from '@hello-pangea/dnd';
 import TodoCard from './TodoCard';
 import Tooltip from '../ui/Tooltip';
+import { SkeletonRow } from '../ui/Skeleton';
 import { LIST_PALETTE } from '../../constants/listPalette';
 import { sidebarDraggableId } from '../../utils/sidebar';
 import { withCopyGhost } from '../../utils/copyDrag';
+import { useFirstLoadFade } from '../../hooks/useFirstLoadFade';
+import { useFreshIds } from '../../hooks/useFreshIds';
 
-export default function TodoList({ list, todos, loading, onAdd, onEdit, onComplete, onDelete, onUnassign, onDismissAgentActivity, copyGhostId = null, isDropDisabled = false }) {
+function TodoList({ list, todos, loading, onAdd, onEdit, onComplete, onDelete, onUnassign, onDismissAgentActivity, copyGhostId = null }) {
   const palette = LIST_PALETTE[list.color] ?? LIST_PALETTE.slate;
+  const showSkeleton = loading && todos.length === 0;
+  const { fadeClass, onFadeEnd } = useFirstLoadFade(showSkeleton);
+  const freshIds = useFreshIds(todos, !loading);
 
   return (
     <div>
@@ -30,18 +37,27 @@ export default function TodoList({ list, todos, loading, onAdd, onEdit, onComple
         </Tooltip>
       </div>
 
-      <Droppable
-        droppableId={`${list.id}-list`}
-        isDropDisabled={isDropDisabled}
-      >
+      {/* Sidebar lists are sources only: the page ignores any drop that is not
+          on a day, and the order is fixed by creation date. An enabled list let
+          a card glide into a slot it was then snapped out of (hundreds of pixels
+          back home for a drop in the same list); a disabled one returns it
+          home in a single glide. */}
+      <Droppable droppableId={`${list.id}-list`} isDropDisabled>
         {(provided) => (
           <div
             ref={provided.innerRef}
             {...provided.droppableProps}
-            className="min-h-[60px] space-y-2 rounded-lg"
+            className={`min-h-[60px] rounded-lg${fadeClass}`}
+            onAnimationEnd={onFadeEnd}
           >
-            {loading && todos.length === 0 && (
-              <div className="text-xs text-zinc-300 dark:text-zinc-600 py-4 text-center">Loading…</div>
+            {/* The droppable is the list body and every card carries its own
+                bottom margin, as in the day columns: a space-y gap that exists
+                only between siblings made the landing slot differ by one gap
+                depending on whether the card moved to or from the top. */}
+            {showSkeleton && (
+              <div className="space-y-2">
+                {[0, 1].map(i => <SkeletonRow key={i} variant={i} />)}
+              </div>
             )}
             {!loading && todos.length === 0 && (
               <button
@@ -62,6 +78,7 @@ export default function TodoList({ list, todos, loading, onAdd, onEdit, onComple
                 index={index}
                 draggableId={row.draggableId}
                 isGhost={row.isGhost}
+                isFresh={!row.isGhost && freshIds.has(row.item.id)}
                 onComplete={onComplete}
                 onEdit={onEdit}
                 onDelete={onDelete}
@@ -76,3 +93,7 @@ export default function TodoList({ list, todos, loading, onAdd, onEdit, onComple
     </div>
   );
 }
+
+// Plain memo: a real prop change always re-renders; stable callbacks from the
+// page are what let it skip.
+export default memo(TodoList);

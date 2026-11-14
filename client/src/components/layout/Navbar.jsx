@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import SettingsPanel from './SettingsPanel';
+import { Suspense } from 'react';
+import { SettingsPanel } from '../lazyDialogs';
 import Tooltip from '../ui/Tooltip';
 import QuoteBar from './QuoteBar';
 import { useExams } from '../../context/ExamsContext';
@@ -65,8 +65,7 @@ function ExamControl({ nextExam, openModal }) {
   );
 }
 
-export default function Navbar({ onArchiveToggle, archiveOpen, fetchTodos, onOpenWhatsNew }) {
-  const [settingsOpen, setSettingsOpen] = useState(false);
+export default function Navbar({ onArchiveToggle, archiveOpen, settingsOpen, onSettingsOpenChange, fetchTodos, onOpenWhatsNew }) {
   const { nextExam, openModal } = useExams();
 
   return (
@@ -111,7 +110,9 @@ export default function Navbar({ onArchiveToggle, archiveOpen, fetchTodos, onOpe
 
         <Tooltip text="Account settings">
           <button
-            onClick={() => setSettingsOpen(v => !v)}
+            onClick={() => onSettingsOpenChange(!settingsOpen)}
+            onPointerEnter={SettingsPanel.preload}
+            onFocus={SettingsPanel.preload}
             aria-label={settingsOpen ? 'Close account settings' : 'Open account settings'}
             aria-expanded={settingsOpen}
             aria-haspopup="dialog"
@@ -127,7 +128,11 @@ export default function Navbar({ onArchiveToggle, archiveOpen, fetchTodos, onOpe
         </Tooltip>
       </header>
 
-      {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} fetchTodos={fetchTodos} onOpenWhatsNew={onOpenWhatsNew} />}
+      {settingsOpen && (
+        <Suspense fallback={null}>
+          <SettingsPanel onClose={() => onSettingsOpenChange(false)} fetchTodos={fetchTodos} onOpenWhatsNew={onOpenWhatsNew} />
+        </Suspense>
+      )}
     </>
   );
 }

@@ -11,8 +11,11 @@ import NotificationSection from '../settings/NotificationSection';
 import ListsSection from '../settings/ListsSection';
 import AppearanceSection from '../settings/AppearanceSection';
 import ShortcutsSection from '../settings/ShortcutsSection';
+import AiListSection from '../settings/AiListSection';
 import QuotesSection from '../settings/QuotesSection';
 import AgentConnectionsSection from '../settings/AgentConnectionsSection';
+import AgentAccountSection from '../settings/AgentAccountSection';
+import SettingsGroup from '../settings/SettingsGroup';
 
 // Mirrors the server's own 15-minute cache, so reopening this panel does not
 // spend a rate-limit slot re-asking a question we already have the answer to.
@@ -50,6 +53,8 @@ function installReallyFailed(err) {
   return (err.status >= 400 && err.status < 500) || err.status === 503;
 }
 
+const ALL_CLOSED = Object.freeze({ planner: false, agents: false, account: false, app: false });
+
 export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
   useRegisterModal();
   const { user, updateAccount, logout } = useAuth();
@@ -58,6 +63,12 @@ export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
   const { fetchExams } = useExams();
 
   const panelRef = useRef(null);
+  // Every group starts closed each time the panel opens, so the panel is a
+  // short list of headings to pick from.
+  const [openGroups, setOpenGroups] = useState(ALL_CLOSED);
+  function toggleGroup(id) {
+    setOpenGroups(prev => ({ ...prev, [id]: !prev[id] }));
+  }
   // Navbar hands us a fresh arrow on every render, so this effect must not depend
   // on it -- it would re-run constantly and pull focus out of whatever field the
   // user is typing in.
@@ -214,239 +225,254 @@ export default function SettingsPanel({ onClose, fetchTodos, onOpenWhatsNew }) {
         className="relative z-10 w-80 max-w-[calc(100vw-2.5rem)] bg-white dark:bg-zinc-900 border-l border-zinc-100 dark:border-zinc-800 flex flex-col h-full shadow-xl outline-none"
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-100 dark:border-zinc-800">
-          <h2 id="settings-panel-title" className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Account Settings</h2>
-          <button onClick={onClose} aria-label="Close account settings" className="text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition p-1 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800">
+          <h2 id="settings-panel-title" className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Settings</h2>
+          <button onClick={onClose} aria-label="Close settings" className="text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition p-1 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800">
             <svg aria-hidden="true" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5 space-y-8">
+        <div className="flex-1 overflow-y-auto p-5 space-y-6">
           <div>
             <p className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mb-1">Signed in as</p>
             <p className="text-sm text-zinc-700 dark:text-zinc-200 font-medium truncate">{user?.email}</p>
           </div>
 
-          {/* Change password */}
-          <form onSubmit={e => { e.preventDefault(); passwordOp.run(); }} className="space-y-3">
-            <h3 className="text-xs font-semibold text-zinc-600 dark:text-zinc-300 uppercase tracking-widest">Change Password</h3>
-            <div>
-              <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Current password</label>
-              <input
-                type="password"
-                required
-                maxLength={128}
-                value={passwordForm.currentPassword}
-                onChange={e => setPasswordForm(f => ({ ...f, currentPassword: e.target.value }))}
-                className="w-full text-sm border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition"
-                placeholder="••••••••"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">New password</label>
-              <input
-                type="password"
-                required
-                minLength={8}
-                maxLength={128}
-                value={passwordForm.newPassword}
-                onChange={e => setPasswordForm(f => ({ ...f, newPassword: e.target.value }))}
-                className="w-full text-sm border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition"
-                placeholder="Min. 8 characters"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Confirm new password</label>
-              <input
-                type="password"
-                required
-                maxLength={128}
-                value={passwordForm.confirm}
-                onChange={e => setPasswordForm(f => ({ ...f, confirm: e.target.value }))}
-                className="w-full text-sm border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition"
-                placeholder="••••••••"
-              />
-            </div>
-            {passwordOp.error && <p className="text-xs text-red-500">{passwordOp.error}</p>}
-            {passwordOp.success && <p className="text-xs text-emerald-600">{passwordOp.success}</p>}
-            <button
-              type="submit"
-              disabled={passwordOp.loading}
-              className="w-full text-xs font-medium bg-indigo-500 hover:bg-indigo-600 text-white py-2 rounded-lg transition disabled:opacity-50"
-            >
-              {passwordOp.loading ? 'Saving…' : 'Update Password'}
-            </button>
-          </form>
+          <div>
+            <SettingsGroup title="Planner" summary="Appearance, lists, quotes, shortcuts" open={openGroups.planner} onToggle={() => toggleGroup('planner')}>
+              <AppearanceSection />
 
-          <div className="border-t border-zinc-100 dark:border-zinc-800" />
+              <div className="border-t border-zinc-100 dark:border-zinc-800" />
 
-          <AgentConnectionsSection key={user?.id} />
+              <ListsSection fetchTodos={fetchTodos} />
 
-          <div className="border-t border-zinc-100 dark:border-zinc-800" />
+              <div className="border-t border-zinc-100 dark:border-zinc-800" />
 
-          <ShortcutsSection />
+              <QuotesSection />
 
-          <div className="border-t border-zinc-100 dark:border-zinc-800" />
+              <div className="border-t border-zinc-100 dark:border-zinc-800" />
 
-          {/* Lists */}
-          <ListsSection fetchTodos={fetchTodos} />
+              {user?.ai_list_available && user.principal !== 'agent' && <>
+                <AiListSection />
 
-          <div className="border-t border-zinc-100 dark:border-zinc-800" />
+                <div className="border-t border-zinc-100 dark:border-zinc-800" />
+              </>}
 
-          <AppearanceSection />
+              <ShortcutsSection />
+            </SettingsGroup>
 
-          <div className="border-t border-zinc-100 dark:border-zinc-800" />
+            <SettingsGroup title="Agents" summary="Agent account, MCP connections" open={openGroups.agents} onToggle={() => toggleGroup('agents')}>
+              {user?.principal !== 'agent' && <>
+                <AgentAccountSection key={user?.id} />
 
-          <QuotesSection />
+                <div className="border-t border-zinc-100 dark:border-zinc-800" />
+              </>}
 
-          <div className="border-t border-zinc-100 dark:border-zinc-800" />
+              <AgentConnectionsSection key={user?.id} />
+            </SettingsGroup>
 
-          <NotificationSection />
-
-          <div className="border-t border-zinc-100 dark:border-zinc-800" />
-
-          {/* App Updates */}
-          <div className="space-y-3">
-            <h3 className="text-xs font-semibold text-zinc-600 dark:text-zinc-300 uppercase tracking-widest">App Updates</h3>
-
-            <div className="rounded-lg border border-zinc-100 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800">
-              <div className="flex items-baseline justify-between px-3 py-2">
-                <span className="text-[11px] text-zinc-400 dark:text-zinc-500">Running</span>
-                <span className="text-xs font-medium text-zinc-700 dark:text-zinc-200">
-                  {versionInfo ? `v${versionInfo.running.version} · ${versionInfo.running.commit}` : '—'}
-                </span>
+            <SettingsGroup title="Account" summary="Password, notifications" open={openGroups.account} onToggle={() => toggleGroup('account')}>
+            {/* Change password */}
+            <form onSubmit={e => { e.preventDefault(); passwordOp.run(); }} className="space-y-3">
+              <h3 className="text-xs font-semibold text-zinc-600 dark:text-zinc-300 uppercase tracking-widest">Change Password</h3>
+              <div>
+                <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Current password</label>
+                <input
+                  type="password"
+                  required
+                  maxLength={128}
+                  value={passwordForm.currentPassword}
+                  onChange={e => setPasswordForm(f => ({ ...f, currentPassword: e.target.value }))}
+                  className="w-full text-sm border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition"
+                  placeholder="••••••••"
+                />
               </div>
-              {versionInfo?.available && (
-                <div className="flex items-baseline justify-between px-3 py-2">
-                  <span className="text-[11px] text-zinc-400 dark:text-zinc-500">Latest</span>
-                  <span className="text-xs font-medium text-zinc-700 dark:text-zinc-200">
-                    {versionInfo.latest ? `v${versionInfo.latest.version}` : 'unknown'}
-                  </span>
-                </div>
+              <div>
+                <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">New password</label>
+                <input
+                  type="password"
+                  required
+                  minLength={8}
+                  maxLength={128}
+                  value={passwordForm.newPassword}
+                  onChange={e => setPasswordForm(f => ({ ...f, newPassword: e.target.value }))}
+                  className="w-full text-sm border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition"
+                  placeholder="Min. 8 characters"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Confirm new password</label>
+                <input
+                  type="password"
+                  required
+                  maxLength={128}
+                  value={passwordForm.confirm}
+                  onChange={e => setPasswordForm(f => ({ ...f, confirm: e.target.value }))}
+                  className="w-full text-sm border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition"
+                  placeholder="••••••••"
+                />
+              </div>
+              {passwordOp.error && <p className="text-xs text-red-500">{passwordOp.error}</p>}
+              {passwordOp.success && <p className="text-xs text-emerald-600">{passwordOp.success}</p>}
+              <button
+                type="submit"
+                disabled={passwordOp.loading}
+                className="w-full text-xs font-medium bg-indigo-500 hover:bg-indigo-600 text-white py-2 rounded-lg transition disabled:opacity-50"
+              >
+                {passwordOp.loading ? 'Saving…' : 'Update Password'}
+              </button>
+            </form>
+
+              <div className="border-t border-zinc-100 dark:border-zinc-800" />
+
+              <NotificationSection />
+            </SettingsGroup>
+
+            <SettingsGroup title="App" summary="Backup and restore, app updates" open={openGroups.app} onToggle={() => toggleGroup('app')}>
+            {/* Backup & Restore */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-semibold text-zinc-600 dark:text-zinc-300 uppercase tracking-widest">Backup &amp; Restore</h3>
+              <p className="text-[11px] text-zinc-400 dark:text-zinc-500 leading-relaxed">
+                Download your lists, todos, exams and day notes as a JSON file, or restore from a previous backup. Existing items are never duplicated. Your account and password are not included.
+              </p>
+              <button
+                type="button"
+                disabled={backupLoading}
+                onClick={handleDownloadBackup}
+                className="w-full text-xs font-medium bg-indigo-500 hover:bg-indigo-600 text-white py-2 rounded-lg transition disabled:opacity-50"
+              >
+                {backupLoading ? 'Preparing…' : 'Download Backup'}
+              </button>
+              <div>
+                <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Restore from backup</label>
+                <label className={`flex items-center justify-center w-full py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 text-xs text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition cursor-pointer ${restoreLoading ? 'opacity-50 pointer-events-none' : ''}`}>
+                  {restoreLoading ? 'Restoring…' : 'Choose backup file…'}
+                  <input type="file" accept=".json,application/json" className="sr-only" onChange={handleRestoreBackup} disabled={restoreLoading} />
+                </label>
+              </div>
+              {restoreError && <p className="text-xs text-red-500">{restoreError}</p>}
+              {restoreResult && (
+                <p className="text-xs text-emerald-600">
+                  Restored {restoreResult.imported} todo{restoreResult.imported !== 1 ? 's' : ''}{restoreResult.skipped > 0 ? `, ${restoreResult.skipped} already existed` : ''}
+                  {restoreResult.examsImported != null ? ` · ${restoreResult.examsImported} exam${restoreResult.examsImported !== 1 ? 's' : ''}${restoreResult.examsSkipped > 0 ? `, ${restoreResult.examsSkipped} already existed` : ''}` : ''}.
+                </p>
               )}
             </div>
 
-            {versionLoad === 'loading' && (
-              <p className="text-[11px] text-zinc-400 dark:text-zinc-500">Checking for updates…</p>
-            )}
-            {versionLoad === 'failed' && <p className="text-xs text-red-500">{versionError}</p>}
+              <div className="border-t border-zinc-100 dark:border-zinc-800" />
 
-            {versionInfo && !versionInfo.available && (
-              <p className="text-[11px] text-zinc-400 dark:text-zinc-500 leading-relaxed">
-                This server is not configured to check for updates, so it cannot tell whether a newer version exists.
-                Set <span className="font-mono text-zinc-500 dark:text-zinc-400">GITHUB_REPO</span> in the server environment to switch it on.
-              </p>
-            )}
+            {/* App Updates */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-semibold text-zinc-600 dark:text-zinc-300 uppercase tracking-widest">App Updates</h3>
 
-            {versionInfo?.available && versionInfo.checkFailed && versionInfo.checkReason === 'no-versions' && (
-              <p className="text-[11px] text-zinc-400 dark:text-zinc-500 leading-relaxed">
-                No versions have been published for this app yet, so there is nothing to compare against. Nothing is wrong with this app.
-              </p>
-            )}
-            {versionInfo?.available && versionInfo.checkFailed && versionInfo.checkReason !== 'no-versions' && (
-              <p className="text-[11px] text-amber-600 dark:text-amber-500 leading-relaxed">
-                GitHub could not be reached, so the latest version is unknown. Nothing is wrong with this app.
-              </p>
-            )}
-            {versionInfo?.available && versionInfo.stale && (
-              <p className="text-[11px] text-amber-600 dark:text-amber-500 leading-relaxed">
-                GitHub could not be reached just now — showing the last result instead.
-              </p>
-            )}
-            {versionInfo?.updateAvailable && installState === 'idle' && (
-              <p className="text-xs text-emerald-600 dark:text-emerald-500">
-                Version {versionInfo.latest.version} is available.
-                {!versionInfo.canInstall && ' It will install automatically at 04:00.'}
-              </p>
-            )}
-            {versionInfo?.available && !versionInfo.updateAvailable && !versionInfo.checkFailed && installState === 'idle' && !checkOp.error && (
-              <p className="text-[11px] text-zinc-400 dark:text-zinc-500">You are on the latest version.</p>
-            )}
+              <div className="rounded-lg border border-zinc-100 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800">
+                <div className="flex items-baseline justify-between px-3 py-2">
+                  <span className="text-[11px] text-zinc-400 dark:text-zinc-500">Running</span>
+                  <span className="text-xs font-medium text-zinc-700 dark:text-zinc-200">
+                    {versionInfo ? `v${versionInfo.running.version} · ${versionInfo.running.commit}` : '—'}
+                  </span>
+                </div>
+                {versionInfo?.available && (
+                  <div className="flex items-baseline justify-between px-3 py-2">
+                    <span className="text-[11px] text-zinc-400 dark:text-zinc-500">Latest</span>
+                    <span className="text-xs font-medium text-zinc-700 dark:text-zinc-200">
+                      {versionInfo.latest ? `v${versionInfo.latest.version}` : 'unknown'}
+                    </span>
+                  </div>
+                )}
+              </div>
 
-            {installState === 'started' && (
-              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                Update started. The server is restarting, so this may take a minute — leave the page open.
-              </p>
-            )}
-            {installState === 'installed' && (
-              <p className="text-xs text-emerald-600 dark:text-emerald-500">Update installed. Reload to use the new version.</p>
-            )}
-            {installState === 'timeout' && (
-              <p className="text-[11px] text-amber-600 dark:text-amber-500 leading-relaxed">
-                The new version has not come up yet. Give it another minute, then reload the page.
-              </p>
-            )}
-            {installError && <p className="text-xs text-red-500">{installError}</p>}
-            {checkOp.error && <p className="text-xs text-red-500">{checkOp.error}</p>}
+              {versionLoad === 'loading' && (
+                <p className="text-[11px] text-zinc-400 dark:text-zinc-500">Checking for updates…</p>
+              )}
+              {versionLoad === 'failed' && <p className="text-xs text-red-500">{versionError}</p>}
 
-            {installState === 'installed' || installState === 'timeout' ? (
+              {versionInfo && !versionInfo.available && (
+                <p className="text-[11px] text-zinc-400 dark:text-zinc-500 leading-relaxed">
+                  This server is not configured to check for updates, so it cannot tell whether a newer version exists.
+                  Set <span className="font-mono text-zinc-500 dark:text-zinc-400">GITHUB_REPO</span> in the server environment to switch it on.
+                </p>
+              )}
+
+              {versionInfo?.available && versionInfo.checkFailed && versionInfo.checkReason === 'no-versions' && (
+                <p className="text-[11px] text-zinc-400 dark:text-zinc-500 leading-relaxed">
+                  No versions have been published for this app yet, so there is nothing to compare against. Nothing is wrong with this app.
+                </p>
+              )}
+              {versionInfo?.available && versionInfo.checkFailed && versionInfo.checkReason !== 'no-versions' && (
+                <p className="text-[11px] text-amber-600 dark:text-amber-500 leading-relaxed">
+                  GitHub could not be reached, so the latest version is unknown. Nothing is wrong with this app.
+                </p>
+              )}
+              {versionInfo?.available && versionInfo.stale && (
+                <p className="text-[11px] text-amber-600 dark:text-amber-500 leading-relaxed">
+                  GitHub could not be reached just now — showing the last result instead.
+                </p>
+              )}
+              {versionInfo?.updateAvailable && installState === 'idle' && (
+                <p className="text-xs text-emerald-600 dark:text-emerald-500">
+                  Version {versionInfo.latest.version} is available.
+                  {!versionInfo.canInstall && ' It will install automatically at 04:00.'}
+                </p>
+              )}
+              {versionInfo?.available && !versionInfo.updateAvailable && !versionInfo.checkFailed && installState === 'idle' && !checkOp.error && (
+                <p className="text-[11px] text-zinc-400 dark:text-zinc-500">You are on the latest version.</p>
+              )}
+
+              {installState === 'started' && (
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                  Update started. The server is restarting, so this may take a minute — leave the page open.
+                </p>
+              )}
+              {installState === 'installed' && (
+                <p className="text-xs text-emerald-600 dark:text-emerald-500">Update installed. Reload to use the new version.</p>
+              )}
+              {installState === 'timeout' && (
+                <p className="text-[11px] text-amber-600 dark:text-amber-500 leading-relaxed">
+                  The new version has not come up yet. Give it another minute, then reload the page.
+                </p>
+              )}
+              {installError && <p className="text-xs text-red-500">{installError}</p>}
+              {checkOp.error && <p className="text-xs text-red-500">{checkOp.error}</p>}
+
+              {installState === 'installed' || installState === 'timeout' ? (
+                <button
+                  type="button"
+                  onClick={() => window.location.reload()}
+                  className="w-full text-xs font-medium bg-indigo-500 hover:bg-indigo-600 text-white py-2 rounded-lg transition"
+                >
+                  Reload now
+                </button>
+              ) : versionInfo?.updateAvailable && versionInfo.canInstall ? (
+                <button
+                  type="button"
+                  disabled={installState === 'started'}
+                  onClick={handleInstallUpdate}
+                  className="w-full text-xs font-medium bg-indigo-500 hover:bg-indigo-600 text-white py-2 rounded-lg transition disabled:opacity-50"
+                >
+                  {installState === 'started' ? 'Installing…' : 'Install now'}
+                </button>
+              ) : null}
+
               <button
                 type="button"
-                onClick={() => window.location.reload()}
-                className="w-full text-xs font-medium bg-indigo-500 hover:bg-indigo-600 text-white py-2 rounded-lg transition"
+                disabled={checkOp.loading || installState === 'started' || (versionInfo && !versionInfo.available)}
+                onClick={() => checkOp.run()}
+                className="w-full text-xs font-medium border border-indigo-300 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950 py-2 rounded-lg transition disabled:opacity-50"
               >
-                Reload now
+                {checkOp.loading ? 'Checking…' : 'Check for updates'}
               </button>
-            ) : versionInfo?.updateAvailable && versionInfo.canInstall ? (
+
               <button
                 type="button"
-                disabled={installState === 'started'}
-                onClick={handleInstallUpdate}
-                className="w-full text-xs font-medium bg-indigo-500 hover:bg-indigo-600 text-white py-2 rounded-lg transition disabled:opacity-50"
+                onClick={() => { onClose(); onOpenWhatsNew?.(); }}
+                className="w-full text-xs font-medium border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 py-2 rounded-lg transition"
               >
-                {installState === 'started' ? 'Installing…' : 'Install now'}
+                See what's changed
               </button>
-            ) : null}
-
-            <button
-              type="button"
-              disabled={checkOp.loading || installState === 'started' || (versionInfo && !versionInfo.available)}
-              onClick={() => checkOp.run()}
-              className="w-full text-xs font-medium border border-indigo-300 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950 py-2 rounded-lg transition disabled:opacity-50"
-            >
-              {checkOp.loading ? 'Checking…' : 'Check for updates'}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => { onClose(); onOpenWhatsNew?.(); }}
-              className="w-full text-xs font-medium border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 py-2 rounded-lg transition"
-            >
-              See what's changed
-            </button>
-          </div>
-
-          <div className="border-t border-zinc-100 dark:border-zinc-800" />
-
-          {/* Backup & Restore */}
-          <div className="space-y-3">
-            <h3 className="text-xs font-semibold text-zinc-600 dark:text-zinc-300 uppercase tracking-widest">Backup &amp; Restore</h3>
-            <p className="text-[11px] text-zinc-400 dark:text-zinc-500 leading-relaxed">
-              Download your lists, todos, exams and day notes as a JSON file, or restore from a previous backup. Existing items are never duplicated. Your account and password are not included.
-            </p>
-            <button
-              type="button"
-              disabled={backupLoading}
-              onClick={handleDownloadBackup}
-              className="w-full text-xs font-medium bg-indigo-500 hover:bg-indigo-600 text-white py-2 rounded-lg transition disabled:opacity-50"
-            >
-              {backupLoading ? 'Preparing…' : 'Download Backup'}
-            </button>
-            <div>
-              <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Restore from backup</label>
-              <label className={`flex items-center justify-center w-full py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 text-xs text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition cursor-pointer ${restoreLoading ? 'opacity-50 pointer-events-none' : ''}`}>
-                {restoreLoading ? 'Restoring…' : 'Choose backup file…'}
-                <input type="file" accept=".json,application/json" className="sr-only" onChange={handleRestoreBackup} disabled={restoreLoading} />
-              </label>
             </div>
-            {restoreError && <p className="text-xs text-red-500">{restoreError}</p>}
-            {restoreResult && (
-              <p className="text-xs text-emerald-600">
-                Restored {restoreResult.imported} todo{restoreResult.imported !== 1 ? 's' : ''}{restoreResult.skipped > 0 ? `, ${restoreResult.skipped} already existed` : ''}
-                {restoreResult.examsImported != null ? ` · ${restoreResult.examsImported} exam${restoreResult.examsImported !== 1 ? 's' : ''}${restoreResult.examsSkipped > 0 ? `, ${restoreResult.examsSkipped} already existed` : ''}` : ''}.
-              </p>
-            )}
+            </SettingsGroup>
           </div>
         </div>
 

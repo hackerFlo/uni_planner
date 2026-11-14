@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext } from 'react';
+import { createContext, useCallback, useContext, useMemo } from 'react';
 import { api } from '../api/client';
 import { usePlannerResource } from '../hooks/usePlannerResource';
 const ListsContext = createContext(null);
@@ -20,7 +20,10 @@ export function ListsProvider({ children }) {
   }, [mutate, reportFailure]);
   const deleteList = useCallback((id, moveTo, controls) => mutate(options => api.delete(
     `/api/lists/${id}${moveTo ? `?moveTo=${encodeURIComponent(moveTo)}` : ''}`, options), controls), [mutate]);
-  return <ListsContext.Provider value={{ lists, getList: id => lists.find(list => list.id === id),
-    createList, updateList, reorderLists, deleteList, fetchLists: refresh, captureVersion, version }}>{children}</ListsContext.Provider>;
+  const getList = useCallback(id => lists.find(list => list.id === id), [lists]);
+  const value = useMemo(() => ({ lists, getList, createList, updateList, reorderLists, deleteList,
+    fetchLists: refresh, captureVersion, version }),
+  [lists, getList, createList, updateList, reorderLists, deleteList, refresh, captureVersion, version]);
+  return <ListsContext.Provider value={value}>{children}</ListsContext.Provider>;
 }
 export function useLists() { return useContext(ListsContext); }

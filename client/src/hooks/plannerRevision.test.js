@@ -223,3 +223,60 @@ describe('planner revision polling', () => {
     f.poller.stop(); resource.close();
   });
 });
+
+describe('own writes', () => {
+  async function caughtUp() {
+    const context = fixture();
+    await context.poller.refresh();
+    await settle();
+    context.changes.length = 0;
+    return context;
+  }
+
+  it('does not refresh for a revision the client wrote itself', async () => {
+    const { poller, changes, setVersion } = await caughtUp();
+    poller.markDelivered(version(0), version(1));
+    setVersion(version(1));
+    await poller.refresh();
+    await settle();
+    assert.deepEqual(changes, []);
+  });
+
+  it('chains consecutive own writes', async () => {
+    const { poller, changes, setVersion } = await caughtUp();
+    poller.markDelivered(version(0), version(1));
+    poller.markDelivered(version(1), version(2));
+    setVersion(version(2));
+    await poller.refresh();
+    await settle();
+    assert.deepEqual(changes, []);
+  });
+
+  it('still refreshes for a foreign revision after an own write', async () => {
+    const { poller, changes, setVersion } = await caughtUp();
+    poller.markDelivered(version(0), version(1));
+    setVersion(version(2));
+    await poller.refresh();
+    await settle();
+    assert.deepEqual(changes, [version(2)]);
+  });
+
+  it('still refreshes when the write started from a revision the poller never delivered', async () => {
+    const { poller, changes, setVersion } = await caughtUp();
+    poller.markDelivered(version(1), version(2));
+    setVersion(version(2));
+    await poller.refresh();
+    await settle();
+    assert.deepEqual(changes, [version(2)]);
+  });
+
+  it('drops a pending refresh that was only the own write', async () => {
+    const { poller, changes } = await caughtUp();
+    poller.setPaused(true);
+    poller.accept(version(1));
+    poller.markDelivered(version(0), version(1));
+    poller.setPaused(false);
+    await settle();
+    assert.deepEqual(changes, []);
+  });
+});

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { notificationApi, capturedRequest } from '../../api/settingsMutations';
+import { notificationApi, capturedRequest, saveRecovering } from '../../api/settingsMutations';
+import { isStaleVersion } from '../../api/conflictRetry';
 import { userMessage } from '../../api/errors';
 import { useUndo } from '../../context/UndoContext';
 import { useAuth } from '../../context/AuthContext';
@@ -11,6 +12,7 @@ export default function NotificationSection() {
   const { refreshUser } = useAuth();
   const [notifForm, setNotifForm] = useState({ notify_enabled: false, notify_time: '22:00', notify_email: '' });
   const [version, setVersion] = useState(null);
+  const versionRef = useRef(null);
   const [notifLoad, setNotifLoad] = useState('loading');
   const [notifLoadError, setNotifLoadError] = useState('');
   const saveAttempt = useRef(capturedRequest(notificationApi.save));
@@ -21,16 +23,25 @@ export default function NotificationSection() {
     try {
       const data = await notificationApi.settings();
       setNotifForm({ notify_enabled: data.notify_enabled, notify_time: data.notify_time, notify_email: data.notify_email });
+      versionRef.current = data.version;
       setVersion(data.version);
       setNotifLoad('ready');
     } catch (error) { setNotifLoadError(userMessage(error)); setNotifLoad('failed'); }
   }, []);
   useEffect(() => { loadNotifSettings(); }, [loadNotifSettings]);
+  // Version only: the form keeps the user's unsaved draft.
+  const refreshVersion = useCallback(async () => {
+    const data = await notificationApi.settings();
+    versionRef.current = data.version;
+    setVersion(data.version);
+  }, []);
   const notifOp = useAsync(async () => {
     try {
-      const receipt = await saveAttempt.current.run({ ...notifForm, notify_tz: Intl.DateTimeFormat().resolvedOptions().timeZone }, version);
+      const receipt = await saveRecovering(saveAttempt.current, { ...notifForm, notify_tz: Intl.DateTimeFormat().resolvedOptions().timeZone },
+        () => versionRef.current, refreshVersion);
       if (receipt.replayed) await loadNotifSettings();
       else {
+        versionRef.current = receipt.currentVersion;
         setVersion(receipt.currentVersion);
         const saved = receipt.data;
         setNotifForm({ notify_enabled: saved.notify_enabled, notify_time: saved.notify_time, notify_email: saved.notify_email });
@@ -39,7 +50,7 @@ export default function NotificationSection() {
       await refreshUser();
       return 'Notification settings saved';
     } catch (error) {
-      if (error.status === 409) { setNotifLoad('failed'); setNotifLoadError('The planner changed. Reload before saving this draft.'); }
+      if (isStaleVersion(error)) throw new Error('Your settings changed elsewhere again. Your draft is kept; save once more.');
       throw error;
     }
   });

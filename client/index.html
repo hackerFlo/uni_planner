@@ -13,9 +13,78 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Uni Planner" />
     <meta name="theme-color" content="#6366f1" />
+    <script src="/paint-boot.js"></script>
+    <style>
+      /* Pre-JS shell: a static copy of PlannerSkeleton (components/ui/Skeleton.jsx),
+         painted while the bundle downloads and replaced when React mounts. Keep the
+         two in step. Dark follows html.dark, which /paint-boot.js sets from the
+         app's saved theme before first paint, along with html.pk-exam and the
+         --pk-scroll board offset. */
+      body{margin:0}
+      #pk,#pk *{box-sizing:border-box}
+      #pk{display:flex;flex-direction:column;height:100vh;overflow:hidden;background:#fff}
+      .pk-s{display:block;border-radius:999px;background-color:#e4e4e7;background-image:linear-gradient(90deg,transparent 35%,rgba(255,255,255,.6) 50%,transparent 65%);background-repeat:no-repeat;background-size:300% 100%;background-position:100% 0;animation:pk-sh 1.2s ease-in-out infinite}
+      @keyframes pk-sh{to{background-position:0 0}}
+      .pk-nav{height:56px;flex:none;border-bottom:1px solid #f4f4f5;display:flex;align-items:center;gap:8px;padding:0 12px}
+      .pk-brand{display:flex;align-items:center;gap:10px;margin-right:auto}
+      .pk-logo,.pk-ic{width:28px;height:28px;border-radius:8px}
+      .pk-ic{width:32px;height:32px}
+      .pk-pill{display:none;width:80px;height:32px}
+      html.pk-exam .pk-pill{display:block}
+      html.pk-exam .pk-exb{display:none}
+      .pk-name{display:none;width:74px;height:12px}
+      .pk-body{display:flex;flex:1;flex-direction:column;overflow:hidden;min-height:0}
+      .pk-main{order:1;height:50%;flex:none;overflow:hidden;padding:20px;display:flex;flex-direction:column}
+      .pk-side{order:2;height:50%;flex:none;overflow:hidden;background:#fafafa;border-top:1px solid #e4e4e7;padding:20px}
+      .pk-wh{display:flex;align-items:center;justify-content:space-between;height:24px;margin-bottom:16px;flex:none}
+      .pk-wl{width:80px;height:10px}
+      .pk-wb{display:flex;gap:8px}
+      .pk-wb .pk-s{width:64px;height:24px}
+      .pk-wb .pk-s+.pk-s{width:65px}
+      .pk-days{flex:1;min-height:0;overflow:hidden}
+      .pk-row{display:flex;gap:12px;min-height:100%;transform:translateX(var(--pk-scroll,0px))}
+      .pk-day{display:flex;flex-direction:column;width:180px;flex:none;overflow:hidden;border:1px solid #f4f4f5;border-radius:12px;background:#fff}
+      .pk-dh{display:flex;flex-direction:column;justify-content:center;padding:12px;border-bottom:1px solid #f4f4f5}
+      .pk-dh>div{height:16px;display:flex;align-items:center}
+      .pk-dh>div+div{height:32px}
+      .pk-dh>div:first-child .pk-s{width:32px;height:10px}
+      .pk-dh>div+div .pk-s{width:56px;height:16px}
+      .pk-db{padding:10px;min-height:120px}
+      .pk-db>*+*,.pk-cards>*+*{margin-top:8px}
+      .pk-list+.pk-list{margin-top:24px}
+      .pk-lh{display:flex;align-items:center;justify-content:space-between;height:20px;margin-bottom:12px}
+      .pk-lh div{display:flex;align-items:center;gap:8px}
+      .pk-lh .pk-s{width:12px;height:12px}
+      .pk-lh div .pk-s:first-child{width:6px;height:6px}
+      .pk-lh div .pk-s:last-child{width:80px;height:10px}
+      .pk-c{display:flex;flex-direction:column;background:#fff;border:1px solid #f4f4f5;border-radius:8px;padding:10px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+      .pk-c>div{display:flex;align-items:center}
+      .pk-c .pk-r1{height:18px;margin-bottom:6px;gap:8px}
+      .pk-c .pk-r1 .pk-s:first-child{width:14px;height:14px;border-radius:4px}
+      .pk-c .pk-r1 .pk-s+.pk-s{width:40px;height:14px}
+      .pk-c .pk-r2{height:17px}
+      .pk-c .pk-r3{height:20px;margin-top:7px;gap:12px}
+      .pk-c .pk-r3 .pk-s{width:12px;height:12px;border-radius:4px}
+      .pk-c.pk-sc{padding:12px}
+      .pk-c .pk-rr{height:20px}
+      .pk-r2 .pk-s,.pk-rr .pk-s{height:10px;width:80%}
+      .pk-c.v1 .pk-s.pk-t{width:60%}
+      .pk-c.v2 .pk-s.pk-t{width:66.667%}
+      .pk-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+      @media(min-width:640px){.pk-nav{padding:0 20px;gap:16px}.pk-name{display:block}.pk-pill{width:112px}}
+      @media(min-width:768px){.pk-body{flex-direction:row}.pk-main{order:2;height:auto;flex:1}.pk-side{order:1;height:auto;width:288px;border-top:0}.pk-day{width:auto;flex:1;min-width:180px}.pk-row{min-width:100%}.pk-wb .pk-s{width:124px}.pk-wb .pk-s+.pk-s{width:101px}}
+      html.dark #pk,html.dark .pk-day,html.dark .pk-c{background:#18181b}
+      html.dark .pk-side{background:#18181b;border-top-color:#27272a}
+      html.dark .pk-nav,html.dark .pk-day,html.dark .pk-dh,html.dark .pk-c{border-color:#27272a}
+      html.dark .pk-s{background-color:#27272a;background-image:linear-gradient(90deg,transparent 35%,rgba(255,255,255,.07) 50%,transparent 65%)}
+      @media(prefers-reduced-motion:reduce){.pk-s{animation:none;background-image:none}}
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="pk" aria-hidden="true"><div class="pk-nav"><div class="pk-brand"><b class="pk-s pk-logo"></b><b class="pk-s pk-name"></b></div><b class="pk-s pk-pill"></b><b class="pk-s pk-ic pk-exb"></b><b class="pk-s pk-ic"></b><b class="pk-s pk-ic"></b></div><div class="pk-body"><div class="pk-main"><div class="pk-wh"><b class="pk-s pk-wl"></b><div class="pk-wb"><b class="pk-s"></b><b class="pk-s"></b></div></div><div class="pk-days"><div class="pk-row"><div class="pk-day"><div class="pk-dh"><div><b class="pk-s"></b></div><div><b class="pk-s"></b></div></div><div class="pk-db"><div class="pk-c v0"><div class="pk-r1"><b class="pk-s"></b><b class="pk-s"></b></div><div class="pk-r2"><b class="pk-s pk-t"></b></div><div class="pk-r3"><b class="pk-s"></b><b class="pk-s"></b><b class="pk-s"></b></div></div><div class="pk-c v1"><div class="pk-r1"><b class="pk-s"></b><b class="pk-s"></b></div><div class="pk-r2"><b class="pk-s pk-t"></b></div><div class="pk-r3"><b class="pk-s"></b><b class="pk-s"></b><b class="pk-s"></b></div></div><div class="pk-c v2"><div class="pk-r1"><b class="pk-s"></b><b class="pk-s"></b></div><div class="pk-r2"><b class="pk-s pk-t"></b></div><div class="pk-r3"><b class="pk-s"></b><b class="pk-s"></b><b class="pk-s"></b></div></div></div></div><div class="pk-day"><div class="pk-dh"><div><b class="pk-s"></b></div><div><b class="pk-s"></b></div></div><div class="pk-db"><div class="pk-c v0"><div class="pk-r1"><b class="pk-s"></b><b class="pk-s"></b></div><div class="pk-r2"><b class="pk-s pk-t"></b></div><div class="pk-r3"><b class="pk-s"></b><b class="pk-s"></b><b class="pk-s"></b></div></div><div class="pk-c v1"><div class="pk-r1"><b class="pk-s"></b><b class="pk-s"></b></div><div class="pk-r2"><b class="pk-s pk-t"></b></div><div class="pk-r3"><b class="pk-s"></b><b class="pk-s"></b><b class="pk-s"></b></div></div></div></div><div class="pk-day"><div class="pk-dh"><div><b class="pk-s"></b></div><div><b class="pk-s"></b></div></div><div class="pk-db"><div class="pk-c v0"><div class="pk-r1"><b class="pk-s"></b><b class="pk-s"></b></div><div class="pk-r2"><b class="pk-s pk-t"></b></div><div class="pk-r3"><b class="pk-s"></b><b class="pk-s"></b><b class="pk-s"></b></div></div><div class="pk-c v1"><div class="pk-r1"><b class="pk-s"></b><b class="pk-s"></b></div><div class="pk-r2"><b class="pk-s pk-t"></b></div><div class="pk-r3"><b class="pk-s"></b><b class="pk-s"></b><b class="pk-s"></b></div></div><div class="pk-c v2"><div class="pk-r1"><b class="pk-s"></b><b class="pk-s"></b></div><div class="pk-r2"><b class="pk-s pk-t"></b></div><div class="pk-r3"><b class="pk-s"></b><b class="pk-s"></b><b class="pk-s"></b></div></div></div></div><div class="pk-day"><div class="pk-dh"><div><b class="pk-s"></b></div><div><b class="pk-s"></b></div></div><div class="pk-db"><div class="pk-c v0"><div class="pk-r1"><b class="pk-s"></b><b class="pk-s"></b></div><div class="pk-r2"><b class="pk-s pk-t"></b></div><div class="pk-r3"><b class="pk-s"></b><b class="pk-s"></b><b class="pk-s"></b></div></div><div class="pk-c v1"><div class="pk-r1"><b class="pk-s"></b><b class="pk-s"></b></div><div class="pk-r2"><b class="pk-s pk-t"></b></div><div class="pk-r3"><b class="pk-s"></b><b class="pk-s"></b><b class="pk-s"></b></div></div></div></div><div class="pk-day"><div class="pk-dh"><div><b class="pk-s"></b></div><div><b class="pk-s"></b></div></div><div class="pk-db"><div class="pk-c v0"><div class="pk-r1"><b class="pk-s"></b><b class="pk-s"></b></div><div class="pk-r2"><b class="pk-s pk-t"></b></div><div class="pk-r3"><b class="pk-s"></b><b class="pk-s"></b><b class="pk-s"></b></div></div><div class="pk-c v1"><div class="pk-r1"><b class="pk-s"></b><b class="pk-s"></b></div><div class="pk-r2"><b class="pk-s pk-t"></b></div><div class="pk-r3"><b class="pk-s"></b><b class="pk-s"></b><b class="pk-s"></b></div></div></div></div><div class="pk-day"><div class="pk-dh"><div><b class="pk-s"></b></div><div><b class="pk-s"></b></div></div><div class="pk-db"><div class="pk-c v0"><div class="pk-r1"><b class="pk-s"></b><b class="pk-s"></b></div><div class="pk-r2"><b class="pk-s pk-t"></b></div><div class="pk-r3"><b class="pk-s"></b><b class="pk-s"></b><b class="pk-s"></b></div></div></div></div><div class="pk-day"><div class="pk-dh"><div><b class="pk-s"></b></div><div><b class="pk-s"></b></div></div><div class="pk-db"><div class="pk-c v0"><div class="pk-r1"><b class="pk-s"></b><b class="pk-s"></b></div><div class="pk-r2"><b class="pk-s pk-t"></b></div><div class="pk-r3"><b class="pk-s"></b><b class="pk-s"></b><b class="pk-s"></b></div></div></div></div></div></div></div><div class="pk-side"><div class="pk-list"><div class="pk-lh"><div><b class="pk-s"></b><b class="pk-s"></b></div><b class="pk-s"></b></div><div class="pk-cards"><div class="pk-c pk-sc v0"><div class="pk-rr"><b class="pk-s pk-t"></b></div></div><div class="pk-c pk-sc v1"><div class="pk-rr"><b class="pk-s pk-t"></b></div></div><div class="pk-c pk-sc v2"><div class="pk-rr"><b class="pk-s pk-t"></b></div></div></div></div><div class="pk-list"><div class="pk-lh"><div><b class="pk-s"></b><b class="pk-s"></b></div><b class="pk-s"></b></div><div class="pk-cards"><div class="pk-c pk-sc v1"><div class="pk-rr"><b class="pk-s pk-t"></b></div></div><div class="pk-c pk-sc v2"><div class="pk-rr"><b class="pk-s pk-t"></b></div></div></div></div><div class="pk-list"><div class="pk-lh"><div><b class="pk-s"></b><b class="pk-s"></b></div><b class="pk-s"></b></div><div class="pk-cards"><div class="pk-c pk-sc v2"><div class="pk-rr"><b class="pk-s pk-t"></b></div></div><div class="pk-c pk-sc v0"><div class="pk-rr"><b class="pk-s pk-t"></b></div></div></div></div></div></div></div>
+      <span role="status" class="pk-sr">Loading planner…</span>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

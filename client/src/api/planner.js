@@ -1,5 +1,6 @@
 import { api } from './client.js';
 import { ApiError, KINDS } from './errors.js';
+import { reportOwnWrite } from './ownWrites.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -32,7 +33,7 @@ export function plannerMutationOptions(expectedVersion, idempotencyKey, options 
 
 export const plannerApi = {
   async getVersion(options = {}) {
-    const result = await api.get('/api/planner/version', { ...options, cache: 'no-store', redirect: 'manual' });
+    const result = await api.get('/api/planner/version', { ...options, cache: 'no-store', redirect: 'manual', silent: true });
     return readVersion(result.version);
   },
   async undo(operationId, { expectedVersion, idempotencyKey, ...options } = {}) {
@@ -41,6 +42,8 @@ export const plannerApi = {
     }
     const result = await api.post('/api/planner/undo', { operationId },
       plannerMutationOptions(expectedVersion, idempotencyKey, options));
-    return { ...result, resultVersion: readVersion(result.resultVersion), currentVersion: readVersion(result.currentVersion) };
+    const resultVersion = readVersion(result.resultVersion);
+    reportOwnWrite(expectedVersion, resultVersion);
+    return { ...result, resultVersion, currentVersion: readVersion(result.currentVersion) };
   },
 };

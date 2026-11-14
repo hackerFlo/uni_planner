@@ -95,7 +95,7 @@ export function resolveTheme(theme, prefersDark) {
 const profileMemory = new Map();
 const PROFILE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export function preferenceProfileKey(accountId) {
+function preferenceProfileKey(accountId) {
   if (!Number.isSafeInteger(accountId) || accountId < 1) throw new TypeError('Invalid preference account');
   return `${PREFS_KEY}.account.${accountId}`;
 }
@@ -128,4 +128,12 @@ export function savePreferenceProfile(accountId, marker, storage) {
     // Keep the same random profile for this session even if persistent storage fails.
     return false;
   }
+}
+
+// Preference profiles are synced per account, but the agent account works on the
+// owner's planner without the right to create profiles there, so an agent's
+// browser keeps local preferences exactly as a signed-out one does.
+export function syncedAccountId(user, loading) {
+  if (loading || !user || user.principal === 'agent') return null;
+  return user.id ?? null;
 }

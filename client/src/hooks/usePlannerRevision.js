@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { plannerApi } from '../api/planner.js';
+import { subscribeOwnWrites } from '../api/ownWrites.js';
 import { PlannerRevisionPoller, plannerRevisionSnapshot } from './plannerRevision.js';
 
 export default function usePlannerRevision({ onChange, paused = false }) {
@@ -30,8 +31,10 @@ export default function usePlannerRevision({ onChange, paused = false }) {
     const focus = () => { visibility(); poller.refresh(); };
     document.addEventListener('visibilitychange', visibility);
     window.addEventListener('focus', focus);
+    const stopOwnWrites = subscribeOwnWrites((expected, version) => poller.markDelivered(expected, version));
     poller.start();
     return () => {
+      stopOwnWrites();
       poller.stop();
       if (pollerRef.current === poller) pollerRef.current = null;
       document.removeEventListener('visibilitychange', visibility);

@@ -1,6 +1,7 @@
 const { z } = require('zod');
 const { idSchema, dateSchema, parse } = require('../domain/schemas');
 const { DomainError } = require('../domain/errors');
+const { isAgentActor } = require('../domain/actor');
 const { createDayDividerService } = require('./dayDividers');
 
 const itemSchema = z.strictObject({ kind: z.enum(['task', 'divider']), id: idSchema });
@@ -73,7 +74,7 @@ function setDay(db, dividers, context, item, day) {
     if (day === null) throw new DomainError('VALIDATION_ERROR', 'Dividers cannot move to backlog');
     dividers.update(context, { id: item.id, date: day });
   } else {
-    const marker = context.actor === 'mcp' && item.day_assigned !== day
+    const marker = isAgentActor(context.actor) && item.day_assigned !== day
       ? { at: new Date().toISOString(), action: 'moved' } : null;
     db.prepare(`UPDATE todos SET day_assigned=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),
       agent_activity_at=CASE WHEN ? THEN ? ELSE agent_activity_at END,
@@ -86,12 +87,13 @@ function setDay(db, dividers, context, item, day) {
 function move(db, dividers, context, { item: ref, day, index }) {
   const item = getItem(db, dividers, context, ref);
   const from = itemDay(item);
-  const original = orderedItems(db, context.userId, from).findIndex(entry => key(entry) === key(item));
   const target = orderedItems(db, context.userId, day);
+  const original = (from === day ? target : orderedItems(db, context.userId, from)).findIndex(entry => key(entry) === key(item));
   setDay(db, dividers, context, item, day);
   if (from !== day) renumber(db, context.userId, orderedItems(db, context.userId, from));
-  renumber(db, context.userId, insertAt(target, item, index));
-  const final = orderedItems(db, context.userId, day).findIndex(entry => key(entry) === key(item));
+  const placed = insertAt(target, item, index);
+  renumber(db, context.userId, placed);
+  const final = placed.findIndex(entry => key(entry) === key(item));
   if (context.actor === 'web' && item.kind === 'task' && (from !== day || original !== final)) {
     db.prepare('UPDATE todos SET agent_activity_at=NULL,agent_activity_action=NULL WHERE id=? AND user_id=?')
       .run(item.id, context.userId);
@@ -108,8 +110,8 @@ function copyItem(db, dividers, context, source, day) {
     completed,archived,recurrence_interval_days,recurrence_pattern,recurrence_parent_id,completed_at,
     agent_activity_at,agent_activity_action)
     VALUES(?,?,?,?,?,?,0,0,NULL,NULL,NULL,NULL,?,?)`).run(context.userId, source.list_id, source.title,
-    source.description, source.approx_time, day, context.actor === 'mcp' ? new Date().toISOString() : null,
-    context.actor === 'mcp' ? 'created' : null);
+    source.description, source.approx_time, day, isAgentActor(context.actor) ? new Date().toISOString() : null,
+    isAgentActor(context.actor) ? 'created' : null);
   return ownedTask(db, context.userId, result.lastInsertRowid);
 }
 

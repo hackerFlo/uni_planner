@@ -1,10 +1,11 @@
-import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
 import { parseDateLocal } from '../utils/dates';
 import { useToday } from './TimeContext';
 import { useAuth } from './AuthContext';
 
 import { usePlannerResource } from '../hooks/usePlannerResource';
+import { saveExamHint } from '../utils/paintHints';
 const ExamsContext = createContext(null);
 const EMPTY = [];
 
@@ -42,20 +43,32 @@ export function ExamsProvider({ children }) {
   }, [mutate]);
   const deleteExam = useCallback((id, controls) => mutate(options => api.delete(`/api/exams/${id}`, options), controls), [mutate]);
 
+  // Remembered for the next load's skeleton, but only once the exams are known:
+  // the empty list before the first fetch would always record "no exam".
+  const hasExam = upcomingExams.length > 0;
+  const examsLoaded = data != null;
+  useEffect(() => { if (examsLoaded) saveExamHint(hasExam); }, [examsLoaded, hasExam]);
+
+  const userId = user?.id;
+  const openModal = useCallback(() => setModalAccount(userId ?? null), [userId]);
+  const closeModal = useCallback(() => setModalAccount(null), []);
+
+  const value = useMemo(() => ({
+    upcomingExams,
+    captureVersion,
+    version,
+    nextExam: upcomingExams[0] ?? null,
+    fetchExams,
+    addExam,
+    updateExam,
+    deleteExam,
+    isModalOpen,
+    openModal,
+    closeModal,
+  }), [upcomingExams, captureVersion, version, fetchExams, addExam, updateExam, deleteExam, isModalOpen, openModal, closeModal]);
+
   return (
-    <ExamsContext.Provider value={{
-      upcomingExams,
-      captureVersion,
-      version,
-      nextExam: upcomingExams[0] ?? null,
-      fetchExams,
-      addExam,
-      updateExam,
-      deleteExam,
-      isModalOpen,
-      openModal: () => setModalAccount(user?.id ?? null),
-      closeModal: () => setModalAccount(null),
-    }}>
+    <ExamsContext.Provider value={value}>
       {children}
     </ExamsContext.Provider>
   );

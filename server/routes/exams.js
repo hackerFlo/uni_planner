@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../db');
 const requireAuth = require('../middleware/auth');
+const { requestContext } = require('../domain/actor');
 const domainError = require('../middleware/domainError');
 const { createExamService } = require('../services/exams');
 const service = createExamService(db);
@@ -9,7 +10,7 @@ const { webMutation } = require('../domain/webMutation');
 const router = express.Router();
 router.use(requireAuth);
 
-const context = req => ({ userId: req.user.id, actor: 'web' });
+const context = requestContext;
 const routeId = value => typeof value === 'string' && /^[1-9]\d*$/.test(value) ? Number(value) : NaN;
 router.get('/', (req, res) => res.json({ exams: service.list(context(req)), version: operations.version(context(req)) }));
 router.post('/', (req, res) => res.status(201).json(webMutation(operations, req, 'create_exam', req.body,

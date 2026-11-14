@@ -1,5 +1,6 @@
 const express = require('express');
 const requireAuth = require('../middleware/auth');
+const { requestContext } = require('../domain/actor');
 const domainError = require('../middleware/domainError');
 const { createPreferenceService, preferenceSchemas } = require('../services/preferences');
 const { parse } = require('../domain/schemas');
@@ -11,7 +12,7 @@ const schemas = { create_preference_profile: preferenceSchemas.create,
 
 function writeProfile(mutations, req, name, args, action) {
   args = parse(schemas[name], args);
-  const context = { userId: req.user.id, actor: 'web' };
+  const context = requestContext(req);
   const controls = requestControls(req);
   if (!controls) {
     if (process.env.MCP_WRITES_ENABLED === 'true') throw new DomainError('CONFLICT', 'Reload preferences before editing', 409);
@@ -29,7 +30,7 @@ function createPreferencesRouter(db) {
   const router = express.Router();
   const service = createPreferenceService(db);
   const mutations = createMutationService(db);
-  const context = req => ({ userId: req.user.id, actor: 'web' });
+  const context = requestContext;
   router.use(requireAuth);
   router.use((_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
   router.get('/profiles', (req, res) => {

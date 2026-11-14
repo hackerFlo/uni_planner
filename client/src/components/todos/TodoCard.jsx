@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { Draggable } from '@hello-pangea/dnd';
 import LinkText from '../ui/LinkText';
 import RichText from '../ui/RichText';
@@ -12,18 +12,29 @@ import { sidebarAssignment, sidebarDraggableId } from '../../utils/sidebar';
 import { useToday } from '../../context/TimeContext';
 import AgentActivityBadge from '../ui/AgentActivityBadge';
 import { formatAgentActivityLabel } from '../../utils/agentActivity';
-
-const COMPLETION_DELAY_MS = 500;
-
-function isRecurring(todo) {
-  return todo.recurrence_parent_id != null || todo.recurrence_interval_days != null || todo.recurrence_pattern != null;
-}
+import { COMPLETION_DELAY_MS, checkmarkTransition, completionFadeTransition, isRecurring } from '../../utils/todoCard';
+import { dragTransform, dropTransition, listContentWidth } from '../../utils/dropTransition';
+import { PLOP_MS } from '../../utils/freshIds';
+import { useDragTilt } from '../../hooks/useDragTilt';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+// 180 is the mobile column width, which PlannerPage also narrows the card to so
+// it tracks the finger; it stays the fallback and the mobile value. On desktop the
+// columns flex, so the card takes the measured width of the day it hovers.
+const MOBILE_CARD_WIDTH_PX = 180;
+
+// While landing, the real content width is used even on mobile: the card is
+// about to become a day card, and dropTransition eases it there during the glide.
+function measureDayCardWidth(dayId, landing) {
+  if (!landing && window.matchMedia('(max-width: 767px)').matches) return MOBILE_CARD_WIDTH_PX;
+  const list = document.querySelector(`[data-rfd-droppable-id="${dayId}"]`);
+  return listContentWidth(list, getComputedStyle) ?? MOBILE_CARD_WIDTH_PX;
+}
+
 function fmtTime(t) { return t ? t.replace(' min', 'm') : t; }
 
-const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, checked, isGhost, onComplete, onEdit, onDelete, onUnassign, onDismissAgentActivity }) {
+const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, checked, isGhost, isFresh, onComplete, onEdit, onDelete, onUnassign, onDismissAgentActivity }) {
   const today = useToday();
   const { inWindow, label: assignmentLabel } = sidebarAssignment(todo.day_assigned, today);
   const assignmentDescription = `Assigned to ${todo.day_assigned}${inWindow ? '' : ' · Outside available weeks'}`;
@@ -36,76 +47,40 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, chec
   const listName = list?.name ?? '';
   const hasAgentActivity = Boolean(formatAgentActivityLabel(todo.agent_activity_at, todo.agent_activity_action, { dayAssigned: todo.day_assigned }));
 
-  const [rotation, setRotation] = useState(0);
-  const prevXRef = useRef(null);
-  const decayRef = useRef(null);
+  const setCardRef = useDragTilt(snapshot.isDragging, provided.innerRef);
 
   const isDraggingOverDay = snapshot.isDragging && DATE_RE.test(snapshot.draggingOver ?? '');
-
-  useEffect(() => {
-    if (!snapshot.isDragging) {
-      setRotation(0);
-      prevXRef.current = null;
-      return;
-    }
-    let rafId = null;
-    let pendingX = null;
-    function handleMove(e) {
-      pendingX = e.clientX;
-      if (rafId !== null) return;
-      rafId = requestAnimationFrame(() => {
-        rafId = null;
-        if (prevXRef.current !== null) {
-          const dx = pendingX - prevXRef.current;
-          setRotation(Math.max(-12, Math.min(12, dx * 1.5)));
-          clearTimeout(decayRef.current);
-          decayRef.current = setTimeout(() => setRotation(0), 80);
-        }
-        prevXRef.current = pendingX;
-      });
-    }
-    function handleUp() {
-      setRotation(0);
-      prevXRef.current = null;
-      if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
-      window.removeEventListener('pointermove', handleMove);
-      window.removeEventListener('pointerup', handleUp);
-    }
-    window.addEventListener('pointermove', handleMove);
-    window.addEventListener('pointerup', handleUp);
-    return () => {
-      window.removeEventListener('pointermove', handleMove);
-      window.removeEventListener('pointerup', handleUp);
-      clearTimeout(decayRef.current);
-      if (rafId !== null) cancelAnimationFrame(rafId);
-    };
-  }, [snapshot.isDragging]);
+  const overDayWidth = useMemo(
+    () => (isDraggingOverDay ? measureDayCardWidth(snapshot.draggingOver, snapshot.isDropAnimating) : undefined),
+    [isDraggingOverDay, snapshot.draggingOver, snapshot.isDropAnimating],
+  );
 
   return (
     <div
-      ref={provided.innerRef}
+      ref={setCardRef}
       {...provided.draggableProps}
       {...provided.dragHandleProps}
       style={{
         ...provided.draggableProps.style,
-        width: isDraggingOverDay ? 180 : provided.draggableProps.style?.width,
+        width: isDraggingOverDay ? overDayWidth : provided.draggableProps.style?.width,
         height: isDraggingOverDay ? 'auto' : provided.draggableProps.style?.height,
-        opacity: snapshot.isDragging ? 0.85 : checked ? 0.4 : undefined,
+        opacity: snapshot.isDragging ? 0.85 : checked ? 0 : undefined,
+        animation: isFresh ? `plop-in ${PLOP_MS}ms ease-out` : undefined,
         transform: snapshot.isDragging
-          ? `${provided.draggableProps.style?.transform ?? ''} rotate(${rotation}deg) scale(1.03)`
+          ? dragTransform(provided.draggableProps.style?.transform, snapshot)
           : checked
           ? `${provided.draggableProps.style?.transform ?? ''} scale(0.97)`
           : provided.draggableProps.style?.transform,
         transition: checked
-          ? 'opacity 400ms ease, transform 300ms ease'
-          : provided.draggableProps.style?.transition,
+          ? completionFadeTransition
+          : dropTransition(snapshot, provided.draggableProps.style?.transition),
       }}
-      className={`group border rounded-lg shadow-sm transition-all select-none cursor-grab active:cursor-grabbing ${
+      className={`group mb-2 !mt-0 border rounded-lg shadow-sm transition-[box-shadow,opacity,background-color,border-color] select-none cursor-grab active:cursor-grabbing ${
         isDraggingOverDay
           ? 'bg-white dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800 p-2.5'
           : inWindow
           ? 'bg-zinc-50 dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800 p-3 opacity-50 hover:opacity-70'
-          : 'bg-white dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800 p-3 hover:shadow-md hover:-translate-y-0.5'
+          : 'bg-white dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800 p-3 hover:shadow-md'
       }${isGhost ? ' pointer-events-none' : ''}`}
       aria-hidden={isGhost || undefined}
     >
@@ -142,8 +117,8 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, chec
           <button
             onPointerDown={e => e.stopPropagation()}
             onClick={e => { e.stopPropagation(); onComplete(e); }}
-            aria-label={`Mark ${todo.title} complete`}
-            className={`mt-0.5 flex-shrink-0 w-4 h-4 rounded border transition-all duration-150 flex items-center justify-center hover:scale-110 active:scale-95 ${
+            aria-label={checked ? `Mark "${todo.title}" as not done` : `Mark "${todo.title}" as done`}
+            className={`mt-0.5 flex-shrink-0 w-4 h-4 rounded border transition-[transform,background-color,border-color] duration-150 flex items-center justify-center hover:scale-110 active:scale-95 ${
               checked
                 ? 'bg-indigo-500 border-indigo-500'
                 : 'border-zinc-300 dark:border-zinc-700 hover:border-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950'
@@ -159,7 +134,7 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, chec
               style={{
                 strokeDasharray: 48,
                 strokeDashoffset: checked ? 0 : 48,
-                transition: 'stroke-dashoffset 280ms ease 60ms',
+                transition: checkmarkTransition,
               }}
             >
               <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
@@ -226,7 +201,7 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, chec
                 <Tooltip text="Unassign">
                   <button
                     onClick={e => { e.stopPropagation(); onUnassign(todo.id); }}
-                    aria-label={`Remove ${todo.title} from its day`}
+                    aria-label={`Remove "${todo.title}" from its day`}
                     className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition"
                   >
                     <svg aria-hidden="true" className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -239,7 +214,7 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, chec
               <Tooltip text="Edit">
                 <button
                   onClick={e => { e.stopPropagation(); onEdit(todo); }}
-                  aria-label={`Edit ${todo.title}`}
+                  aria-label={`Edit "${todo.title}"`}
                   className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition"
                 >
                   <svg aria-hidden="true" className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -259,7 +234,7 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, chec
                   tooltipText="Delete"
                 >
                   <button
-                    aria-label={`Delete ${todo.title}`}
+                    aria-label={`Delete "${todo.title}"`}
                     aria-haspopup="true"
                     className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950 text-zinc-400 dark:text-zinc-500 hover:text-red-500 transition"
                   >
@@ -272,7 +247,7 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, chec
                 <Tooltip text="Delete">
                   <button
                     onClick={e => { e.stopPropagation(); onDelete(todo.id); }}
-                    aria-label={`Delete ${todo.title}`}
+                    aria-label={`Delete "${todo.title}"`}
                     className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950 text-zinc-400 dark:text-zinc-500 hover:text-red-500 transition"
                   >
                     <svg aria-hidden="true" className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -288,7 +263,7 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, chec
   );
 });
 
-export default function TodoCard({ todo, index, draggableId, isGhost = false, onComplete, onEdit, onDelete, onUnassign, onDismissAgentActivity }) {
+export default function TodoCard({ todo, index, draggableId, isGhost = false, isFresh = false, onComplete, onEdit, onDelete, onUnassign, onDismissAgentActivity }) {
   const [checked, setChecked] = useState(false);
 
   function handleComplete(e) {
@@ -307,6 +282,7 @@ export default function TodoCard({ todo, index, draggableId, isGhost = false, on
           todo={todo}
           checked={checked}
           isGhost={isGhost}
+          isFresh={isFresh}
           onComplete={handleComplete}
           onEdit={onEdit}
           onDelete={onDelete}

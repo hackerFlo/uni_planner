@@ -38,7 +38,7 @@ export function usePlannerResource(path, field, { autoLoad = true, requireVersio
   const captureVersion = useCallback(() => state.version ? { ...state.version } : null, [state.version]);
   const readSnapshotVersion = useCallback(() => resource.captureVersion(), [resource]);
   const mutate = useCallback(async (write, controls, refreshAfter = refreshSafely) => {
-    const result = await resource.mutate(write, { expectedVersion: captureVersion(), ...controls });
+    const result = await resource.mutateRecovering(write, { expectedVersion: captureVersion(), ...controls }, refreshAfter);
     if (scopeRef.current !== scope) throw new DOMException('Account changed', 'AbortError');
     recordOperation(result, refreshAfter);
     await refreshAfter();

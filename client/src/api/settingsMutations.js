@@ -1,5 +1,6 @@
 import { api } from './client.js';
 import { ApiError, KINDS } from './errors.js';
+import { isStaleVersion, runWithRecovery } from './conflictRetry.js';
 import { isPlannerVersion, plannerMutationOptions } from './planner.js';
 
 function withVersion(result) {
@@ -49,4 +50,11 @@ export function capturedRequest(send, uuid = () => crypto.randomUUID(), { retain
       }
     },
   };
+}
+
+// A stale version rejects before anything is saved, and a rejected attempt is
+// forgotten, so the second run rebuilds with the fresh version and a new key
+// while the caller's draft stays untouched.
+export function saveRecovering(attempt, args, readVersion, refreshVersion) {
+  return runWithRecovery(() => attempt.run(args, readVersion()), refreshVersion, isStaleVersion);
 }

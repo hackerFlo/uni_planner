@@ -93,14 +93,49 @@ describe('device preference synchronization', () => {
     assert.deepEqual(f.states.at(-1).preferences, DEFAULT_PREFERENCES);
   });
 
-  it('does not recreate an initialized but missing remote profile from stale local preferences', async () => {
-    const storage = store();
-    const first = fixture(1008, { get: async () => reply({ theme: 'dark' }) }, storage);
-    await first.sync.load(); first.sync.close();
-    const next = fixture(1008, { get: async () => { throw Object.assign(new Error('Missing'), { status: 404 }); },
-      post: () => assert.fail('Never remigrate a known remote profile') }, storage);
-    assert.equal(await next.sync.load(), false);
-    assert.equal(next.states.at(-1).ready, false);
+  // A known profile can vanish from the server (a backup restored elsewhere, a
+  // fresh database). Re-uploading this browser's stale copy would overwrite the
+  // server's view with old values; staying broken repeats the error on every
+  // refresh. The browser starts over: defaults, under a new profile id.
+  describe('when an initialized remote profile is gone', () => {
+    const freshId = '5d2f8c1e-0b7a-4c39-9e61-2a4b8f0d7c35';
+    async function recover() {
+      const storage = store();
+      const first = fixture(1008, { get: async () => reply({ theme: 'dark' }) }, storage);
+      await first.sync.load(); first.sync.close();
+      const posts = []; const errors = []; const states = [];
+      const api = {
+        get: async path => {
+          if (path.endsWith('/version')) return { version };
+          throw Object.assign(new Error('Missing'), { status: 404 });
+        },
+        post: async (_path, body) => { posts.push(body); return { profile: { id: freshId, settings: body.settings }, version }; },
+      };
+      const sync = new PreferencesSync({ accountId: 1008, api, storage, uuid: () => freshId,
+        onState: state => states.push(state), onError: error => errors.push(error) });
+      const loaded = await sync.load();
+      return { loaded, posts, errors, states, storage };
+    }
+
+    it('creates a replacement profile under a new id', async () => {
+      const { posts } = await recover();
+      assert.deepEqual(posts.map(body => body.id), [freshId]);
+    });
+
+    it('never re-uploads the stale local preferences', async () => {
+      const { posts } = await recover();
+      assert.deepEqual(posts[0].settings, DEFAULT_PREFERENCES);
+    });
+
+    it('ends ready without reporting an error', async () => {
+      const { loaded, errors, states } = await recover();
+      assert.deepEqual([loaded, errors.length, states.at(-1).ready], [true, 0, true]);
+    });
+
+    it('remembers the replacement so the next load reads it', async () => {
+      const { storage } = await recover();
+      assert.equal(loadPreferenceProfile(1008, storage).id, freshId);
+    });
   });
 
   it('prevents an overlapping reload or edit from racing an in-flight preference save', async () => {

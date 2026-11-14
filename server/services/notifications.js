@@ -8,7 +8,7 @@ const { localDayBoundsUtc } = require('../time');
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
-const EMAIL_RE = /^[^\s@]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/;
+const EMAIL_RE = /^[^\s@,;<>"()[\]\\:]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/;
 function validEmail(value) {
   // eslint-disable-next-line no-control-regex -- prevent SMTP header injection
   return value.length <= 254 && !/[\x00-\x1f\x7f]/.test(value) && EMAIL_RE.test(value);

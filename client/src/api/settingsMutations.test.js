@@ -1,7 +1,7 @@
 import { test, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { api } from './client.js';
-import { capturedRequest, quoteApi, notificationApi } from './settingsMutations.js';
+import { capturedRequest, quoteApi, notificationApi, saveRecovering } from './settingsMutations.js';
 const version = { epoch: 'a'.repeat(32), revision: 4 };
 const key = '5ce22963-02da-4bb2-828b-a5276b13efa9';
 afterEach(() => mock.restoreAll());
@@ -70,4 +70,26 @@ test('malformed successful mutation response retains its key for a safe retry', 
   assert.equal(request.pending, true);
   await assert.rejects(request.run({ notify_enabled: false }, version));
   assert.deepEqual(calls[0], calls[1]);
+});
+
+const staleVersion = revision => ({ ...version, revision });
+const stale = () => Object.assign(new Error('Planner changed'), { status: 409, currentVersion: staleVersion(5) });
+
+test('saveRecovering refreshes the version and saves the same draft with a new key', async () => {
+  const sent = [];
+  let current = staleVersion(4);
+  let n = 0;
+  const attempt = capturedRequest(async (args, controls) => {
+    sent.push({ args, controls });
+    if (sent.length === 1) throw stale();
+    return { ok: true };
+  }, () => `key-${++n}`);
+  await saveRecovering(attempt, { time: '09:00' }, () => current, async () => { current = staleVersion(5); });
+  assert.deepEqual(sent.map(call => [call.args.time, call.controls.expectedVersion.revision, call.controls.idempotencyKey]),
+    [['09:00', 4, 'key-1'], ['09:00', 5, 'key-2']]);
+});
+
+test('saveRecovering surfaces a second stale conflict', async () => {
+  const attempt = capturedRequest(async () => { throw stale(); });
+  await assert.rejects(saveRecovering(attempt, {}, () => version, async () => {}), /Planner changed/);
 });

@@ -30,7 +30,7 @@ const CompletedCard = memo(function CompletedCard({ todo, onUncomplete }) {
             onClick={() => onUncomplete(todo)}
             aria-pressed="true"
             aria-label={`Mark "${todo.title}" as not done`}
-            className="flex-shrink-0 relative w-3.5 h-3.5 rounded border bg-indigo-500 border-indigo-500 transition-all duration-150 flex items-center justify-center hover:scale-110 active:scale-95 md:before:absolute md:before:content-[''] md:before:inset-[-8px]"
+            className="flex-shrink-0 relative w-3.5 h-3.5 rounded border bg-indigo-500 border-indigo-500 transition-[transform,background-color,border-color] duration-150 flex items-center justify-center hover:scale-110 active:scale-95 md:before:absolute md:before:content-[''] md:before:inset-[-8px]"
           >
             <svg className="w-2 h-2" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth={3.5} aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />

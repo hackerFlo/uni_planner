@@ -1,5 +1,6 @@
 const { z } = require('zod');
 const { DomainError } = require('../domain/errors');
+const { isAgentActor } = require('../domain/actor');
 const { idSchema, parse } = require('../domain/schemas');
 const { sanitizeDescription, validateDayAssigned } = require('../middleware/validate');
 const { createRecurrenceService, getWindowBounds, addDays } = require('../recurrence');
@@ -134,10 +135,10 @@ function createTodo(db, recurrence, context, input) {
       agent_activity_at,agent_activity_action) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(userId, args.list_id, args.title, description, args.day_assigned ?? null,
         args.approx_time || null, rule.interval, rule.pattern, Number(args.completed), Number(args.completed), args.completed ? nowIso() : null,
-        context.actor === 'mcp' ? nowIso() : null, context.actor === 'mcp' ? 'created' : null);
+        isAgentActor(context.actor) ? nowIso() : null, isAgentActor(context.actor) ? 'created' : null);
     if (args.day_assigned && !args.completed) createPlannerService(db).move(context, { item: { kind: 'task', id }, day: args.day_assigned, index: Number.MAX_SAFE_INTEGER });
     if (rule.recurring) recurrence.materializeForTemplate(id, timezone(db, userId), userId);
-    if (rule.recurring && context.actor === 'mcp') db.prepare(`UPDATE todos SET agent_activity_at=?,agent_activity_action='created'
+    if (rule.recurring && isAgentActor(context.actor)) db.prepare(`UPDATE todos SET agent_activity_at=?,agent_activity_action='created'
       WHERE user_id=? AND recurrence_parent_id=?`).run(nowIso(), userId, id);
     return { todo: ownedTodo(db, userId, id), materialized: children(db, userId, id) };
   })();
@@ -233,7 +234,7 @@ function updateTodo(db, recurrence, context, input) {
     if (context.actor === 'web' && (Object.keys(instanceUpdates).length || hasChange)) {
       Object.assign(instanceUpdates, { agent_activity_at: null, agent_activity_action: null });
     }
-    if (context.actor === 'mcp' && args.day_assigned !== undefined && args.day_assigned !== existing.day_assigned) {
+    if (isAgentActor(context.actor) && args.day_assigned !== undefined && args.day_assigned !== existing.day_assigned) {
       Object.assign(instanceUpdates, { agent_activity_at: nowIso(), agent_activity_action: 'moved' });
     }
     writePatch(db, userId, existing.recurrence_parent_id ?? existing.id, seriesUpdates, recurring);
@@ -264,13 +265,13 @@ function reorderTodos(db, context, input) {
   const { items } = parse(todoReorderSchema, input);
   if (new Set(items.map(item => item.id)).size !== items.length) invalid('Duplicate task IDs');
   return db.transaction(() => {
-    for (const item of items) ownedTodo(db, userId, item.id);
-    for (const item of items) {
-      const before = ownedTodo(db, userId, item.id);
+    const owned = items.map(item => ownedTodo(db, userId, item.id));
+    items.forEach((item, index) => {
+      const before = owned[index];
       writePatch(db, userId, item.id, { planner_order: item.planner_order,
         ...(context.actor === 'web' && before.planner_order !== item.planner_order
           ? { agent_activity_at: null, agent_activity_action: null } : {}) });
-    }
+    });
     return { ok: true };
   })();
 }

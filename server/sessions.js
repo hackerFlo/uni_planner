@@ -14,21 +14,27 @@ const { SESSION_COOKIE_MAX_AGE_MS } = require('./config');
 // and the row cannot drift apart into a session that is valid by one measure and
 // dead by another.
 
-function createSession(userId, { now = new Date() } = {}) {
+// An agent-account session is filed under the OWNER's user_id (so deleting the
+// owner cascades) and tagged with agentAccountId. Owner and agent sessions never
+// satisfy each other's lookups, and the owner's "revoke everything" lever
+// (deleteAllSessions) leaves agent sessions alone: the agent has its own
+// credentials and its own lever (deleteAgentSessions).
+function createSession(userId, { now = new Date(), agentAccountId = null } = {}) {
   const id = randomUUID();
   const expiresAt = new Date(now.getTime() + SESSION_COOKIE_MAX_AGE_MS).toISOString();
-  db.prepare('INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)')
-    .run(id, userId, expiresAt);
+  db.prepare('INSERT INTO sessions (id, user_id, expires_at, agent_account_id) VALUES (?, ?, ?, ?)')
+    .run(id, userId, expiresAt, agentAccountId);
   return id;
 }
 
 // Scoped by user_id as well as id: a session id is a bearer-ish value, and
 // pairing it with the token's user makes a mismatched pair fail closed (AR-2).
-function findLiveSession(sessionId, userId, { now = new Date() } = {}) {
+let selectSession;
+
+function findLiveSession(sessionId, userId, { now = new Date(), agentAccountId = null } = {}) {
   if (typeof sessionId !== 'string' || sessionId === '') return null;
-  const row = db.prepare(
-    'SELECT id, expires_at FROM sessions WHERE id = ? AND user_id = ?'
-  ).get(sessionId, userId);
+  selectSession ??= db.prepare('SELECT id, expires_at FROM sessions WHERE id = ? AND user_id = ? AND agent_account_id IS ?');
+  const row = selectSession.get(sessionId, userId, agentAccountId);
   if (!row) return null;
   return row.expires_at > now.toISOString() ? row : null;
 }
@@ -39,7 +45,11 @@ function deleteSession(sessionId, userId) {
 }
 
 function deleteAllSessions(userId) {
-  return db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId).changes;
+  return db.prepare('DELETE FROM sessions WHERE user_id = ? AND agent_account_id IS NULL').run(userId).changes;
+}
+
+function deleteAgentSessions(agentAccountId) {
+  return db.prepare('DELETE FROM sessions WHERE agent_account_id = ?').run(agentAccountId).changes;
 }
 
 // Expired rows are already refused by findLiveSession; this only stops the table
@@ -53,5 +63,6 @@ module.exports = {
   findLiveSession,
   deleteSession,
   deleteAllSessions,
+  deleteAgentSessions,
   sweepExpiredSessions,
 };

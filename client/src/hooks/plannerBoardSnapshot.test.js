@@ -16,6 +16,13 @@ test('board reads retry once and require matching versions', async () => {
 test('continually changing board is rejected and cancellation stops retries', async () => {
   await assert.rejects(refreshBoardSnapshots(async () => true, async () => true, () => version(1), () => version(2)), /changed/);
   let reads = 0;
-  assert.equal(await refreshBoardSnapshots(async () => false, async () => { reads++; }, () => null, () => null), false);
-  assert.equal(reads, 0);
+  assert.equal(await refreshBoardSnapshots(async () => false, async () => { reads++; return true; }, () => null, () => null), false);
+  assert.equal(reads, 1);
+});
+// Sequential reads cost one extra round trip after every board change.
+test('board reads tasks and dividers concurrently', async () => {
+  let dividersStartedBeforeTasksFinished = false; let tasksDone = false;
+  await refreshBoardSnapshots(async () => { await new Promise(resolve => setTimeout(resolve, 5)); tasksDone = true; return true; },
+    async () => { dividersStartedBeforeTasksFinished = !tasksDone; return true; }, () => version(1), () => version(1));
+  assert.equal(dividersStartedBeforeTasksFinished, true);
 });

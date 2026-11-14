@@ -231,3 +231,75 @@ test.describe('parseWatchtowerToken', () => {
     assert.throws(() => parseWatchtowerToken(token), (err) => !err.message.includes('yyy'));
   });
 });
+
+test.describe('parseAnthropicApiKey', () => {
+  const { parseAnthropicApiKey } = require('./config');
+
+  test('returns null when unset so the feature stays unavailable', () => {
+    assert.equal(parseAnthropicApiKey(undefined), null);
+  });
+
+  test('treats whitespace as unset', () => {
+    assert.equal(parseAnthropicApiKey('  \n'), null);
+  });
+
+  test('trims a stray newline from a compose file', () => {
+    assert.equal(parseAnthropicApiKey(' sk-ant-test\n'), 'sk-ant-test');
+  });
+
+  test('rejects a value containing whitespace without repeating it', () => {
+    assert.throws(() => parseAnthropicApiKey('sk ant secretvalue'), (err) => !err.message.includes('secretvalue'));
+  });
+
+  test('rejects an implausibly long value', () => {
+    assert.throws(() => parseAnthropicApiKey('k'.repeat(513)), /at most 512/);
+  });
+});
+
+test.describe('parseAiListModel', () => {
+  const { parseAiListModel, AI_LIST_MODEL_DEFAULT } = require('./config');
+
+  test('defaults to the cheap model', () => {
+    assert.equal(parseAiListModel(undefined), AI_LIST_MODEL_DEFAULT);
+  });
+
+  test('accepts a plain model id', () => {
+    assert.equal(parseAiListModel('claude-haiku-5-5'), 'claude-haiku-5-5');
+  });
+
+  test('rejects a value with a path or space', () => {
+    assert.throws(() => parseAiListModel('x/../y z'), /AI_LIST_MODEL/);
+  });
+});
+
+test.describe('parseAiListDailyLimit', () => {
+  const { parseAiListDailyLimit } = require('./config');
+
+  test('defaults to 100', () => {
+    assert.equal(parseAiListDailyLimit(undefined), 100);
+  });
+
+  test('parses a positive integer', () => {
+    assert.equal(parseAiListDailyLimit('15'), 15);
+  });
+
+  test('rejects zero, negatives and fractions', () => {
+    for (const raw of ['0', '-3', '1.5', 'abc']) assert.throws(() => parseAiListDailyLimit(raw), /AI_LIST_DAILY_LIMIT/);
+  });
+});
+
+test.describe('parseAnthropicBaseUrl', () => {
+  const { parseAnthropicBaseUrl } = require('./config');
+
+  test('returns null when unset so the SDK default endpoint is used', () => {
+    assert.equal(parseAnthropicBaseUrl(undefined), null);
+  });
+
+  test('accepts a bare http origin for a local fake', () => {
+    assert.equal(parseAnthropicBaseUrl('http://127.0.0.1:3999/'), 'http://127.0.0.1:3999');
+  });
+
+  test('rejects a URL with a path', () => {
+    assert.throws(() => parseAnthropicBaseUrl('https://example.com/v1'), /bare origin/);
+  });
+});

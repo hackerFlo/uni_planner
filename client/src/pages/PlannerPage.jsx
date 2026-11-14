@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useIsMobile from '../hooks/useIsMobile';
 import { DragDropContext } from '@hello-pangea/dnd';
 import { usePlannerBoard } from '../hooks/usePlannerBoard';
@@ -9,15 +9,15 @@ import { useLists } from '../context/ListsContext';
 import { useUndo } from '../context/UndoContext';
 import Navbar from '../components/layout/Navbar';
 import TodoList from '../components/todos/TodoList';
-import TodoForm from '../components/todos/TodoForm';
-import ArchiveDrawer from '../components/todos/ArchiveDrawer';
 import WeeklyPlanner from '../components/planner/WeeklyPlanner';
-import WhatsNewModal from '../components/layout/WhatsNewModal';
+import OfflinePill from '../components/OfflinePill';
+import { TodoForm, ArchiveDrawer, WhatsNewModal, ALL_DIALOGS } from '../components/lazyDialogs';
 import Tooltip from '../components/ui/Tooltip';
 import { getWeekDates, parseDateLocal } from '../utils/dates';
 import { useToday } from '../context/TimeContext';
 import { useCompletedTodos } from '../hooks/useCompletedTodos';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
+import { narrowedCardShiftPx } from '../utils/dragCenter';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 import { buildSidebar } from '../utils/sidebar';
 import { planCrossDayDrop, planSameDayReorder, todosForDay } from '../utils/plannerMutations';
@@ -32,6 +32,14 @@ import { useToast } from '../context/ToastContext';
 import { userMessage } from '../api/errors';
 import { CopyDragProvider } from '../context/CopyDragContext';
 import { useAuth } from '../context/AuthContext';
+import { useStableCallback } from '../hooks/useStableCallback';
+import { useGlobalShortcuts } from '../hooks/useGlobalShortcuts';
+import { useAttentionCount } from '../hooks/useAttentionCount';
+import { countOpenToday } from '../utils/appBadge';
+import { dragEndMessage, dragStartMessage, dragUpdateMessage } from '../utils/dragAnnouncements';
+import { preloadOnIdle } from '../utils/lazyDialog';
+import { loadBoardScroll, sessionStore } from '../utils/boardScroll';
+import { isUndoShortcut } from '../utils/undoShortcut';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const SIDEBAR_MIN_PX = 200;
@@ -42,6 +50,7 @@ const SIDEBAR_MAX_PX = 520;
 // the column width before @hello-pangea/dnd measures it (see onBeforeCapture below).
 const COLUMN_WIDTH_PX = 180;
 const REVEALED_DAYS_KEY = 'uniPlanner.revealedDays';
+const NO_TODOS = [];
 
 // localStorage can throw (Safari private mode) and can hold anything a previous
 // version wrote, so neither read nor write is allowed to take the page down.
@@ -68,7 +77,7 @@ function getRealId(draggableId) {
 export default function PlannerPage() {
   const relatedRefresh = useRef(null);
   const refreshRelated = useCallback(options => relatedRefresh.current?.(options) ?? Promise.resolve(true), []);
-  const { todos, dividers, items, loading, initialLoading, fetchTodos, createTodo, updateTodo, deleteTodo, dismissAgentActivity,
+  const { todos, dividers, items, loading, initialLoading, fetchTodos, createTodoQuick, saveTodo, completeTodo: completeById, updateTodo, deleteTodo, dismissAgentActivity,
     captureVersion, fetchBoard, assignDay, reorderDayItems, moveItemToDay, copyItemToDay, addDivider, removeDivider } = usePlannerBoard({ refreshRelated });
   const { canUndo, undo } = useUndo();
   const { notes, setNote, fetchNotes, version: notesVersion } = useDayNotes();
@@ -88,7 +97,9 @@ export default function PlannerPage() {
   const [copyGhostId, setCopyGhostId] = useState(null);
   const [formState, setFormState] = useState(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
-  const [weekOffset, setWeekOffset] = useState(0);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  // A reload of this tab reopens the week it was on; a fresh tab starts on this week.
+  const [weekOffset, setWeekOffset] = useState(() => loadBoardScroll(sessionStore(), todayIso)?.weekOffset ?? 0);
   const [revealedDays, setRevealedDays] = useState(loadRevealedDays);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(288);
@@ -104,10 +115,13 @@ export default function PlannerPage() {
   // The same decision, in a ref, because handleDragEnd must read the value the
   // drag started with rather than whichever render it closed over.
   const copyGhostRef = useRef(null);
+  const pointerXRef = useRef(null);
   const scrollTimerRef = useRef(null);
   const resizeStartRef = useRef({ x: 0, width: 0 });
 
   useShakeUndo(canUndo, undo);
+  useEffect(() => preloadOnIdle(ALL_DIALOGS), []);
+  useAttentionCount(useMemo(() => countOpenToday(todos, todayIso), [todos, todayIso]));
 
   useEffect(() => {
     const syncFocus = () => setEditingText(Boolean(document.activeElement?.matches('input,textarea,[contenteditable="true"]')));
@@ -115,10 +129,18 @@ export default function PlannerPage() {
     document.addEventListener('focusout', syncFocus);
     return () => { document.removeEventListener('focusin', syncFocus); document.removeEventListener('focusout', syncFocus); };
   }, []);
-  function openForm(state) {
+  const openForm = useStableCallback(state => {
     try { setFormState({ ...state, draft: new PlannerDraft(captureVersion()) }); }
     catch (error) { toast?.error(userMessage(error)); }
-  }
+  });
+
+  // Where the finger (or mouse) last went down, so a narrowed sidebar card can
+  // be centred under it at pickup -- see narrowedCardShiftPx.
+  useEffect(() => {
+    const remember = (e) => { pointerXRef.current = e.clientX; };
+    window.addEventListener('pointerdown', remember, { capture: true, passive: true });
+    return () => window.removeEventListener('pointerdown', remember, true);
+  }, []);
 
   useEffect(() => {
     const sync = (e) => { altHeldRef.current = e.altKey; };
@@ -137,7 +159,7 @@ export default function PlannerPage() {
 
   useEffect(() => {
     function onKeyDown(e) {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+      if (isUndoShortcut(e)) {
         const tag = document.activeElement?.tagName;
         if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return;
         if (canUndo) {
@@ -178,7 +200,7 @@ export default function PlannerPage() {
   }, [isResizing]);
 
   function handleCreate(data) {
-    return createTodo(data, formState.draft.controls({ action: 'create', data }));
+    return createTodoQuick(data, formState.draft.controls({ action: 'create', data }));
   }
 
   function startResize(e) {
@@ -189,9 +211,15 @@ export default function PlannerPage() {
     document.body.style.userSelect = 'none';
   }
 
-  function handleDragStart({ draggableId }) {
+  function handleDragStart({ draggableId, source }, provided) {
     dragControls.current = { expectedVersion: captureVersion(), idempotencyKey: crypto.randomUUID() };
-    setActiveItem(itemIdMap.get(getRealId(draggableId)) ?? null);
+    const item = itemIdMap.get(getRealId(draggableId)) ?? null;
+    setActiveItem(item);
+    provided?.announce(dragStartMessage(item, source));
+  }
+
+  function handleDragUpdate({ destination }, provided) {
+    provided?.announce(dragUpdateMessage(destination));
   }
 
   // Everything that has to be true before @hello-pangea/dnd measures the board.
@@ -211,16 +239,29 @@ export default function PlannerPage() {
     const el = document.querySelector(`[data-rfd-draggable-id="${draggableId}"]`);
     if (!el || !sidebarScrollRef.current?.contains(el)) return;
     el.style.width = `${COLUMN_WIDTH_PX}px`;
+    // Narrowing keeps the left edge, which leaves the card beside a finger that
+    // grabbed it further right: drops and auto-scroll follow the card, not the finger.
+    el.style.position = 'relative';
+    el.style.left = `${narrowedCardShiftPx({
+      pointerX: pointerXRef.current,
+      cardLeft: el.getBoundingClientRect().left,
+      cardWidth: COLUMN_WIDTH_PX,
+      viewportWidth: window.innerWidth,
+    })}px`;
     shrunkCardRef.current = el;
   }
 
   function restoreShrunkCard() {
-    if (!shrunkCardRef.current) return;
-    shrunkCardRef.current.style.width = '';
+    const el = shrunkCardRef.current;
+    if (!el) return;
+    el.style.width = '';
+    el.style.position = '';
+    el.style.left = '';
     shrunkCardRef.current = null;
   }
 
-  function handleDragEnd({ source, destination, draggableId }) {
+  function handleDragEnd({ source, destination, draggableId }, provided) {
+    provided?.announce(dragEndMessage(itemIdMap.get(getRealId(draggableId)), source, destination));
     restoreShrunkCard();
     const wantsCopy = copyGhostRef.current !== null;
     setActiveItem(null);
@@ -315,7 +356,7 @@ export default function PlannerPage() {
     return () => { controller.abort(); clearTimeout(retry); document.removeEventListener('visibilitychange', refreshDay); };
   }, [todayIso, syncPaused, refreshAll]);
 
-  function toggleCompleted(date) {
+  const toggleCompleted = useStableCallback(function toggleCompleted(date) {
     setRevealedDays(prev => {
       const next = new Set(prev);
       if (next.has(date)) next.delete(date); else next.add(date);
@@ -326,20 +367,34 @@ export default function PlannerPage() {
       }
       return next;
     });
-  }
+  });
 
   // Completing an item moves it out of the live board and into the completed
   // list, so both have to be refreshed for the card to reappear below the fold.
-  function completeTodo(todo) {
-    return updateTodo(todo.id, { completed: 1, archived: 1 });
-  }
+  const completeTodo = useStableCallback(todo => completeById(todo.id));
 
   // The inverse of the checkbox that filed it away. Both surfaces have to be
   // refreshed: the item leaves the completed list and rejoins the live board on
   // the same day it was assigned to, which `completed = 0` does not disturb.
-  function uncompleteTodo(todo) {
-    return updateTodo(todo.id, { completed: 0, archived: 0 }, { expectedVersion: completedVersion });
-  }
+  const uncompleteTodo = useStableCallback(todo =>
+    updateTodo(todo.id, { completed: 0, archived: 0 }, { expectedVersion: completedVersion }));
+
+  const editTodo = useStableCallback(todo => openForm({ mode: 'edit', todo }));
+  const addForDay = useStableCallback(date => openForm({ mode: 'create', defaults: { day_assigned: date } }));
+  const unassignTodo = useStableCallback(id => assignDay(id, null));
+  const dismissActivity = useStableCallback((id, controls) => dismissAgentActivity(id, controls));
+  const deleteTodoById = useStableCallback(id => deleteTodo(id));
+  const changeNote = useStableCallback((date, value) => setNote(date, value, { expectedVersion: notesVersion }));
+  const addForList = useMemo(() => new Map(lists.map(list => [list.id, () => openForm({ mode: 'create', defaults: { list_id: list.id } })])), [lists, openForm]);
+  const toggleArchive = useCallback(() => setArchiveOpen(v => !v), []);
+
+  useGlobalShortcuts({
+    new: () => openForm({ mode: 'create', defaults: {} }),
+    'prev-week': () => setWeekOffset(offset => offset - 1),
+    'next-week': () => setWeekOffset(offset => offset + 1),
+    today: () => setWeekOffset(0),
+    help: () => setSettingsOpen(true),
+  }, syncPaused || archiveOpen || settingsOpen);
 
   // An installed PWA has no browser pull-to-refresh; this restores it and pulls
   // every surface at once, so the gesture means "bring the board up to date".
@@ -347,16 +402,16 @@ export default function PlannerPage() {
     () => Promise.all([fetchTodos(), refreshCompleted()]),
     [fetchTodos, refreshCompleted]
   );
-  const { distance: pullDistancePx, refreshing: pullRefreshing } = usePullToRefresh(pullRefresh);
+  const { distance: pullDistancePx, refreshing: pullRefreshing } = usePullToRefresh(pullRefresh, { suspended: Boolean(activeItem) });
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-white dark:bg-zinc-900">
       <PullToRefreshIndicator distance={pullDistancePx} refreshing={pullRefreshing} />
       {revisionSync.error && <p role="status" className="text-xs px-4 py-1 text-amber-700">Planner sync is paused or retrying. {userMessage(revisionSync.error)}</p>}
-      <Navbar onArchiveToggle={() => setArchiveOpen(v => !v)} archiveOpen={archiveOpen} fetchTodos={fetchTodos} onOpenWhatsNew={whatsNew.openManually} />
+      <Navbar onArchiveToggle={toggleArchive} archiveOpen={archiveOpen} settingsOpen={settingsOpen} onSettingsOpenChange={setSettingsOpen} fetchTodos={fetchTodos} onOpenWhatsNew={whatsNew.openManually} />
 
       <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
-        <DragDropContext onBeforeCapture={handleBeforeCapture} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+        <DragDropContext onBeforeCapture={handleBeforeCapture} onDragStart={handleDragStart} onDragUpdate={handleDragUpdate} onDragEnd={handleDragEnd}>
         <CopyDragProvider value={!!copyGhostId}>
 
           {/* Weekly planner */}
@@ -375,13 +430,13 @@ export default function PlannerPage() {
               isDragging={!!activeItem}
               copyGhostId={copyGhostId}
               notes={notes}
-              onNoteChange={(date, value) => setNote(date, value, { expectedVersion: notesVersion })}
-              onUnassign={id => assignDay(id, null)}
+              onNoteChange={changeNote}
+              onUnassign={unassignTodo}
               onComplete={completeTodo}
-              onDismissAgentActivity={dismissAgentActivity}
-              onEdit={todo => openForm({ mode: 'edit', todo })}
-              onDelete={deleteTodo}
-              onAdd={date => openForm({ mode: 'create', defaults: { day_assigned: date } })}
+              onDismissAgentActivity={dismissActivity}
+              onEdit={editTodo}
+              onDelete={deleteTodoById}
+              onAdd={addForDay}
               onAddDivider={addDivider}
               onDeleteDivider={removeDivider}
             />
@@ -412,18 +467,15 @@ export default function PlannerPage() {
                   <TodoList
                     key={list.id}
                     list={list}
-                    todos={sidebarByList[list.id] ?? []}
+                    todos={sidebarByList[list.id] ?? NO_TODOS}
                     loading={loading}
-                    onAdd={() => openForm({ mode: 'create', defaults: { list_id: list.id } })}
-                    onEdit={todo => openForm({ mode: 'edit', todo })}
+                    onAdd={addForList.get(list.id)}
+                    onEdit={editTodo}
                     onComplete={completeTodo}
-                    onDismissAgentActivity={dismissAgentActivity}
-                    onDelete={id => deleteTodo(id)}
-                    onUnassign={id => assignDay(id, null)}
+                    onDismissAgentActivity={dismissActivity}
+                    onDelete={deleteTodoById}
+                    onUnassign={unassignTodo}
                     copyGhostId={copyGhostId}
-                    // A divider belongs to a day, so the sidebar visibly
-                    // refuses it rather than accepting a drop that does nothing.
-                    isDropDisabled={activeItem?.kind === 'divider'}
                   />
                 ))}
               </div>
@@ -471,6 +523,7 @@ export default function PlannerPage() {
         </DragDropContext>
       </div>
 
+      <Suspense fallback={null}>
       {formState && (
         <TodoForm
           mode={formState.mode}
@@ -478,8 +531,8 @@ export default function PlannerPage() {
           defaults={formState.defaults}
           onClose={() => setFormState(null)}
           onCreate={handleCreate}
-          onUpdate={(id, data) => updateTodo(id, data, formState.draft.controls({ action: 'update', id, data }))}
-          onComplete={todo => updateTodo(todo.id, { completed: true, archived: true }, formState.draft.controls({ action: 'complete', id: todo.id }))}
+          onUpdate={(id, data) => saveTodo(id, data, formState.draft.controls({ action: 'update', id, data }))}
+          onComplete={todo => completeById(todo.id, formState.draft.controls({ action: 'complete', id: todo.id }))}
           onDelete={(id, scope) => deleteTodo(id, scope, formState.draft.controls({ action: 'delete', id, scope }))}
         />
       )}
@@ -493,6 +546,8 @@ export default function PlannerPage() {
       )}
 
       {whatsNew.open && <WhatsNewModal entries={whatsNew.entries} onClose={whatsNew.close} />}
+      </Suspense>
+      <OfflinePill />
     </div>
   );
 }

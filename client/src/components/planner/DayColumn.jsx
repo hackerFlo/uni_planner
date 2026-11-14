@@ -1,14 +1,17 @@
-import { useRef, useState } from 'react';
+import { memo, useRef, useState } from 'react';
 import { Droppable } from '@hello-pangea/dnd';
 import AssignedCard from './AssignedCard';
 import DividerCard from './DividerCard';
 import CompletedCard from './CompletedCard';
 import Tooltip from '../ui/Tooltip';
+import { SkeletonCard } from '../ui/Skeleton';
 import EmojiPicker from '../ui/EmojiPicker';
 import useEmojiInput from '../../hooks/useEmojiInput';
 import { parseDateLocal } from '../../utils/dates';
 import { withCopyGhost } from '../../utils/copyDrag';
 import { useToday } from '../../context/TimeContext';
+import { useFirstLoadFade } from '../../hooks/useFirstLoadFade';
+import { EMPTY_IDS } from '../../utils/freshIds';
 
 const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const ALT_LABEL = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent ?? '') ? '⌥' : 'Alt';
@@ -116,33 +119,23 @@ function NoteSlot({ note, isToday, exam, holiday, onSave }) {
   );
 }
 
-// Placeholder cards for the first fetch. Shaped like an AssignedCard so the
-// column does not jump when the real ones land. An empty day now renders
-// nothing at all, so without these seven blank columns would be
-// indistinguishable from a load that has not finished.
-const SKELETON_ROWS = ['w-4/5', 'w-3/5', 'w-2/3'];
-
+// Placeholder cards for the first fetch. The shared shimmer cards share
+// AssignedCard's padding and border, so the column does not jump when the real
+// ones land. An empty day now renders nothing at all, so without these seven
+// blank columns would be indistinguishable from a load that has not finished.
 function DaySkeleton() {
   return (
-    <div className="space-y-2 animate-pulse" aria-hidden="true">
-      {SKELETON_ROWS.map((titleWidth, i) => (
-        <div
-          key={i}
-          className="bg-white/60 dark:bg-zinc-800/40 border border-zinc-100 dark:border-zinc-800 rounded-lg p-2.5"
-        >
-          <div className="h-2 w-10 rounded-full bg-zinc-200 dark:bg-zinc-700" />
-          <div className={`h-2 mt-2 rounded-full bg-zinc-200 dark:bg-zinc-700 ${titleWidth}`} />
-          <div className="h-2 mt-1.5 w-1/2 rounded-full bg-zinc-100 dark:bg-zinc-800" />
-        </div>
-      ))}
+    <div className="space-y-2" aria-hidden="true">
+      {[0, 1, 2].map(i => <SkeletonCard key={i} variant={i} />)}
     </div>
   );
 }
 
-export default function DayColumn({ date, items, copyGhostId = null, loading = false, completedTodos = [], showCompleted = false, onToggleCompleted, onUncomplete, holiday, exam, isDragging, note, onNoteChange, onUnassign, onComplete, onEdit, onDelete, onAdd, onAddDivider, onDeleteDivider, onDismissAgentActivity }) {
+function DayColumn({ date, items, copyGhostId = null, freshIds = EMPTY_IDS, loading = false, completedTodos = [], showCompleted = false, onToggleCompleted, onUncomplete, holiday, exam, isDragging, note, onNoteChange, onUnassign, onComplete, onEdit, onDelete, onAdd, onAddDivider, onDeleteDivider, onDismissAgentActivity }) {
   const todayIso = useToday();
   const dateObj = parseDateLocal(date);
   const isToday = date === todayIso;
+  const { fadeClass, onFadeEnd } = useFirstLoadFade(loading && items.length === 0);
 
   const dayLabel = DAY_SHORT[dateObj.getDay()];
   const dayNum = dateObj.getDate();
@@ -154,10 +147,8 @@ export default function DayColumn({ date, items, copyGhostId = null, loading = f
     >
       {(provided, snapshot) => (
         <div
-          ref={provided.innerRef}
-          {...provided.droppableProps}
           aria-busy={loading}
-          className={`group flex flex-col w-[180px] flex-shrink-0 md:w-auto md:flex-1 md:min-w-[180px] overflow-hidden rounded-xl border transition-all snap-start md:snap-align-none ${
+          className={`group flex flex-col w-[180px] flex-shrink-0 md:w-auto md:flex-1 md:min-w-[180px] overflow-hidden rounded-xl border transition-[background-color,border-color,box-shadow] snap-start md:snap-align-none ${
             isToday
               ? 'border-indigo-200 dark:border-indigo-900 bg-indigo-50 dark:bg-indigo-950/40'
               : exam
@@ -230,12 +221,27 @@ export default function DayColumn({ date, items, copyGhostId = null, loading = f
             </div>
           </div>
 
+          {/* The list body, not the whole column, is the droppable. The library
+              lands a card dropped on an empty list at the droppable's own content
+              box, so a droppable that also holds the header sent the card to the
+              column's top-left corner, then snapped it a header and a padding
+              further down. Overlap decides the target list, so a card hovering
+              over the header still counts. */}
           <div
+            ref={provided.innerRef}
+            {...provided.droppableProps}
             className={`flex-1 p-2.5 min-h-[120px] transition-colors rounded-b-xl ${
               snapshot.isDraggingOver ? 'bg-indigo-50 dark:bg-indigo-950/60' : isToday ? '' : exam ? 'bg-rose-50 dark:bg-rose-950/20' : holiday ? 'bg-emerald-50 dark:bg-emerald-950/20' : ''
             }`}
           >
-            <div className="space-y-2">
+            {/* Every card carries its own bottom margin instead of space-y: the
+                library measures a card's margin when it is lifted, and a margin
+                that exists only on non-first siblings made the landing slot
+                eight pixels off whenever a card moved to or from the top.
+                space-y must stay off this element: it also writes
+                margin-bottom: 0 on every non-first child, at a specificity that
+                beats mb-2, so only the first card keeps its gap. */}
+            <div className={fadeClass.trim() || undefined} onAnimationEnd={onFadeEnd}>
               {/* One row per item, plus the inert stand-in that holds the
                   original's place while a copy is dragged out of this column. */}
               {withCopyGhost(items, copyGhostId, dayDraggableId).map((row, index) => (row.item.kind === 'divider' ? (
@@ -255,6 +261,7 @@ export default function DayColumn({ date, items, copyGhostId = null, loading = f
                   index={index}
                   draggableId={row.draggableId}
                   isGhost={row.isGhost}
+                  isFresh={!row.isGhost && freshIds.has(row.item.id)}
                   onUnassign={onUnassign}
                   onComplete={onComplete}
                   onEdit={onEdit}
@@ -275,7 +282,7 @@ export default function DayColumn({ date, items, copyGhostId = null, loading = f
                     // here", which is why the divider has no control of its own.
                     onClick={e => (e.altKey ? onAddDivider(date, items) : onAdd(date))}
                     aria-label={`Add an item to ${dayLabel} ${dayNum}`}
-                    className={`mt-2 w-full flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] transition-colors ${
+                    className={`${items.length > 0 ? '!mt-0' : 'mt-2'} w-full flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] transition-colors ${
                       isToday
                         ? 'text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 hover:text-indigo-500'
                         : exam
@@ -312,3 +319,7 @@ export default function DayColumn({ date, items, copyGhostId = null, loading = f
     </Droppable>
   );
 }
+
+// Plain memo: every prop is compared by identity, so a real change always
+// re-renders and the page's own callbacks decide how often that happens.
+export default memo(DayColumn);

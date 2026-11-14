@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { api } from '../api/client';
 import { useToast } from './ToastContext';
 import { KINDS, userMessage } from '../api/errors';
@@ -28,14 +28,14 @@ export function AuthProvider({ children }) {
       .finally(() => setLoading(false));
   }, [toast]);
 
-  async function login(email, password) {
+  const login = useCallback(async (email, password) => {
     const { user } = await api.post('/api/auth/login', { email, password });
     userReadSequence.current += 1;
     setUser(user);
     return user;
-  }
+  }, []);
 
-  async function logout() {
+  const logout = useCallback(async () => {
     userReadSequence.current += 1;
     await api.post('/api/auth/logout').catch((err) => {
       console.warn('[auth] logout request failed:', err.message);
@@ -43,14 +43,14 @@ export function AuthProvider({ children }) {
     });
     userReadSequence.current += 1;
     setUser(null);
-  }
+  }, [toast]);
 
-  async function updateAccount({ currentPassword, newEmail, newPassword }) {
+  const updateAccount = useCallback(async ({ currentPassword, newEmail, newPassword }) => {
     const { user: updated } = await api.patch('/api/auth/me', { currentPassword, newEmail, newPassword });
     userReadSequence.current += 1;
     setUser(updated);
     return updated;
-  }
+  }, []);
 
   const refreshUser = useCallback(async (options = {}) => {
     const sequence = ++userReadSequence.current;
@@ -60,8 +60,13 @@ export function AuthProvider({ children }) {
     return updated;
   }, []);
 
+  const value = useMemo(
+    () => ({ user, loading, login, logout, updateAccount, refreshUser }),
+    [user, loading, login, logout, updateAccount, refreshUser]
+  );
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, updateAccount, refreshUser }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

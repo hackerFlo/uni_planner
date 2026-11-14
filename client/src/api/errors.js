@@ -40,12 +40,14 @@ export function describeFailure(kind, status = 0) {
 }
 
 export class ApiError extends Error {
-  constructor(kind, { status = 0, requestId = null, message } = {}) {
+  constructor(kind, { status = 0, requestId = null, message, code, currentVersion } = {}) {
     super(message || describeFailure(kind, status));
     this.name = 'ApiError';
     this.kind = kind;
     this.status = status;
     this.requestId = requestId;
+    this.code = code;
+    this.currentVersion = currentVersion;
   }
 }
 

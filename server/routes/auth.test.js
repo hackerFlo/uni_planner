@@ -395,3 +395,12 @@ test.describe('PATCH /notification-settings', () => {
     );
   });
 });
+
+test.describe('GET /me AI list fields', () => {
+  test('reports the setting off and the feature unavailable without a server key', async () => {
+    const user = makeUser('ai-me@example.com');
+    const res = await fetch(`${base}/api/auth/me`, { headers: { Cookie: `${SESSION_COOKIE_NAME}=${tokenFor(user)}` } });
+    const { user: body } = await res.json();
+    assert.deepEqual([body.ai_list_enabled, body.ai_list_available], [false, false]);
+  });
+});

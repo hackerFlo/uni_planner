@@ -11,7 +11,7 @@ export function recurrenceLabel(days, pattern) {
   return `Repeats every ${days} days`;
 }
 
-const SHOW_DELAY = 800;
+const SHOW_DELAY = 400;
 const HIDE_FADE = 150;
 const MARGIN = 8;
 

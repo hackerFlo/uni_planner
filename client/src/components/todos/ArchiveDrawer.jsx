@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react';
 import { usePlannerResource } from '../../hooks/usePlannerResource';
 import { useLists } from '../../context/ListsContext';
 import { useRegisterModal } from '../../context/ModalContext';
+import { useModalFocus } from '../../hooks/useModalFocus';
+import ConfirmPopover from '../ui/ConfirmPopover';
 import { LIST_PALETTE } from '../../constants/listPalette';
 import RichText from '../ui/RichText';
 
@@ -17,15 +19,11 @@ export default function ArchiveDrawer({ onClose, onRestore, onDelete }) {
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
+  useModalFocus(panelRef, { initialFocus: 'dialog' });
   useEffect(() => {
-    const returnFocusTo = document.activeElement;
-    panelRef.current?.focus({ preventScroll: true });
     function onKey(e) { if (e.key === 'Escape') onCloseRef.current(); }
     document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      if (returnFocusTo instanceof HTMLElement) returnFocusTo.focus({ preventScroll: true });
-    };
+    return () => document.removeEventListener('keydown', onKey);
   }, []);
 
   async function act(action, id) {
@@ -87,7 +85,7 @@ export default function ArchiveDrawer({ onClose, onRestore, onDelete }) {
                     )}
                   </div>
                 </div>
-                <div className="flex gap-2 mt-2.5">
+                <div className="flex gap-3 mt-2.5">
                   <button
                     onClick={() => act(onRestore, todo.id)}
                     aria-label={`Restore ${todo.title}`}
@@ -95,13 +93,20 @@ export default function ArchiveDrawer({ onClose, onRestore, onDelete }) {
                   >
                     Restore
                   </button>
-                  <button
-                    onClick={() => act(onDelete, todo.id)}
-                    aria-label={`Delete ${todo.title} permanently`}
-                    className="flex-1 text-xs font-medium text-red-500 bg-red-50 dark:bg-red-950 hover:bg-red-100 dark:hover:bg-red-900 py-2 sm:py-1.5 rounded-md transition"
-                  >
-                    Delete
-                  </button>
+                  <div className="flex flex-1 [&>span]:flex-1">
+                    <ConfirmPopover
+                      options={[{ label: 'Delete permanently', tone: 'danger' }]}
+                      onSelect={() => act(onDelete, todo.id)}
+                    >
+                      <button
+                        aria-label={`Delete ${todo.title} permanently`}
+                        aria-haspopup="menu"
+                        className="flex-1 text-xs font-medium text-red-500 bg-red-50 dark:bg-red-950 hover:bg-red-100 dark:hover:bg-red-900 py-2 sm:py-1.5 rounded-md transition"
+                      >
+                        Delete
+                      </button>
+                    </ConfirmPopover>
+                  </div>
                 </div>
               </div>
             );

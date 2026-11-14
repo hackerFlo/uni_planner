@@ -104,8 +104,10 @@ app.use(cookieParser());
 
 app.use('/api/health', healthRoutes); // public by design -- see routes/health.js
 app.use('/api/auth', authRoutes); // rate limiters are per-route in routes/auth.js
+app.use('/api/agent-account', require('./routes/agentAccount')); // limiters are per-route, like auth
 app.use('/api/todos', todoLimiter, todoRoutes);
 app.use('/api/lists', todoLimiter, listRoutes);
+app.use('/api/ai', todoLimiter, require('./routes/ai')); // owner-only; its own per-account limiter runs after auth
 app.use('/api/planner', require('./routes/planner'));
 app.use('/api/preferences', todoLimiter, require('./routes/preferences').createPreferencesRouter(require('./db')));
 app.use('/api/backup', backupLimiter, backupRoutes);

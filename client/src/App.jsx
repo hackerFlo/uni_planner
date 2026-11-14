@@ -3,8 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { UndoProvider } from './context/UndoContext';
 import { ListsProvider } from './context/ListsContext';
-import { ExamsProvider } from './context/ExamsContext';
-import ExamsModal from './components/exams/ExamsModal';
+import { ExamsProvider, useExams } from './context/ExamsContext';
+import { ExamsModal } from './components/lazyDialogs';
 import { ModalProvider } from './context/ModalContext';
 import { ToastProvider } from './context/ToastContext';
 import { TimeProvider } from './context/TimeContext';
@@ -14,24 +14,71 @@ import ErrorBoundary from './components/ErrorBoundary';
 import GlobalErrorToast from './components/GlobalErrorToast';
 import NewVersionNotice from './components/NewVersionNotice';
 import LoadingBar from './components/LoadingBar';
+import { PlannerSkeleton } from './components/ui/Skeleton';
+import { useLoadingVeil } from './hooks/useLoadingVeil';
+import { SHIMMER_CYCLE_MS } from './utils/loadingVeil';
 
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
+const AgentView = lazy(() => import('./agent/AgentView'));
 
-function ProtectedRoute({ children }) {
+function ExamsModalHost() {
+  const { isModalOpen } = useExams();
+  return isModalOpen ? <Suspense fallback={null}><ExamsModal /></Suspense> : null;
+}
+
+// The pre-JS skeleton in index.html started shimmering at first paint; starting
+// this one at the same point in the cycle keeps the sweep from jumping at hand-over.
+const SHIMMER_PHASE = { '--shimmer-delay': `-${Math.round(performance.now() % SHIMMER_CYCLE_MS)}ms` };
+
+function ProtectedRoute({ children, plain = false }) {
   const { user, loading } = useAuth();
-  if (loading) return (
-    <div className="flex h-screen items-center justify-center">
-      <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-    </div>
+  const veil = useLoadingVeil(loading);
+  if (plain) {
+    if (loading) return <p role="status" className="p-6 text-sm text-zinc-400 dark:text-zinc-500">Loading…</p>;
+    return user ? children : <Navigate to="/login" replace />;
+  }
+  if (!loading && !user) return <Navigate to="/login" replace />;
+  // The planner mounts underneath while the skeleton is still up, so its data
+  // loads during the hold and the fade reveals a finished board.
+  return (
+    <>
+      {!loading && children}
+      {veil !== 'gone' && (
+        <div className={`fixed inset-0 z-[100]${veil === 'fading' ? ' veil-out' : ''}`} style={SHIMMER_PHASE}>
+          <PlannerSkeleton />
+        </div>
+      )}
+    </>
   );
-  return user ? children : <Navigate to="/login" replace />;
 }
 
 function PublicOnlyRoute({ children }) {
   const { user, loading } = useAuth();
   if (loading) return null;
   return user ? <Navigate to="/" replace /> : children;
+}
+
+// An agent session is locked to the agent view: every path, /login included,
+// lands on /agent. The owner may open /agent to preview what the agent sees.
+function AppRoutes() {
+  const { user } = useAuth();
+  if (user?.principal === 'agent') {
+    return (
+      <Routes>
+        <Route path="/agent/*" element={<AgentView />} />
+        <Route path="*" element={<Navigate to="/agent" replace />} />
+      </Routes>
+    );
+  }
+  return (
+    <Routes>
+      <Route path="/login" element={<PublicOnlyRoute><LoginPage /></PublicOnlyRoute>} />
+      <Route path="/agent/*" element={<ProtectedRoute plain><AgentView /></ProtectedRoute>} />
+      <Route path="/" element={<ProtectedRoute><PlannerPage /></ProtectedRoute>} />
+      <Route path="*" element={<NotFoundPage />} />
+    </Routes>
+  );
 }
 
 export default function App() {
@@ -67,14 +114,10 @@ export default function App() {
           <ExamsProvider>
             <BrowserRouter>
               <Suspense fallback={null}>
-                <Routes>
-                  <Route path="/login" element={<PublicOnlyRoute><LoginPage /></PublicOnlyRoute>} />
-                  <Route path="/" element={<ProtectedRoute><PlannerPage /></ProtectedRoute>} />
-                  <Route path="*" element={<NotFoundPage />} />
-                </Routes>
+                <AppRoutes />
               </Suspense>
             </BrowserRouter>
-            <ExamsModal />
+            <ExamsModalHost />
           </ExamsProvider>
         </ListsProvider>
         </UndoProvider>

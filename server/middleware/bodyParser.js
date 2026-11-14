@@ -22,7 +22,7 @@ const LARGE_BODY_PATHS = new Set([RESTORE_PATH, QUOTE_IMPORT_PATH]);
 const DEFAULT_LIMIT = '10kb';
 
 function jsonBodyParser({ limit = DEFAULT_LIMIT } = {}) {
-  const parse = express.json({ limit });
+  const parse = express.json({ limit, inflate: false });
   return function parseJsonBody(req, res, next) {
     if (LARGE_BODY_PATHS.has(req.path)) return next();
     return parse(req, res, next);

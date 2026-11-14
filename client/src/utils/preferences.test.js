@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   DEFAULT_PREFERENCES, normalizePreferences, resolveTheme,
-  loadPreferences, savePreferences, PREFS_KEY,
+  loadPreferences, savePreferences, PREFS_KEY, syncedAccountId,
 } from './preferences.js';
 
 const fakeStore = (initial = {}) => {
@@ -171,5 +171,27 @@ test.describe('quote preferences', () => {
       { q: back.showQuotes, s: back.quotesSnoozedOn },
       { q: false, s: '2026-08-20' },
     );
+  });
+});
+
+test.describe('syncedAccountId', () => {
+  const OWNER_ID = 7;
+
+  test('syncs an owner session under its account', () => {
+    assert.equal(syncedAccountId({ id: OWNER_ID, principal: 'owner' }, false), OWNER_ID);
+  });
+
+  // The agent account works on the owner's planner but may not create profiles
+  // there, so its browser keeps local preferences like a signed-out one.
+  test('never syncs an agent session', () => {
+    assert.equal(syncedAccountId({ id: OWNER_ID, principal: 'agent' }, false), null);
+  });
+
+  test('waits while the session is still loading', () => {
+    assert.equal(syncedAccountId({ id: OWNER_ID, principal: 'owner' }, true), null);
+  });
+
+  test('has nothing to sync when signed out', () => {
+    assert.equal(syncedAccountId(null, false), null);
   });
 });

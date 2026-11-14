@@ -30,6 +30,9 @@ services:
       CF_ACCESS_MCP_AUD: ${CF_ACCESS_MCP_AUD:-}
       CF_ACCESS_WEB_AUD: ${CF_ACCESS_WEB_AUD:-}
       MCP_ALLOWED_ORIGINS: ${MCP_ALLOWED_ORIGINS:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AI_LIST_MODEL: ${AI_LIST_MODEL:-}
+      AI_LIST_DAILY_LIMIT: ${AI_LIST_DAILY_LIMIT:-}
     volumes:
       # Bind mount rather than a named volume, matching docker-compose.nas.yml.
       # Resolved against this file's directory. Gitignored.

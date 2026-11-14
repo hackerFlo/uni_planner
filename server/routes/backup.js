@@ -4,13 +4,17 @@ const { z } = require('zod');
 const { DomainError } = require('../domain/errors');
 const domainError = require('../middleware/domainError');
 const { preferenceSchemas, DEFAULT_PREFERENCES } = require('../services/preferences');
+const { PALETTE } = require('../services/lists');
+const { MAX_DIVIDERS_PER_DAY } = require('../services/dayDividers');
 const router = express.Router();
 const db = require('../db');
 const { log } = require('../logger');
 const { encryptEmail } = require('../crypto');
 const requireAuth = require('../middleware/auth');
 const { createLinkService } = require('../mcp/links');
+const { createAgentAccountService } = require('../services/agentAccounts');
 const agentLinks = createLinkService(db);
+const agentAccounts = createAgentAccountService(db);
 const {
   validateDayAssigned,
   validateRecurrenceInterval,
@@ -20,15 +24,11 @@ const {
   sanitizeDescription,
 } = require('../middleware/validate');
 
-const backupJsonParser = express.json({ limit: '5mb' });
+const backupJsonParser = express.json({ limit: '5mb', inflate: false });
 
-// Must stay equal to routes/lists.js and client/src/constants/listPalette.js.
-// It fell one colour behind them once, and every exported teal list came back
-// grey with nothing logged and nothing rejected.
-// Must stay equal to MAX_DIVIDERS_PER_DAY in routes/dayDividers.js.
-const MAX_DIVIDERS_PER_DAY = 20;
-
-const PALETTE = ['indigo', 'emerald', 'teal', 'amber', 'rose', 'sky', 'violet', 'pink', 'slate'];
+// PALETTE must stay equal to client/src/constants/listPalette.js. It fell one
+// colour behind once, and every exported teal list came back grey with nothing
+// logged and nothing rejected.
 const ISO_DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
 const cleanIsoDatetime = (v) => (typeof v === 'string' && ISO_DATETIME.test(v) ? v : null);
 
@@ -73,7 +73,7 @@ const NOTIFY_TZ_RE = /^[A-Za-z_]+(?:\/[A-Za-z_+\-0-9]+){0,2}$/;
 // Deliberately the same shape routes/auth.js accepts: a control character in a
 // recipient ends the To: header and lets the rest become headers of the file
 // author's choosing, and a backup file is untrusted input like any body (AR-1).
-const NOTIFY_EMAIL_RE = /^[^\s@]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/;
+const NOTIFY_EMAIL_RE = /^[^\s@,;<>"()[\]\\:]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/;
 
 function cleanNotifyTz(tz) {
   if (typeof tz !== 'string' || tz.length > 64 || !NOTIFY_TZ_RE.test(tz)) return null;
@@ -97,6 +97,7 @@ function cleanNotifyEmail(value) {
 function collectSettingUpdates(raw, rlog, userId) {
   const updates = {};
   if (raw.notify_enabled !== undefined) updates.notify_enabled = raw.notify_enabled ? 1 : 0;
+  if (typeof raw.ai_list_enabled === 'boolean') updates.ai_list_enabled = raw.ai_list_enabled ? 1 : 0;
   if (NOTIFY_TIME_RE.test(String(raw.notify_time))) updates.notify_time = raw.notify_time;
   const tz = cleanNotifyTz(raw.notify_tz);
   if (tz) updates.notify_tz = tz;
@@ -270,6 +271,9 @@ router.post('/restore', requireAuth, backupJsonParser, (req, res) => {
     // Authorization is not portable backup content. Keep the binding but
     // require fresh consent after restore, atomically with all restored data.
     agentLinks.revoke(req.user.id);
+    // The agent account's credentials are not in the backup either (AR-15
+    // exception); a restore only signs it out so it must authenticate afresh.
+    agentAccounts.signOut(req.user.id);
     if (Array.isArray(backupLists)) {
       for (const l of backupLists) {
         if (typeof l.name === 'string' && l.name.trim().length > 0) {
@@ -307,7 +311,7 @@ router.post('/restore', requireAuth, backupJsonParser, (req, res) => {
         t.archived ? 1 : 0,
         day,
         t.approx_time ? String(t.approx_time).slice(0, 50) : null,
-        Number.isInteger(t.planner_order) ? t.planner_order : null,
+        Number.isSafeInteger(t.planner_order) ? t.planner_order : null,
         cleanIsoDatetime(t.completed_at),
         cleanIsoDatetime(t.created_at) || now,
         now,

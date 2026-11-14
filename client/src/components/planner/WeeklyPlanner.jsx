@@ -5,6 +5,13 @@ import { useHolidays } from '../../hooks/useHolidays';
 import { useLists } from '../../context/ListsContext';
 import { useExams } from '../../context/ExamsContext';
 import { useToday } from '../../context/TimeContext';
+import { useFreshIds } from '../../hooks/useFreshIds';
+import { loadBoardScroll, saveBoardScroll, sessionStore } from '../../utils/boardScroll';
+
+// A fresh array per render would defeat DayColumn's memo for every day without
+// completed items.
+const NO_COMPLETED = [];
+const SCROLL_SAVE_DEBOUNCE_MS = 150;
 
 const WEEK_LABEL = { '-1': 'Last Week', '0': 'This Week', '1': 'Next Week' };
 
@@ -13,6 +20,7 @@ export default function WeeklyPlanner({ todos, dividers, loading = false, weekOf
   const { lists } = useLists();
   const { upcomingExams } = useExams();
   const today = useToday();
+  const freshIds = useFreshIds(todos, !loading);
 
   const examsByDate = useMemo(() => {
     const m = new Map();
@@ -50,12 +58,23 @@ export default function WeeklyPlanner({ todos, dividers, loading = false, weekOf
 
   const scrollRef = useRef(null);
 
+  // Spent by the first scroll that actually happens on this mount: a reload of
+  // the same tab puts the board back where it was, but only when the saved week
+  // is the one being shown. Every later run (week change, midnight) scrolls as
+  // usual. It is spent inside the frame callback, which the cleanup cancels, so
+  // StrictMode's throwaway first effect run cannot use it up.
+  const restoreRef = useRef(true);
+
   useEffect(() => {
     if (!scrollRef.current) return;
-    requestAnimationFrame(() => {
+    const frame = requestAnimationFrame(() => {
       const container = scrollRef.current;
       if (!container) return;
-      if (weekOffset === 1) {
+      const saved = restoreRef.current ? loadBoardScroll(sessionStore(), today) : null;
+      restoreRef.current = false;
+      if (saved && saved.weekOffset === weekOffset) {
+        container.scrollLeft = saved.scrollLeft;
+      } else if (weekOffset === 1) {
         container.scrollLeft = 0;
       } else if (weekOffset === -1) {
         container.scrollLeft = container.scrollWidth;
@@ -69,7 +88,24 @@ export default function WeeklyPlanner({ todos, dividers, loading = false, weekOf
         container.scrollLeft += colRect.left - containerRect.left;
       }
     });
+    return () => cancelAnimationFrame(frame);
   }, [weekOffset, weekDates, today]);
+
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return undefined;
+    let timer = null;
+    const save = () => saveBoardScroll(sessionStore(), { today, weekOffset, scrollLeft: container.scrollLeft });
+    const onScroll = () => {
+      clearTimeout(timer);
+      timer = setTimeout(save, SCROLL_SAVE_DEBOUNCE_MS);
+    };
+    container.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      container.removeEventListener('scroll', onScroll);
+      clearTimeout(timer);
+    };
+  }, [weekOffset, today]);
 
   return (
     <div className="h-full flex flex-col p-5">
@@ -81,7 +117,7 @@ export default function WeeklyPlanner({ todos, dividers, loading = false, weekOf
           <button
             onClick={() => onWeekOffsetChange(Math.max(-1, weekOffset - 1))}
             disabled={weekOffset === -1}
-            className="text-xs font-semibold px-3 py-1 rounded-full bg-indigo-500/30 text-indigo-600 hover:bg-indigo-500/50 disabled:opacity-25 disabled:cursor-not-allowed transition-all"
+            className="text-xs font-semibold px-3 py-1 rounded-full bg-indigo-500/30 text-indigo-600 hover:bg-indigo-500/50 disabled:opacity-25 disabled:cursor-not-allowed transition-[background-color,opacity]"
           >
             <span className="md:hidden">← Prev</span>
             <span className="hidden md:inline">← Previous Week</span>
@@ -89,7 +125,7 @@ export default function WeeklyPlanner({ todos, dividers, loading = false, weekOf
           {weekOffset !== 0 && (
             <button
               onClick={() => onWeekOffsetChange(0)}
-              className="text-xs font-medium px-2.5 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-all"
+              className="text-xs font-medium px-2.5 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
             >
               Current
             </button>
@@ -97,7 +133,7 @@ export default function WeeklyPlanner({ todos, dividers, loading = false, weekOf
           <button
             onClick={() => onWeekOffsetChange(Math.min(1, weekOffset + 1))}
             disabled={weekOffset === 1}
-            className="text-xs font-semibold px-3 py-1 rounded-full bg-indigo-500 text-white hover:bg-indigo-600 disabled:opacity-25 disabled:cursor-not-allowed transition-all"
+            className="text-xs font-semibold px-3 py-1 rounded-full bg-indigo-500 text-white hover:bg-indigo-600 disabled:opacity-25 disabled:cursor-not-allowed transition-[background-color,opacity]"
           >
             <span className="md:hidden">Next →</span>
             <span className="hidden md:inline">Next Week →</span>
@@ -105,9 +141,13 @@ export default function WeeklyPlanner({ todos, dividers, loading = false, weekOf
         </div>
       </div>
 
+      {/* Snapping is switched off for the length of a drag: @hello-pangea/dnd
+          auto-scrolls by nudging scrollLeft a few pixels per frame, and
+          `snap-mandatory` pulls every nudge straight back to the nearest column,
+          so the row never moves and the days off-screen cannot be reached. */}
       <div
         ref={scrollRef}
-        className="flex-1 min-h-0 overflow-x-auto overflow-y-auto [&::-webkit-scrollbar]:hidden snap-x snap-mandatory md:snap-none"
+        className={`flex-1 min-h-0 overflow-x-auto overflow-y-auto [&::-webkit-scrollbar]:hidden ${isDragging ? 'snap-none' : 'snap-x snap-mandatory md:snap-none'}`}
         style={{ scrollbarWidth: 'none' }}
       >
         <div className="flex gap-3 min-h-full min-w-full">
@@ -117,8 +157,9 @@ export default function WeeklyPlanner({ todos, dividers, loading = false, weekOf
               date={date}
               items={itemsByDate[date]}
               copyGhostId={copyGhostId}
+              freshIds={freshIds}
               loading={loading}
-              completedTodos={completedByDate[date] ?? []}
+              completedTodos={completedByDate[date] ?? NO_COMPLETED}
               showCompleted={revealedDays.has(date)}
               onToggleCompleted={onToggleCompleted}
               onUncomplete={onUncomplete}

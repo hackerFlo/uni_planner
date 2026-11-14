@@ -1,5 +1,8 @@
 import { isPlannerVersion, plannerMutationOptions, plannerVersionSatisfies } from '../api/planner.js';
 import { ApiError, KINDS } from '../api/errors.js';
+import { isStaleVersion, runWithRecovery } from '../api/conflictRetry.js';
+import { shareStructure } from './shareStructure.js';
+import { reportOwnWrite } from '../api/ownWrites.js';
 
 // Each instance belongs to one authenticated account and one displayed snapshot.
 export class PlannerResource {
@@ -42,7 +45,7 @@ export class PlannerResource {
       const result = await this.read({ signal: controller.signal, cache: 'no-store', redirect: 'manual' });
       if (this.closed || controller.signal.aborted || sequence !== this.sequence) return false;
       if (this.requireVersion && !isPlannerVersion(result.version)) throw new ApiError(KINDS.UNKNOWN);
-      this.emit({ data: this.select(result), version: result.version ?? null, hasLoaded: true });
+      this.emit({ data: shareStructure(this.state.data, this.select(result)), version: result.version ?? null, hasLoaded: true });
       return !minimumVersion || plannerVersionSatisfies(result.version, minimumVersion);
     } catch (error) {
       if (this.closed || controller.signal.aborted || sequence !== this.sequence) return false;
@@ -61,6 +64,20 @@ export class PlannerResource {
     const result = await write(options);
     if (this.closed || options.signal.aborted) throw new DOMException('Account changed', 'AbortError');
     if (!isPlannerVersion(result?.resultVersion) || !isPlannerVersion(result?.currentVersion)) throw new ApiError(KINDS.UNKNOWN);
+    reportOwnWrite(expectedVersion, result.resultVersion);
     return result;
+  }  // A stale-version 409 was rejected before anything changed, and the server
+  // stores a receipt only for a write it applied, so nothing is stored under the
+  // first key. The retry still takes a new key: it carries a different expected
+  // version, and reusing the key would replay-conflict ("different input") if a
+  // receipt ever existed. A caller's own key keeps its meaning for uncertain
+  // network retries; only this automatic one-shot recovery rekeys.
+  async mutateRecovering(write, controls = {}, refresh = () => this.refresh()) {
+    let attempt = controls;
+    const recover = async error => {
+      if (await refresh() === false) throw error;
+      attempt = { ...controls, expectedVersion: this.captureVersion(), idempotencyKey: crypto.randomUUID() };
+    };
+    return runWithRecovery(() => this.mutate(write, attempt), recover, isStaleVersion);
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "uni-planner-client",
-  "version": "5.3",
+  "version": "6.0",
   "private": true,
   "type": "module",
   "scripts": {

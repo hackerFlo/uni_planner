@@ -1,12 +1,13 @@
 const express = require('express');
 const db = require('../db');
 const requireAuth = require('../middleware/auth');
+const { requestContext } = require('../domain/actor');
 const domainError = require('../middleware/domainError');
 const { createHolidayService } = require('../services/holidays');
 const router = express.Router();
 const service = createHolidayService(db);
 router.use(requireAuth);
-const context = req => ({ userId: req.user.id, actor: 'web', log: req.log });
+const context = req => ({ ...requestContext(req), log: req.log });
 router.get('/countries', async (req, res, next) => {
   try { res.json(await service.countries(context(req))); } catch (error) { next(error); }
 });

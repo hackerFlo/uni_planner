@@ -1,3 +1,4 @@
+const { requestContext } = require('./actor');
 const { DomainError } = require('./errors');
 const { mutationControlSchema, parse } = require('./schemas');
 
@@ -11,7 +12,7 @@ function requestControls(req) {
 }
 
 function webMutation(operations, req, name, args, legacyAction) {
-  const context = { userId: req.user.id, actor: 'web' };
+  const context = requestContext(req);
   const controls = requestControls(req);
   if (!controls) {
     // Compatibility exists only while MCP writes remain unavailable. Remove it

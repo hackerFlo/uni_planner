@@ -153,3 +153,45 @@ test('account disposal blocks both an initial read and its waiting reconciliatio
   assert.equal(await sync, false);
   assert.equal(resource.state.data, null);
 });
+
+const stale = () => Object.assign(new Error('Planner changed'), { status: 409, currentVersion: { epoch: version.epoch, revision: 3 } });
+const bumped = { epoch: version.epoch, revision: 3 };
+const ok = next => ({ resultVersion: next, currentVersion: next });
+async function loadedResource() {
+  let current = version;
+  const resource = new PlannerResource({ read: async () => ({ rows: [], version: current }), select: x => x.rows });
+  await resource.refresh();
+  return { resource, bump: next => { current = next; } };
+}
+
+test('a stale-version conflict refreshes then retries once with the new version and a new key', async () => {
+  const { resource, bump } = await loadedResource();
+  const sent = [];
+  const result = await resource.mutateRecovering(async options => {
+    sent.push(options.headers);
+    if (sent.length === 1) { bump(bumped); throw stale(); }
+    return ok({ epoch: version.epoch, revision: 4 });
+  }, { idempotencyKey: key });
+  assert.deepEqual([sent.length, sent[1]['X-Planner-Revision'], sent[1]['Idempotency-Key'] !== key, result.resultVersion.revision], [2, '3', true, 4]);
+});
+
+test('a second stale conflict is surfaced after exactly one retry', async () => {
+  const { resource } = await loadedResource();
+  let writes = 0;
+  await assert.rejects(resource.mutateRecovering(async () => { writes++; throw stale(); }, { idempotencyKey: key }), /Planner changed/);
+  assert.equal(writes, 2);
+});
+
+test('a conflict without a current version is not retried', async () => {
+  const { resource } = await loadedResource();
+  let writes = 0;
+  await assert.rejects(resource.mutateRecovering(async () => { writes++; throw Object.assign(new Error('Retry key'), { status: 409 }); }, { idempotencyKey: key }), /Retry key/);
+  assert.equal(writes, 1);
+});
+
+test('recovers through the supplied refresh and surfaces the conflict when it did not apply', async () => {
+  const { resource } = await loadedResource();
+  let writes = 0;
+  await assert.rejects(resource.mutateRecovering(async () => { writes++; throw stale(); }, {}, async () => false), /Planner changed/);
+  assert.equal(writes, 1);
+});

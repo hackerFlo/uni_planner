@@ -14,7 +14,7 @@ function canonical(value) {
 }
 
 function defaultAuthorize(context) {
-  if (!Number.isSafeInteger(context?.userId) || context.userId < 1 || !['web', 'system'].includes(context.actor)) {
+  if (!Number.isSafeInteger(context?.userId) || context.userId < 1 || !['web', 'agent', 'system'].includes(context.actor)) {
     throw new DomainError('FORBIDDEN', 'A trusted authorized principal is required', 403);
   }
 }

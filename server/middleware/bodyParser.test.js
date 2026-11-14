@@ -1,5 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const zlib = require('node:zlib');
 const express = require('express');
 
 const { jsonBodyParser, RESTORE_PATH } = require('./bodyParser');
@@ -41,6 +42,15 @@ test.describe('jsonBodyParser', () => {
   test('still enforces the 10 kB limit on an ordinary route', async () => {
     const res = await post('/api/todos', { items: bigTodos });
     assert.equal(res.status, 413);
+  });
+
+  test('refuses a compressed body instead of inflating it', async () => {
+    const res = await fetch(`${base}/api/todos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Encoding': 'gzip' },
+      body: zlib.gzipSync(JSON.stringify({ items: [1] })),
+    });
+    assert.equal(res.status, 415);
   });
 
   // The regression this whole module exists for. Before the fix the app-level

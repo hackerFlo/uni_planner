@@ -10,14 +10,16 @@ const { asyncHandler } = require('../middleware/asyncHandler');
 const { validateIdentifier } = require('../middleware/validate');
 const { randomUUID } = require('node:crypto');
 const { createNotificationService, notificationSchemas } = require('../services/notifications');
+const { createAgentAccountService } = require('../services/agentAccounts');
 const { createMutationService } = require('../domain/mutation');
 const { requestControls } = require('../domain/webMutation');
 const { DomainError } = require('../domain/errors');
 const { parse } = require('../domain/schemas');
 const domainError = require('../middleware/domainError');
+const agentAccounts = createAgentAccountService(db);
 const notifications = createNotificationService(db);
 const notificationMutations = createMutationService(db);
-const { SESSION_COOKIE_NAME, sessionCookieOptions, clearSessionCookieOptions } = require('../config');
+const { SESSION_COOKIE_NAME, sessionCookieOptions, clearSessionCookieOptions, AI_LIST_AVAILABLE } = require('../config');
 const { authLimiter, sessionLimiter } = require('../middleware/rateLimiter');
 const {
   createSession, deleteSession, deleteAllSessions, sweepExpiredSessions, findLiveSession,
@@ -33,7 +35,14 @@ const credentialSchema = z.strictObject({
 }).refine(input => input.newEmail !== undefined || input.newPassword !== undefined);
 
 function publicUser(userId) {
-  return db.prepare('SELECT id, email, created_at, notify_tz FROM users WHERE id = ?').get(userId);
+  const user = db.prepare('SELECT id, email, created_at, notify_tz, ai_list_enabled FROM users WHERE id = ?').get(userId);
+  return user && { ...user, ai_list_enabled: Boolean(user.ai_list_enabled), ai_list_available: AI_LIST_AVAILABLE, principal: 'owner' };
+}
+
+// id is the OWNER's (the data being worked on); email is the agent account's own.
+function publicAgentUser(agent) {
+  const owner = db.prepare('SELECT notify_tz FROM users WHERE id = ?').get(agent.owner_user_id);
+  return { id: agent.owner_user_id, email: agent.email, principal: 'agent', notify_tz: owner?.notify_tz };
 }
 
 function credentialsUnchanged(user) {
@@ -48,14 +57,38 @@ function commitCredentialChange(req, user, email, passwordHash) {
       || req.user.exp <= Math.floor(Date.now() / 1000) || !findLiveSession(req.user.sid, user.id)) {
       return { status: 401, error: 'Invalid or expired token' };
     }
-    const taken = db.prepare('SELECT id FROM users WHERE email = ? AND id != ?').get(email, user.id);
-    if (taken) return { status: 409, error: 'Username or email already in use' };
+    if (agentAccounts.emailInUse(email, { exceptUserId: user.id })) return { status: 409, error: 'Username or email already in use' };
     const tokenVersion = user.token_version + 1;
     db.prepare('UPDATE users SET email = ?, password_hash = ?, token_version = ? WHERE id = ?')
       .run(email, passwordHash, tokenVersion, user.id);
     deleteAllSessions(user.id);
     return { sid: createSession(user.id), tokenVersion };
   })();
+}
+
+// Same checks, same generic failure as the owner path; a disabled account is
+// only revealed to someone who already holds its password, and then only in the log.
+async function signInAgent(req, res, agent, password) {
+  const rlog = req.log || log;
+  const match = await bcrypt.compare(password, agent.password_hash);
+  if (!match || agent.disabled) {
+    rlog.warn('login failed', { reason: match ? 'agent-disabled' : 'bad-password', userId: agent.owner_user_id, principal: 'agent' });
+    return res.status(401).json({ error: 'Invalid email or password' });
+  }
+  const sid = db.transaction(() => {
+    const current = db.prepare('SELECT password_hash, token_version, disabled FROM agent_accounts WHERE id = ?').get(agent.id);
+    if (!current || current.disabled || current.password_hash !== agent.password_hash
+      || current.token_version !== agent.token_version) return null;
+    sweepExpiredSessions();
+    return createSession(agent.owner_user_id, { agentAccountId: agent.id });
+  })();
+  if (!sid) return res.status(401).json({ error: 'Invalid email or password' });
+  agentAccounts.recordLogin(agent.id);
+  const token = jwt.sign({ id: agent.owner_user_id, email: agent.email, tv: agent.token_version, sid, aid: agent.id },
+    process.env.JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+  res.cookie(SESSION_COOKIE_NAME, token, sessionCookieOptions(req));
+  rlog.info('login ok', { userId: agent.owner_user_id, principal: 'agent', secure: sessionCookieOptions(req).secure });
+  return res.json({ user: publicAgentUser(agent) });
 }
 
 router.post('/login', authLimiter, asyncHandler(async (req, res) => {
@@ -70,12 +103,15 @@ router.post('/login', authLimiter, asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'Invalid credentials' });
   }
 
-  const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email.trim().toLowerCase());
-  if (!user) {
+  const identifier = agentAccounts.normalizeEmail(email);
+  const user = db.prepare('SELECT * FROM users WHERE email = ?').get(identifier);
+  const agent = user ? null : agentAccounts.findByEmail(identifier);
+  if (!user && !agent) {
     await bcrypt.hash('dummy', 12); // constant-time defense
     rlog.warn('login failed', { reason: 'unknown-identifier' });
     return res.status(401).json({ error: 'Invalid email or password' });
   }
+  if (agent) return signInAgent(req, res, agent, password);
 
   const match = await bcrypt.compare(password, user.password_hash);
   if (!match) {
@@ -111,8 +147,7 @@ router.post('/register', authLimiter, asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'Password must be 8–128 characters' });
   }
 
-  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email.trim().toLowerCase());
-  if (existing) return res.status(409).json({ error: 'Username or email already in use' });
+  if (agentAccounts.emailInUse(agentAccounts.normalizeEmail(email))) return res.status(409).json({ error: 'Username or email already in use' });
 
   const passwordHash = await bcrypt.hash(password, 12);
 
@@ -162,6 +197,11 @@ router.post('/logout', sessionLimiter, (req, res) => {
 });
 
 router.get('/me', sessionLimiter, requireAuth, (req, res) => {
+  if (req.principal.kind === 'agent') {
+    const agent = db.prepare('SELECT * FROM agent_accounts WHERE id = ? AND owner_user_id = ?')
+      .get(req.principal.agentAccountId, req.user.id);
+    return agent ? res.json({ user: publicAgentUser(agent) }) : res.status(404).json({ error: 'User not found' });
+  }
   const user = publicUser(req.user.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
   res.json({ user });

@@ -58,7 +58,7 @@ export function isSameDay(a, b) {
 
 // Monday-first. getDay() returns 0 for Sunday, which belongs to the week that
 // is closing, not the one about to open -- hence the -6 rather than +1.
-export function startOfWeek(from = new Date()) {
+function startOfWeek(from = new Date()) {
   const day = from.getDay();
   const diffToMonday = day === 0 ? -6 : 1 - day;
   const monday = new Date(from.getFullYear(), from.getMonth(), from.getDate());

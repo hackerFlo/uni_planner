@@ -9,6 +9,7 @@ import Tooltip from '../ui/Tooltip';
 import DatePickerInput from '../ui/DatePickerInput';
 import EmojiPicker from '../ui/EmojiPicker';
 import useEmojiInput from '../../hooks/useEmojiInput';
+import { useModalFocus } from '../../hooks/useModalFocus';
 import { parseDateLocal, todayIso, countdownParts } from '../../utils/dates';
 
 const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -133,13 +134,7 @@ function ExamsModalContent() {
     return () => document.removeEventListener('keydown', onKey);
   }, [closeModal]);
 
-  useEffect(() => {
-    const returnFocusTo = document.activeElement;
-    dialogRef.current?.focus({ preventScroll: true });
-    return () => {
-      if (returnFocusTo instanceof HTMLElement) returnFocusTo.focus({ preventScroll: true });
-    };
-  }, []);
+  useModalFocus(dialogRef, { initialFocus: 'dialog' });
 
   useEffect(() => {
     if (editingId !== null) setTimeout(() => titleRef.current?.focus(), 0);

@@ -46,7 +46,7 @@ async function parseResponse(path, options, res) {
       // Already on /login means the redirect would just reload into another 401.
       if (window.location.pathname !== '/login') window.location.href = '/login';
     }
-    throw new ApiError(kind, { status: res.status, requestId, message: data?.error });
+    throw new ApiError(kind, { status: res.status, requestId, message: data?.error, code: data?.code, currentVersion: data?.currentVersion });
   }
   if (data === null && res.status !== 204) {
     throw new ApiError(KINDS.UNKNOWN, { status: res.status, requestId });
@@ -56,15 +56,16 @@ async function parseResponse(path, options, res) {
 
 // The activity counter wraps the whole call, body parsing included, and settles
 // in a finally so a rejection cannot leave the progress bar pinned on screen.
-async function request(path, options) {
-  beginRequest();
+// `silent` is for background polling: it must not light the progress bar.
+async function request(path, { silent = false, ...options } = {}) {
+  if (!silent) beginRequest();
   try {
     return await performRequest(path, options);
   } catch (error) {
     reportAccessExpiry(error);
     throw error;
   } finally {
-    endRequest();
+    if (!silent) endRequest();
   }
 }
 

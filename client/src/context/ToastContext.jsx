@@ -1,4 +1,5 @@
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createDismissTimer } from '../utils/dismissTimer';
 
 const ToastContext = createContext(null);
 
@@ -20,10 +21,7 @@ export function ToastProvider({ children }) {
   const addToast = useCallback((message, type = 'error', opts = {}) => {
     const { action = null, ref = null, duration = DEFAULT_DURATION_MS } = opts;
     const id = ++nextId.current;
-    setToasts(prev => [...prev, { id, message, type, action, ref }]);
-    if (duration > 0) {
-      setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), duration);
-    }
+    setToasts(prev => [...prev, { id, message, type, action, ref, duration }]);
     return id;
   }, []);
 
@@ -54,9 +52,9 @@ export function useToast() {
 }
 
 function ToastStack({ toasts, onDismiss }) {
-  if (toasts.length === 0) return null;
+  // Always mounted: a live region only announces content added after it exists.
   return (
-    <div className="fixed top-4 right-4 z-[200] flex flex-col gap-2 pointer-events-none">
+    <div aria-live="polite" aria-relevant="additions" className="fixed top-4 right-4 z-[200] flex flex-col gap-2 pointer-events-none">
       {toasts.map(t => (
         <Toast key={t.id} toast={t} onDismiss={() => onDismiss(t.id)} />
       ))}
@@ -64,9 +62,35 @@ function ToastStack({ toasts, onDismiss }) {
   );
 }
 
+// Auto-dismiss is held while the pointer is over the toast or focus is inside
+// it, so there is time to read it or reach the action.
+function useHoldableDismiss(duration, onDismiss) {
+  const timerRef = useRef(null);
+  const holds = useRef({ pointer: false, focus: false });
+  const dismissRef = useRef(onDismiss);
+  dismissRef.current = onDismiss;
+  useEffect(() => {
+    const timer = createDismissTimer(duration, () => dismissRef.current());
+    timerRef.current = timer;
+    timer.start();
+    return () => timer.stop();
+  }, [duration]);
+  return function hold(kind, active) {
+    holds.current[kind] = active;
+    if (holds.current.pointer || holds.current.focus) timerRef.current?.pause();
+    else timerRef.current?.start();
+  };
+}
+
 function Toast({ toast, onDismiss }) {
+  const hold = useHoldableDismiss(toast.duration, onDismiss);
   return (
     <div
+      role={toast.type === 'error' ? 'alert' : 'status'}
+      onMouseEnter={() => hold('pointer', true)}
+      onMouseLeave={() => hold('pointer', false)}
+      onFocus={() => hold('focus', true)}
+      onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget)) hold('focus', false); }}
       className={`pointer-events-auto flex items-start gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium max-w-sm border animate-in fade-in slide-in-from-top-2 duration-200 ${
         STYLES[toast.type] ?? STYLES.error
       }`}

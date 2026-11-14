@@ -4,11 +4,48 @@
 // This way every Watchtower deploy maps to exactly one version.
 // Versioning: X.Y — increment Y for regular updates, bump X (reset Y to 0) for big releases.
 // Add a new entry to CHANGELOG (newest first) on first push of a window; append to top entry otherwise.
-export const CURRENT_VERSION = '5.3';
+export const CURRENT_VERSION = '6.0';
 
 // icon: 'purple' | 'green' | 'amber' | 'blue' | 'rose'
 // Each feature needs: icon, name, desc, and a 24×24 SVG path string (stroke icons).
 export const CHANGELOG = [
+  {
+    version: '6.0',
+    date: '2026-11-14',
+    title: 'Agent accounts, AI list suggestions and a smoother planner',
+    features: [
+      {
+        icon: 'purple',
+        name: 'A login of its own for your AI agent',
+        desc: 'Browser-based agents can sign in with their own email and password and work on your planner in a simple agent view. Their changes carry the same agent marker as MCP changes. Set it up under Settings > Agents.',
+        svgPath: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
+      },
+      {
+        icon: 'blue',
+        name: 'AI list suggestions for new tasks',
+        desc: 'Optional: while you type a new task, a small AI model picks the list it most likely belongs to. Only the title, note and list names are sent, and only after you turn it on in Settings.',
+        svgPath: 'M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z',
+      },
+      {
+        icon: 'green',
+        name: 'Smoother drag and drop',
+        desc: 'Cards glide straight into place, never flash back in their old day, and keep even spacing. Dragging on the phone home-screen app now lands where your finger is.',
+        svgPath: 'M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4',
+      },
+      {
+        icon: 'amber',
+        name: 'A calmer start',
+        desc: 'Opening or reloading the planner shows a loading preview shaped exactly like your board, in your chosen theme from the first frame. Settings are grouped into sections that start closed.',
+        svgPath: 'M4 6h16M4 12h16M4 18h7',
+      },
+      {
+        icon: 'rose',
+        name: 'Security and reliability fixes',
+        desc: 'Updated dependencies, stricter input checks and automatic recovery from editing conflicts and lost preference profiles. Undo with Cmd/Ctrl+Z now also works with Caps Lock on.',
+        svgPath: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
+      },
+    ],
+  },
   {
     version: '5.3',
     date: '2026-10-12',

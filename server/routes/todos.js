@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../db');
 const requireAuth = require('../middleware/auth');
+const { requestContext } = require('../domain/actor');
 const domainError = require('../middleware/domainError');
 const { createTodoService } = require('../services/todos');
 const service = createTodoService(db);
@@ -10,7 +11,7 @@ const { webMutation, legacyBoardMutation } = require('../domain/webMutation');
 const router = express.Router();
 router.use(requireAuth);
 
-const context = req => ({ userId: req.user.id, actor: 'web' });
+const context = requestContext;
 const routeId = value => typeof value === 'string' && /^[1-9]\d*$/.test(value) ? Number(value) : NaN;
 function read(req, options) {
   const ctx = context(req);

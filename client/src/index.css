@@ -33,6 +33,16 @@
   body {
     @apply bg-white text-zinc-800 font-sans antialiased;
   }
+  /* One keyboard-focus ring for everything that is not a text field; text
+     fields keep their own focus:ring. An element can still opt out with
+     outline-none. */
+  :focus-visible:not(input):not(textarea):not(select):not([contenteditable='true']) {
+    outline: 2px solid #6366f1;
+    outline-offset: 2px;
+  }
+  .dark :focus-visible:not(input):not(textarea):not(select):not([contenteditable='true']) {
+    outline-color: #818cf8;
+  }
   ::-webkit-scrollbar {
     width: 4px;
   }
@@ -81,6 +91,57 @@
   }
   .loading-bar--done { transition: none; }
 }
+
+/* Skeleton placeholders. A highlight band sweeps across a neutral base: the
+   gradient is three times the width of the shape, so the band is only on screen
+   in the middle of the cycle and the shape rests between sweeps. The same
+   rules are mirrored, prefixed `pk-`, in index.html for the pre-JS shell. */
+.skeleton {
+  background-color: #e4e4e7;
+  background-image: linear-gradient(90deg, transparent 35%, rgba(255, 255, 255, 0.6) 50%, transparent 65%);
+  background-repeat: no-repeat;
+  background-size: 300% 100%;
+  background-position: 100% 0;
+  animation: skeleton-shimmer 1.2s ease-in-out infinite;
+  animation-delay: var(--shimmer-delay, 0s);
+}
+
+.dark .skeleton {
+  background-color: #27272a;
+  background-image: linear-gradient(90deg, transparent 35%, rgba(255, 255, 255, 0.07) 50%, transparent 65%);
+}
+
+@keyframes skeleton-shimmer {
+  from { background-position: 100% 0; }
+  to   { background-position: 0 0; }
+}
+
+/* First-load hand-off: content replacing a skeleton eases in rather than popping. */
+.content-fade {
+  animation: fadeIn 150ms ease-out both;
+}
+
+/* The loading skeleton fading off a board that is already rendered beneath it. */
+.veil-out {
+  animation: veil-out 250ms ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes veil-out {
+  to { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton,
+  .content-fade,
+  .veil-out { animation: none; }
+  .skeleton { background-image: none; }
+}
+
+.reduce-motion .skeleton,
+.reduce-motion .content-fade,
+.reduce-motion .veil-out { animation: none; }
+.reduce-motion .skeleton { background-image: none; }
 
 /* Surfaces that are set from JS rather than a Tailwind class. Kept here so the
    two themes are defined in one place instead of inside component logic. */

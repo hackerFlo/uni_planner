@@ -1,8 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   DEFAULT_PREFERENCES, loadPreferences, savePreferences, resolveTheme, normalizePreferences, loadPreferenceProfile,
+  syncedAccountId,
 } from '../utils/preferences';
 import { PreferencesSync } from '../utils/preferencesSync';
+import { saveThemeHint } from '../utils/paintHints';
 import { useAuth } from './AuthContext';
 import { useToast } from './ToastContext';
 import { userMessage } from '../api/errors';
@@ -14,7 +16,7 @@ export function PreferencesProvider({ children }) {
   const toast = useToast();
   const [guestPreferences, setGuestPreferences] = useState(loadPreferences);
   const [snapshot, setSnapshot] = useState(null);
-  const accountId = loading ? null : user?.id ?? null;
+  const accountId = syncedAccountId(user, loading);
   const scope = useMemo(() => ({ accountId }), [accountId]);
   const scopeRef = useRef(scope);
   const syncRef = useRef(null);
@@ -55,13 +57,17 @@ export function PreferencesProvider({ children }) {
 
   // Applied to <html> rather than a wrapper div so the class is in place for
   // portalled modals and for the background painted behind the app.
+  // While the session check runs the account theme is unknown; keep the one
+  // theme-boot.js applied from the hint rather than flashing the guest default.
   useEffect(() => {
     const root = document.documentElement;
-    root.classList.toggle('dark', resolvedTheme === 'dark');
     root.dataset.density = preferences.density;
     root.classList.toggle('reduce-motion', preferences.reduceMotion);
+    if (loading) return;
+    root.classList.toggle('dark', resolvedTheme === 'dark');
     root.style.colorScheme = resolvedTheme;
-  }, [resolvedTheme, preferences.density, preferences.reduceMotion]);
+    saveThemeHint(preferences.theme);
+  }, [loading, resolvedTheme, preferences.theme, preferences.density, preferences.reduceMotion]);
 
   const update = useCallback((patch) => {
     if (scope.accountId !== null) return syncRef.current?.scope === scope ? syncRef.current.sync.update(patch) : undefined;

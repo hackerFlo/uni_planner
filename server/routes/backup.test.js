@@ -72,7 +72,9 @@ for (const slot of DIVIDER_SLOTS) {
 const app = express();
 app.use(cookieParser());
 app.use('/api/backup', backupRoutes);
-app.use((_error, _req, res, _next) => res.status(500).json({ error: 'Restore failed' }));
+// Mirrors index.js: a parser's 4xx passes through, anything else is a 500.
+app.use((error, _req, res, _next) =>
+  res.status(error.status >= 400 && error.status < 500 ? error.status : 500).json({ error: 'Restore failed' }));
 const server = app.listen(0);
 const base = `http://127.0.0.1:${server.address().port}`;
 test.after(() => server.close());
@@ -131,6 +133,7 @@ test.describe('backup export', () => {
       notify_time: NOTIFY.time,
       notify_email: NOTIFY.email,
       notify_tz: NOTIFY.tz,
+      ai_list_enabled: false,
     });
   });
 
@@ -343,6 +346,31 @@ test.describe('restoring untrusted fields', () => {
     assert.equal(row.notify_email_enc, null);
   });
 
+  // nodemailer reads a comma or angle brackets in the local part as address
+  // syntax, so one stored recipient would fan out to several.
+  test('refuses an address that would split into several recipients', async () => {
+    await restoreAs(carol, { todos: [], settings: { notify_email: 'x,extra@example.org' } });
+    const row = db.prepare('SELECT notify_email_enc FROM users WHERE id = ?').get(carol.id);
+    assert.equal(row.notify_email_enc, null);
+  });
+
+  test('drops a planner order no integer column can hold exactly', async () => {
+    await restoreAs(carol, { todos: [{ title: 'order-overflow', list_name: 'Inbox', planner_order: 1e300 }] });
+    const row = db.prepare('SELECT planner_order FROM todos WHERE user_id = ? AND title = ?').get(carol.id, 'order-overflow');
+    assert.equal(row.planner_order, null);
+  });
+
+  // body-parser < 1.20.9 crashed the process on a crafted gzip frame. No client
+  // compresses request bodies, so refusing encoded ones removes the decoder entirely.
+  test('refuses a compressed restore body', async () => {
+    const res = await fetch(`${base}/api/backup/restore`, {
+      method: 'POST',
+      headers: { Cookie: `token=${carol.token}`, 'Content-Type': 'application/json', 'Content-Encoding': 'gzip' },
+      body: require('node:zlib').gzipSync(JSON.stringify({ todos: [] })),
+    });
+    assert.equal(res.status, 415);
+  });
+
   test('reports that a file predating settings restored none', async () => {
     const result = await restoreAs(carol, { todos: [] });
     assert.equal(result.settingsRestored, false);
@@ -551,5 +579,32 @@ test.describe('preference profile backup version 9', () => {
       created_at: '2026-09-01T00:00:00.000Z', updated_at: '2026-09-02T00:00:00.000Z' };
     assert.equal((await restoreAs(owner, { todos: [], preference_profiles: [profile] })).profilesImported, 1);
     assert.deepEqual((await exportAs(owner)).preference_profiles, [{ ...profile, settings: { ...DEFAULT_PREFERENCES, theme: 'dark' } }]);
+  });
+});
+
+test.describe('AI list setting in backups', () => {
+  const owner = makeUser('ai-owner@example.com');
+  const target = makeUser('ai-target@example.com');
+  const flag = user => db.prepare('SELECT ai_list_enabled AS v FROM users WHERE id=?').get(user.id).v;
+
+  test('exports ai_list_enabled with the other settings', async () => {
+    db.prepare('UPDATE users SET ai_list_enabled=1 WHERE id=?').run(owner.id);
+    assert.equal((await exportAs(owner)).settings.ai_list_enabled, true);
+  });
+
+  test('restores ai_list_enabled into another account', async () => {
+    await restoreAs(target, await exportAs(owner));
+    assert.equal(flag(target), 1);
+  });
+
+  test('ignores a non-boolean ai_list_enabled', async () => {
+    db.prepare('UPDATE users SET ai_list_enabled=0 WHERE id=?').run(target.id);
+    await restoreAs(target, { todos: [], settings: { ai_list_enabled: 'yes' } });
+    assert.equal(flag(target), 0);
+  });
+
+  test('never exports the usage counter', async () => {
+    db.prepare("INSERT INTO ai_usage(user_id,day,count) VALUES(?,'2026-01-01',5)").run(owner.id);
+    assert.equal(JSON.stringify(await exportAs(owner)).includes('ai_usage'), false);
   });
 });

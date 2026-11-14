@@ -18,7 +18,7 @@ function scrollableAncestor(node) {
   return null;
 }
 
-export function usePullToRefresh(onRefresh) {
+export function usePullToRefresh(onRefresh, { suspended = false } = {}) {
   const [distance, setDistance] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const startY = useRef(null);
@@ -26,11 +26,23 @@ export function usePullToRefresh(onRefresh) {
   const refreshRef = useRef(onRefresh);
   useEffect(() => { refreshRef.current = onRefresh; }, [onRefresh]);
 
+  // A card being dragged is a finger travelling down the screen, which is exactly
+  // what a pull looks like. Left armed, the drop would also refresh the board in
+  // the middle of the move it is saving. The drag begins after the touch did, so
+  // suspending has to disarm a gesture already under way, not just refuse new ones.
+  const suspendedRef = useRef(suspended);
+  useEffect(() => {
+    suspendedRef.current = suspended;
+    if (!suspended) return;
+    startY.current = null;
+    setDistance(0);
+  }, [suspended]);
+
   useEffect(() => {
     if (!isStandalone()) return undefined;
 
     function onTouchStart(e) {
-      if (e.touches.length !== 1) return;
+      if (suspendedRef.current || e.touches.length !== 1) return;
       const el = scrollableAncestor(e.target);
       if (!isAtTop(el)) return;
       surface.current = el;

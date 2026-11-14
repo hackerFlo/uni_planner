@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { loadEmojis, getLoadedEmojis } from '../data/loadEmojis';
+import { preloadWhenIdle } from './emojiPreload.js';
 
 function detectTrigger(value, cursorPos) {
   const before = value.substring(0, cursorPos);
@@ -26,19 +27,36 @@ function tryAutoConvert(value, cursorPos) {
 
 export default function useEmojiInput(value, onChange, inputRef) {
   const [emojiState, setEmojiState] = useState(null);
-  useEffect(() => { loadEmojis(); }, []);
+  useEffect(() => preloadWhenIdle(loadEmojis), []);
+
+  function applyAuto(auto) {
+    onChange(auto.newVal);
+    setEmojiState(null);
+    setTimeout(() => {
+      inputRef?.current?.focus();
+      inputRef?.current?.setSelectionRange(auto.newCursor, auto.newCursor);
+    }, 0);
+  }
+
+  // The ':name:' shortcut needs the data synchronously. If the chunk is still
+  // loading when the closing colon is typed, convert once it has arrived,
+  // provided the field still ends in that same token.
+  function convertAfterLoad(val) {
+    loadEmojis().then(() => {
+      const field = inputRef?.current;
+      if (!field || field.value !== val) return;
+      const auto = tryAutoConvert(val, field.selectionStart ?? val.length);
+      if (auto) applyAuto(auto);
+    }, error => console.warn('[emoji] data failed to load:', error.message));
+  }
 
   function handleChange(e) {
     const val = e.target.value;
     const cursorPos = e.target.selectionStart ?? val.length;
+    if (!getLoadedEmojis()) { if (val.includes(':')) convertAfterLoad(val); else loadEmojis(); }
     const auto = tryAutoConvert(val, cursorPos);
     if (auto) {
-      onChange(auto.newVal);
-      setEmojiState(null);
-      setTimeout(() => {
-        inputRef?.current?.focus();
-        inputRef?.current?.setSelectionRange(auto.newCursor, auto.newCursor);
-      }, 0);
+      applyAuto(auto);
       return;
     }
     const trigger = detectTrigger(val, cursorPos);

@@ -1,5 +1,6 @@
-import { useEffect, useRef, useLayoutEffect, useState } from 'react';
+import { useEffect, useId, useRef, useLayoutEffect, useState } from 'react';
 import { useRegisterModal } from '../../context/ModalContext';
+import { useModalFocus } from '../../hooks/useModalFocus';
 
 const ICON_COLORS = {
   purple: 'bg-indigo-50 dark:bg-indigo-950 text-indigo-500',
@@ -27,6 +28,9 @@ function formatDate(iso) {
 export default function WhatsNewModal({ entries, onClose }) {
   useRegisterModal();
   const scrollRef = useRef(null);
+  const dialogRef = useRef(null);
+  const titleId = useId();
+  useModalFocus(dialogRef);
   const [showScrollCue, setShowScrollCue] = useState(false);
 
   useEffect(() => {
@@ -58,7 +62,14 @@ export default function WhatsNewModal({ entries, onClose }) {
       className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/30 backdrop-blur-[3px] animate-[fadeIn_0.2s_ease]"
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-[520px] max-w-[calc(100vw-32px)] overflow-hidden animate-[slideUp_0.28s_cubic-bezier(0.22,1,0.36,1)]">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-[520px] max-w-[calc(100vw-32px)] overflow-hidden outline-none animate-[slideUp_0.28s_cubic-bezier(0.22,1,0.36,1)]"
+      >
 
         {/* Header */}
         <div className="px-7 pt-6 pb-5 border-b border-zinc-100 dark:border-zinc-800 flex items-start justify-between gap-4">
@@ -69,7 +80,7 @@ export default function WhatsNewModal({ entries, onClose }) {
               </svg>
               {isMulti ? `What's new · ${entries.length} updates` : `What's new · v${newest.version}`}
             </span>
-            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50 tracking-tight">
+            <h2 id={titleId} className="text-lg font-semibold text-zinc-900 dark:text-zinc-50 tracking-tight">
               {isMulti ? `${entries.length} updates since you were last here` : newest.title}
             </h2>
             <p className="text-[13px] text-zinc-400 dark:text-zinc-500">
