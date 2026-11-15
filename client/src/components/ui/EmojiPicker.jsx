@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { loadEmojis } from '../../data/loadEmojis';
 
@@ -28,12 +28,12 @@ export default function EmojiPicker({ anchorRef, query, onSelect, onClose }) {
   }, []);
 
   const q = query.toLowerCase();
-  const results = emojis == null ? [] : q.length > 0
+  const results = useMemo(() => (emojis == null ? [] : q.length > 0
     ? emojis
         .filter(({ n }) => n.some(name => name.startsWith(q)))
         .sort((a, b) => rank(a.n, q) - rank(b.n, q))
         .slice(0, 8)
-    : getRecents().map(e => emojis.find(em => em.e === e) ?? { e, n: [e] });
+    : getRecents().map(e => emojis.find(em => em.e === e) ?? { e, n: [e] })), [emojis, q]);
 
   useEffect(() => { setIdx(0); }, [query]);
 
@@ -88,7 +88,7 @@ export default function EmojiPicker({ anchorRef, query, onSelect, onClose }) {
 
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [idx, results, onSelect, onClose]);
+  }, [idx, results, emojis, onSelect, onClose]);
 
   if (results.length === 0) return null;
 

@@ -4,11 +4,24 @@
 // This way every Watchtower deploy maps to exactly one version.
 // Versioning: X.Y — increment Y for regular updates, bump X (reset Y to 0) for big releases.
 // Add a new entry to CHANGELOG (newest first) on first push of a window; append to top entry otherwise.
-export const CURRENT_VERSION = '6.0';
+export const CURRENT_VERSION = '6.1';
 
 // icon: 'purple' | 'green' | 'amber' | 'blue' | 'rose'
 // Each feature needs: icon, name, desc, and a 24×24 SVG path string (stroke icons).
 export const CHANGELOG = [
+  {
+    version: '6.1',
+    date: '2026-11-15',
+    title: 'Agent marker tooltip fix',
+    features: [
+      {
+        icon: 'rose',
+        name: 'Agent marker tooltips show in full',
+        desc: 'Hovering the AI marker on a task now shows its tooltip above everything else, instead of cutting it off at the edge of the card.',
+        svgPath: 'M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z',
+      },
+    ],
+  },
   {
     version: '6.0',
     date: '2026-11-14',
