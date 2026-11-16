@@ -25,6 +25,7 @@ const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, isG
   const palette = LIST_PALETTE[list?.color] ?? LIST_PALETTE.slate;
   const listName = list?.name ?? '';
   const hasAgentActivity = Boolean(formatAgentActivityLabel(todo.agent_activity_at, todo.agent_activity_action, { dayAssigned: todo.day_assigned }));
+  const isRecurringTodo = todo.recurrence_interval_days != null || todo.recurrence_pattern != null;
 
   const setCardRef = useDragTilt(snapshot.isDragging, provided.innerRef);
 
@@ -48,13 +49,13 @@ const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, isG
       className={`group bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-lg p-2.5 shadow-sm hover:shadow-md transition-shadow select-none min-w-0 w-full relative mb-2 !mt-0 cursor-grab active:cursor-grabbing${isGhost ? ' pointer-events-none' : ''}`}
       aria-hidden={isGhost || undefined}
     >
-      <div className="flex items-center gap-2 mb-1.5">
+      <div className="flex items-center gap-1 mb-1.5">
         {isCopying && (
           <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full uppercase tracking-wide bg-indigo-100 text-indigo-600 dark:bg-indigo-900 dark:text-indigo-200">
             Copy
           </span>
         )}
-        <Tooltip text="Mark complete">
+        <Tooltip text="Mark complete" className="mr-1">
         <button
           onPointerDown={e => e.stopPropagation()}
           onClick={e => { e.stopPropagation(); onComplete(e); }}
@@ -88,21 +89,21 @@ const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, isG
           </span>
         </Tooltip>
         {todo.approx_time && (
-          <Tooltip text={todo.approx_time} className="min-w-0 max-w-[25%]" onlyWhenTruncated>
+          <Tooltip text={todo.approx_time} className="flex-shrink-0 max-w-[25%]" onlyWhenTruncated>
             <span className="text-[9px] font-medium text-zinc-400 dark:text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded-full truncate">
               {fmtTime(todo.approx_time)}
             </span>
           </Tooltip>
         )}
-        {(todo.recurrence_interval_days != null || todo.recurrence_pattern != null) && (
-          <Tooltip text={recurrenceLabel(todo.recurrence_interval_days, todo.recurrence_pattern)}>
+        {isRecurringTodo && (
+          <Tooltip text={recurrenceLabel(todo.recurrence_interval_days, todo.recurrence_pattern)} className="ml-auto flex-shrink-0">
             <svg className="flex-shrink-0 w-3 h-3 text-zinc-400 dark:text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
               <path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
             </svg>
           </Tooltip>
         )}
         {hasAgentActivity && (
-          <span className="ml-auto flex h-4 flex-shrink-0 items-center">
+          <span className={`${isRecurringTodo ? 'ml-0.5' : 'ml-auto'} flex h-4 flex-shrink-0 items-center`}>
             <AgentActivityBadge todo={todo} onDismissAgentActivity={onDismissAgentActivity} isGhost={isGhost} />
           </span>
         )}

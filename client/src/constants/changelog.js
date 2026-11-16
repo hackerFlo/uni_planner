@@ -20,6 +20,12 @@ export const CHANGELOG = [
         desc: 'The AI marker now sits on the same line as the checkbox and tags, cards with and without it are the same height, and the card buttons and phone header line up with the rest of the planner.',
         svgPath: 'M4 6h16M4 12h16M4 18h16',
       },
+      {
+        icon: 'amber',
+        name: 'Calmer card headers',
+        desc: 'The list and time tags sit closer together, the repeat icon moves to the right edge next to the AI marker, and the time tag no longer gets cut off in narrow day columns.',
+        svgPath: 'M4 6h16M4 12h10M4 18h16',
+      },
     ],
   },
   {
