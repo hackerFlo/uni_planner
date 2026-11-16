@@ -70,7 +70,7 @@ export default function Navbar({ onArchiveToggle, archiveOpen, settingsOpen, onS
 
   return (
     <>
-      <header className="relative h-14 flex-shrink-0 border-b border-zinc-100 dark:border-zinc-800 flex items-center px-3 sm:px-5 gap-2 sm:gap-4 bg-white dark:bg-zinc-900">
+      <header className="relative h-14 flex-shrink-0 border-b border-zinc-100 dark:border-zinc-800 flex items-center px-5 gap-2 sm:gap-4 bg-white dark:bg-zinc-900">
         {/* The wordmark only goes visually hidden below sm -- that is the room the
             archive trigger needs on a phone, and sr-only keeps the app name in the
             accessibility tree either way. */}

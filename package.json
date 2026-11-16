@@ -1,6 +1,6 @@
 {
   "name": "uni-planner-root",
-  "version": "6.1",
+  "version": "6.2",
   "private": true,
   "scripts": {
     "dev": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\"",

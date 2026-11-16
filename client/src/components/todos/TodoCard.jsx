@@ -145,7 +145,7 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, chec
           <div className="flex-1 min-w-0">
             <div className="flex items-start gap-1.5 min-w-0">
               <LinkText text={todo.title} className={`text-sm font-medium break-words flex-1 min-w-0 ${inWindow ? 'text-zinc-400 dark:text-zinc-500' : 'text-zinc-800 dark:text-zinc-100'}`} />
-              <div className={`flex items-center gap-1.5 flex-shrink-0 ${hideOnHover}`}>
+              <div className={`flex h-5 items-center gap-1.5 flex-shrink-0 ${hideOnHover}`}>
         {isCopying && (
           <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full uppercase tracking-wide bg-indigo-100 text-indigo-600 dark:bg-indigo-900 dark:text-indigo-200">
             Copy
@@ -174,7 +174,7 @@ const TodoCardBody = memo(function TodoCardBody({ provided, snapshot, todo, chec
                 )}
               </div>
               {hasAgentActivity && (
-                <span className="ml-auto flex-shrink-0">
+                <span className="ml-auto flex h-5 flex-shrink-0 items-center">
                   <AgentActivityBadge todo={todo} onDismissAgentActivity={onDismissAgentActivity} isGhost={isGhost} />
                 </span>
               )}

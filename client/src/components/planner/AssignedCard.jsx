@@ -102,7 +102,7 @@ const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, isG
           </Tooltip>
         )}
         {hasAgentActivity && (
-          <span className="ml-auto flex-shrink-0">
+          <span className="ml-auto flex h-4 flex-shrink-0 items-center">
             <AgentActivityBadge todo={todo} onDismissAgentActivity={onDismissAgentActivity} isGhost={isGhost} />
           </span>
         )}
@@ -113,7 +113,7 @@ const CardBody = memo(function CardBody({ provided, snapshot, todo, checked, isG
         <RichText text={todo.description} className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5 line-clamp-2 block" />
       )}
 
-      <div className={`flex gap-1 mt-2 transition-opacity duration-200 ${anyModalOpen ? 'opacity-60 pointer-events-none' : ''}`}>
+      <div className={`flex gap-1 mt-2 -ml-1 transition-opacity duration-200 ${anyModalOpen ? 'opacity-60 pointer-events-none' : ''}`}>
           <Tooltip text="Edit">
             <button
               onPointerDown={e => e.stopPropagation()}

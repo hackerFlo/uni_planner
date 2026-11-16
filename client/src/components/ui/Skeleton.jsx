@@ -66,7 +66,7 @@ function SkeletonDay({ cards }) {
 function SkeletonNavbar() {
   const examPill = loadExamHint();
   return (
-    <div aria-hidden="true" className="h-14 flex-shrink-0 border-b border-zinc-100 dark:border-zinc-800 flex items-center px-3 sm:px-5 gap-2 sm:gap-4 bg-white dark:bg-zinc-900">
+    <div aria-hidden="true" className="h-14 flex-shrink-0 border-b border-zinc-100 dark:border-zinc-800 flex items-center px-5 gap-2 sm:gap-4 bg-white dark:bg-zinc-900">
       <div className="flex items-center gap-2.5 mr-auto">
         <div className="skeleton w-7 h-7 rounded-lg" />
         <SkeletonLine className="hidden sm:block h-3 w-[74px]" />

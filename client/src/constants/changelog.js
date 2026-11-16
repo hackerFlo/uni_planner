@@ -4,11 +4,24 @@
 // This way every Watchtower deploy maps to exactly one version.
 // Versioning: X.Y — increment Y for regular updates, bump X (reset Y to 0) for big releases.
 // Add a new entry to CHANGELOG (newest first) on first push of a window; append to top entry otherwise.
-export const CURRENT_VERSION = '6.1';
+export const CURRENT_VERSION = '6.2';
 
 // icon: 'purple' | 'green' | 'amber' | 'blue' | 'rose'
 // Each feature needs: icon, name, desc, and a 24×24 SVG path string (stroke icons).
 export const CHANGELOG = [
+  {
+    version: '6.2',
+    date: '2026-11-16',
+    title: 'Tidier task cards',
+    features: [
+      {
+        icon: 'purple',
+        name: 'Everything lines up',
+        desc: 'The AI marker now sits on the same line as the checkbox and tags, cards with and without it are the same height, and the card buttons and phone header line up with the rest of the planner.',
+        svgPath: 'M4 6h16M4 12h16M4 18h16',
+      },
+    ],
+  },
   {
     version: '6.1',
     date: '2026-11-15',
