@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { quoteApi, capturedRequest } from '../../api/settingsMutations';
+import { quoteApi, capturedRequest, saveRecovering } from '../../api/settingsMutations';
 import { useUndo } from '../../context/UndoContext';
 import { userMessage } from '../../api/errors';
 import { usePreferences } from '../../context/PreferencesContext';
@@ -38,7 +38,9 @@ export default function QuoteBar() {
   const today = useToday();
   const toast = useToast();
   const undo = useUndo();
-  const [version, setVersion] = useState(null);
+  const [version, setVersionState] = useState(null);
+  const versionRef = useRef(null);
+  const setVersion = useCallback(next => { versionRef.current = next; setVersionState(next); }, []);
   const dislikeAttempt = useRef(capturedRequest(quoteApi.dislike));
   const [quote, setQuote] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -52,7 +54,14 @@ export default function QuoteBar() {
     const result = await quoteApi.daily(today);
     setQuote(result.quote ?? null);
     setVersion(result.version);
-  }, [today]);
+  }, [today, setVersion]);
+
+  // Any other planner write moves the version on, so a bar left open goes
+  // stale. A stale-version 409 is refused before anything changes; re-read
+  // only the version and let saveRecovering send the same dislike once more.
+  const refreshVersion = useCallback(async () => {
+    setVersion((await quoteApi.daily(today)).version);
+  }, [today, setVersion]);
 
   useEffect(() => {
     if (!enabled) { setQuote(null); return; }
@@ -61,13 +70,14 @@ export default function QuoteBar() {
       .then(result => { if (!cancelled) { setQuote(result.quote ?? null); setVersion(result.version); } })
       .catch(() => { if (!cancelled) { setQuote(null); setVersion(null); } });
     return () => { cancelled = true; };
-  }, [enabled, today]);
+  }, [enabled, today, setVersion]);
 
   async function handleDislike() {
     if (!quote || busy || !version) return;
     setBusy(true);
     try {
-      const receipt = await dislikeAttempt.current.run({ id: quote.id, date: today }, version);
+      const receipt = await saveRecovering(dislikeAttempt.current, { id: quote.id, date: today },
+        () => versionRef.current, refreshVersion);
       if (receipt.replayed) await refresh();
       else { setQuote(receipt.quote ?? null); setVersion(receipt.currentVersion); }
       undo?.recordOperation(receipt, refresh);

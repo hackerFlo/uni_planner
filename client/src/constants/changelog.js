@@ -4,11 +4,24 @@
 // This way every Watchtower deploy maps to exactly one version.
 // Versioning: X.Y — increment Y for regular updates, bump X (reset Y to 0) for big releases.
 // Add a new entry to CHANGELOG (newest first) on first push of a window; append to top entry otherwise.
-export const CURRENT_VERSION = '6.2';
+export const CURRENT_VERSION = '6.3';
 
 // icon: 'purple' | 'green' | 'amber' | 'blue' | 'rose'
 // Each feature needs: icon, name, desc, and a 24×24 SVG path string (stroke icons).
 export const CHANGELOG = [
+  {
+    version: '6.3',
+    date: '2026-11-25',
+    title: 'Quote fix',
+    features: [
+      {
+        icon: 'rose',
+        name: 'Hiding a quote just works',
+        desc: 'Hiding the daily quote no longer fails with "Planner changed" after you edited something else. The planner catches up and hides the quote in one go.',
+        svgPath: 'M5 13l4 4L19 7',
+      },
+    ],
+  },
   {
     version: '6.2',
     date: '2026-11-16',
